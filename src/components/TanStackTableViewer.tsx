@@ -12,6 +12,7 @@ import {
   ColumnSizingState,
   flexRender,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import {
   ChevronDown,
@@ -39,7 +40,7 @@ import {
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { getCellRenderer } from '@/lib/cellRenderers';
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -68,6 +69,7 @@ export function TanStackTableViewer({
   const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Load table data
   const loadData = async () => {
@@ -268,7 +270,7 @@ export function TanStackTableViewer({
             );
           }
 
-          // Display mode
+          // Display mode with custom renderer
           return (
             <div
               className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
@@ -277,12 +279,10 @@ export function TanStackTableViewer({
                 setEditValue(isNull ? '' : String(value));
               }}
             >
-              {isNull ? (
-                <span className="italic text-muted-foreground/70">NULL</span>
-              ) : (
-                <span className="text-sm">{String(value)}</span>
-              )}
-              <Edit2 className="h-3 w-3 opacity-0 group-hover:opacity-50 ml-2" />
+              <div className="flex-1 min-w-0">
+                {getCellRenderer(col.data_type, value)}
+              </div>
+              <Edit2 className="h-3 w-3 opacity-0 group-hover:opacity-50 ml-2 shrink-0" />
             </div>
           );
         },
@@ -324,6 +324,15 @@ export function TanStackTableViewer({
 
   const selectedRows = tableInstance.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
+
+  // Virtual scrolling setup
+  const { rows } = tableInstance.getRowModel();
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 40, // Row height in pixels
+    overscan: 10, // Number of items to render outside visible area
+  });
 
   const handleSaveEdit = async (rowId: string, columnId: string) => {
     try {
@@ -518,23 +527,30 @@ export function TanStackTableViewer({
         </div>
       </div>
 
-      {/* Table */}
-      <ScrollArea className="flex-1">
-        <div className="relative">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-secondary">
+      {/* Table with Virtual Scrolling */}
+      <div
+        ref={tableContainerRef}
+        className="flex-1 overflow-auto"
+        style={{ contain: 'strict' }}
+      >
+        <div style={{ position: 'relative' }}>
+          <table className="w-full text-sm" style={{ display: 'grid' }}>
+            {/* Sticky Header */}
+            <thead className="sticky top-0 z-10 bg-secondary" style={{ display: 'grid', position: 'sticky', top: 0 }}>
               {tableInstance.getHeaderGroups().map((headerGroup: any) => (
-                <tr key={headerGroup.id} className="border-b-2 border-border">
+                <tr key={headerGroup.id} className="border-b-2 border-border" style={{ display: 'flex', width: '100%' }}>
                   {headerGroup.headers.map((header: any) => {
                     return (
                       <th
                         key={header.id}
                         className="h-14 px-4 text-left align-top font-medium text-muted-foreground text-xs border-r border-border/50 relative group"
-                        style={{ width: header.getSize() }}
+                        style={{ width: header.getSize(), display: 'flex', alignItems: 'start' }}
                       >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
+                        <div className="flex-1 pt-2">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </div>
                         
                         {/* Column Resize Handle */}
                         {header.column.getCanResize() && (
@@ -557,49 +573,66 @@ export function TanStackTableViewer({
                 </tr>
               ))}
             </thead>
-            <tbody>
+
+            {/* Virtual Body */}
+            <tbody
+              style={{
+                display: 'grid',
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                position: 'relative',
+              }}
+            >
               {isLoading ? (
-                <tr>
-                  <td colSpan={columns.length} className="h-32 text-center">
+                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
+                  <td colSpan={columns.length} className="text-center w-full">
                     <div className="flex items-center justify-center">
                       <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   </td>
                 </tr>
-              ) : tableInstance.getRowModel().rows?.length ? (
-                tableInstance.getRowModel().rows.map((row: any, idx: number) => (
-                  <tr
-                    key={row.id}
-                    data-state={row.getIsSelected() ? 'selected' : undefined}
-                    className={`
-                      h-10 border-b border-border/50 transition-colors
-                      ${idx % 2 === 0 ? 'bg-background' : 'bg-secondary/20'}
-                      hover:bg-accent
-                      data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
-                    `}
-                  >
-                    {row.getVisibleCells().map((cell: any) => (
-                      <td
-                        key={cell.id}
-                        className="px-4 py-2"
-                        style={{ width: cell.column.getSize() }}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+              ) : rows.length === 0 ? (
+                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
+                  <td colSpan={columns.length} className="text-center text-muted-foreground w-full">
                     No data
                   </td>
                 </tr>
+              ) : (
+                rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = rows[virtualRow.index];
+                  return (
+                    <tr
+                      key={row.id}
+                      data-state={row.getIsSelected() ? 'selected' : undefined}
+                      style={{
+                        display: 'flex',
+                        position: 'absolute',
+                        transform: `translateY(${virtualRow.start}px)`,
+                        width: '100%',
+                      }}
+                      className={`
+                        h-10 border-b border-border/50 transition-colors
+                        ${virtualRow.index % 2 === 0 ? 'bg-background' : 'bg-secondary/20'}
+                        hover:bg-accent
+                        data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
+                      `}
+                    >
+                      {row.getVisibleCells().map((cell: any) => (
+                        <td
+                          key={cell.id}
+                          className="px-4 py-2 flex items-center"
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer / Pagination */}
       <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
