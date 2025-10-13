@@ -106,3 +106,73 @@ pub async fn delete_rows(
         .await
         .map_err(|e| format!("Failed to delete rows: {}", e))
 }
+
+#[tauri::command]
+pub async fn create_table(
+    connection_id: String,
+    table_name: String,
+    columns: Vec<(String, String, bool, bool)>,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .create_table(&connection_id, &table_name, columns, &db_type)
+        .await
+        .map_err(|e| format!("Failed to create table: {}", e))
+}
+
+#[tauri::command]
+pub async fn drop_table(
+    connection_id: String,
+    table_name: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .drop_table(&connection_id, &table_name)
+        .await
+        .map_err(|e| format!("Failed to drop table: {}", e))
+}
+
+#[tauri::command]
+pub async fn alter_table_add_column(
+    connection_id: String,
+    table_name: String,
+    column_name: String,
+    data_type: String,
+    nullable: bool,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .alter_table_add_column(&connection_id, &table_name, &column_name, &data_type, nullable, &db_type)
+        .await
+        .map_err(|e| format!("Failed to add column: {}", e))
+}
+
+#[tauri::command]
+pub async fn alter_table_drop_column(
+    connection_id: String,
+    table_name: String,
+    column_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .alter_table_drop_column(&connection_id, &table_name, &column_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to drop column: {}", e))
+}
+
+#[tauri::command]
+pub async fn rename_table(
+    connection_id: String,
+    old_name: String,
+    new_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .rename_table(&connection_id, &old_name, &new_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to rename table: {}", e))
+}

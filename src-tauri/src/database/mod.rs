@@ -347,4 +347,147 @@ impl ConnectionManager {
 
         Ok(format!("Successfully deleted {} row(s)", result.rows_affected()))
     }
+
+    pub async fn create_table(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        columns: Vec<(String, String, bool, bool)>, // (name, type, nullable, primary_key)
+        _db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let mut column_defs: Vec<String> = Vec::new();
+        let mut primary_keys: Vec<String> = Vec::new();
+
+        for (name, data_type, nullable, is_pk) in columns {
+            let mut col_def = format!("{} {}", name, data_type);
+            
+            if !nullable {
+                col_def.push_str(" NOT NULL");
+            }
+            
+            if is_pk {
+                primary_keys.push(name.clone());
+            }
+            
+            column_defs.push(col_def);
+        }
+
+        if !primary_keys.is_empty() {
+            column_defs.push(format!("PRIMARY KEY ({})", primary_keys.join(", ")));
+        }
+
+        let query = format!(
+            "CREATE TABLE {} ({})",
+            table_name,
+            column_defs.join(", ")
+        );
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully created table {}", table_name))
+    }
+
+    pub async fn drop_table(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let query = format!("DROP TABLE {}", table_name);
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully dropped table {}", table_name))
+    }
+
+    pub async fn alter_table_add_column(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        column_name: &str,
+        data_type: &str,
+        nullable: bool,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let nullable_clause = if nullable { "" } else { " NOT NULL" };
+        
+        let query = match db_type {
+            DatabaseType::SQLite => {
+                // SQLite doesn't support NOT NULL in ALTER TABLE ADD COLUMN without default
+                format!("ALTER TABLE {} ADD COLUMN {} {}", table_name, column_name, data_type)
+            }
+            _ => {
+                format!("ALTER TABLE {} ADD COLUMN {} {}{}", 
+                    table_name, column_name, data_type, nullable_clause)
+            }
+        };
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully added column {} to {}", column_name, table_name))
+    }
+
+    pub async fn alter_table_drop_column(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        column_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let query = match db_type {
+            DatabaseType::SQLite => {
+                // SQLite doesn't support DROP COLUMN directly
+                return Err(anyhow!("SQLite does not support dropping columns directly. Please recreate the table."));
+            }
+            _ => {
+                format!("ALTER TABLE {} DROP COLUMN {}", table_name, column_name)
+            }
+        };
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully dropped column {} from {}", column_name, table_name))
+    }
+
+    pub async fn rename_table(
+        &self,
+        connection_id: &str,
+        old_name: &str,
+        new_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let query = match db_type {
+            DatabaseType::SQLite => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
+            DatabaseType::MySQL => format!("RENAME TABLE {} TO {}", old_name, new_name),
+            DatabaseType::PostgreSQL => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
+        };
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
+    }
 }
