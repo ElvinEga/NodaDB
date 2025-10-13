@@ -65,10 +65,78 @@ All notable changes to NodaDB will be documented in this file.
 - Type-safe communication between frontend and backend
 - Async command system for non-blocking UI
 
+## [0.2.0] - 2024-01-13
+
+### Added - Phase 3: CRUD Operations
+
+#### Backend Commands
+- **Insert Row**: `insert_row` command for adding new rows
+  - JSON data support
+  - Type-safe value conversion
+  - SQL escaping for strings
+  - NULL value handling
+
+- **Update Row**: `update_row` command for modifying existing rows
+  - WHERE clause-based updates
+  - JSON data with field selection
+  - Primary key identification
+  - Rows affected count
+
+- **Delete Rows**: `delete_rows` command for removing rows
+  - WHERE clause-based deletion
+  - Batch deletion support
+  - Primary key-based operations
+  - Confirmation required
+
+#### Frontend Components
+- **AddRowDialog**:
+  - Dynamic form generation from table structure
+  - Type-aware input fields (number, text, date, boolean)
+  - Primary key auto-generation support
+  - Nullable field handling
+  - Default value support
+  - Form validation
+  - Success callback for refresh
+
+- **Enhanced TableDataViewer**:
+  - **Row Selection**:
+    - Checkbox per row
+    - Select all/deselect all
+    - Visual highlight for selected rows
+    - Selection count display
+  
+  - **Inline Editing**:
+    - Double-click any cell to edit
+    - Enter to save changes
+    - Escape to cancel
+    - Save button for confirmation
+    - Type-safe updates
+    - Auto-refresh after save
+  
+  - **Delete Operations**:
+    - Delete button (shows count)
+    - Batch delete selected rows
+    - Browser confirmation dialog
+    - Primary key-based deletion
+    - Error handling
+  
+  - **Additional Features**:
+    - Add Row button (opens dialog)
+    - Refresh button to reload data
+    - Improved header layout
+    - Selected count in stats
+
+### Technical Changes
+- Added 3 new Rust commands to backend
+- Enhanced ConnectionManager with CRUD methods
+- SQL query generation with proper escaping
+- WHERE clause construction for updates/deletes
+- Type conversion for JSON data
+- Error handling improvements
+
 ## [Unreleased]
 
 ### Planned
-- CRUD operations (Insert, Update, Delete rows)
 - Schema designer (Create, Alter, Drop tables)
 - Query history and favorites
 - Inline table editing
