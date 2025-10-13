@@ -37,9 +37,10 @@ function App() {
     } else {
       // Load table columns
       try {
-        const columns = await invoke<TableColumn[]>('get_table_columns', {
+        const columns = await invoke<TableColumn[]>('get_table_structure', {
           connectionId: activeConnection?.id,
           tableName: table.name,
+          dbType: activeConnection?.db_type,
         });
         
         const newTab: TabType = {
@@ -180,9 +181,10 @@ function App() {
                       onRefresh={async () => {
                         // Reload columns
                         try {
-                          const columns = await invoke<TableColumn[]>('get_table_columns', {
+                          const columns = await invoke<TableColumn[]>('get_table_structure', {
                             connectionId: activeConnection.id,
                             tableName: activeTab.table!.name,
+                            dbType: activeConnection.db_type,
                           });
                           setTabs(tabs.map(t => 
                             t.id === activeTab.id ? { ...t, columns } : t

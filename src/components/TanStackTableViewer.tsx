@@ -338,13 +338,19 @@ export function TanStackTableViewer({
 
       const primaryKeyValue = row[primaryKeyColumn.name];
       
+      // Build update data object with only the changed column
+      const updateData: Record<string, any> = {
+        [columnId]: editValue === '' ? null : editValue,
+      };
+      
+      // Build WHERE clause for the primary key
+      const whereClause = `${primaryKeyColumn.name} = ${typeof primaryKeyValue === 'string' ? `'${primaryKeyValue}'` : primaryKeyValue}`;
+      
       await invoke('update_row', {
         connectionId: connection.id,
         tableName: table.name,
-        primaryKeyColumn: primaryKeyColumn.name,
-        primaryKeyValue,
-        columnName: columnId,
-        newValue: editValue === '' ? null : editValue,
+        data: updateData,
+        whereClause: whereClause,
         dbType: connection.db_type,
       });
 
@@ -376,19 +382,20 @@ export function TanStackTableViewer({
         return;
       }
 
-      // Delete each selected row
-      const deletePromises = selectedRows.map(row => {
-        const primaryKeyValue = row.original[primaryKeyColumn.name];
-        return invoke('delete_row', {
-          connectionId: connection.id,
-          tableName: table.name,
-          primaryKeyColumn: primaryKeyColumn.name,
-          primaryKeyValue,
-          dbType: connection.db_type,
-        });
+      // Build WHERE clause with all selected primary key values
+      const primaryKeyValues = selectedRows.map(row => {
+        const pkValue = row.original[primaryKeyColumn.name];
+        return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
       });
+      
+      const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
 
-      await Promise.all(deletePromises);
+      await invoke('delete_rows', {
+        connectionId: connection.id,
+        tableName: table.name,
+        whereClause: whereClause,
+        dbType: connection.db_type,
+      });
       
       // Reload data
       await loadData();
