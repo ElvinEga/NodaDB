@@ -137,16 +137,26 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex bg-background">
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="border-b px-4 py-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">SQL Query Editor</h2>
-            <p className="text-sm text-muted-foreground">
-              {connection.name} • {connection.db_type.toUpperCase()}
-            </p>
+        {/* Toolbar */}
+        <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">SQL Query Editor</h2>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-mono">{connection.db_type.toUpperCase()}</span>
+            </div>
+            {result && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>•</span>
+                <span><span className="font-mono text-foreground">{result.rows.length}</span> rows</span>
+                <span>•</span>
+                <span><span className="font-mono text-foreground">{executionTime}</span>ms</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
