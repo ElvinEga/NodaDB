@@ -1,12 +1,93 @@
 use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn};
 use anyhow::{anyhow, Result};
-use sqlx::{AnyPool, Column, Row, TypeInfo};
+use sqlx::{Row, TypeInfo, Column};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub enum DatabasePool {
+    Sqlite(sqlx::SqlitePool),
+    Postgres(sqlx::PgPool),
+    MySql(sqlx::MySqlPool),
+}
+
+macro_rules! process_rows {
+    ($rows:expr) => {{
+        if $rows.is_empty() {
+            return Ok(QueryResult {
+                columns: vec![],
+                rows: vec![],
+                rows_affected: 0,
+            });
+        }
+
+        let columns: Vec<String> = $rows[0]
+            .columns()
+            .iter()
+            .map(|col| col.name().to_string())
+            .collect();
+
+        let result_rows: Vec<serde_json::Value> = $rows
+            .into_iter()
+            .map(|row| {
+                let mut map = serde_json::Map::new();
+                for (idx, col) in row.columns().iter().enumerate() {
+                    let value = match col.type_info().name() {
+                        "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" => {
+                            row.try_get::<String, _>(idx)
+                                .map(|v| serde_json::Value::String(v))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "INTEGER" | "INT" | "BIGINT" | "INT2" | "INT4" | "INT8" => {
+                            row.try_get::<i64, _>(idx)
+                                .map(|v| serde_json::Value::Number(v.into()))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "REAL" | "FLOAT" | "DOUBLE" | "FLOAT4" | "FLOAT8" => {
+                            row.try_get::<f64, _>(idx)
+                                .map(|v| serde_json::json!(v))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "BOOLEAN" | "BOOL" => {
+                            row.try_get::<bool, _>(idx)
+                                .map(|v| serde_json::Value::Bool(v))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        _ => serde_json::Value::Null,
+                    };
+                    map.insert(col.name().to_string(), value);
+                }
+                serde_json::Value::Object(map)
+            })
+            .collect();
+
+        QueryResult {
+            columns,
+            rows: result_rows,
+            rows_affected: 0,
+        }
+    }};
+}
+
+macro_rules! execute_query {
+    ($pool:expr, $query:expr) => {{
+        let rows_affected = match $pool {
+            &DatabasePool::Sqlite(ref pool) => {
+                sqlx::query($query).execute(pool).await?.rows_affected()
+            }
+            &DatabasePool::Postgres(ref pool) => {
+                sqlx::query($query).execute(pool).await?.rows_affected()
+            }
+            &DatabasePool::MySql(ref pool) => {
+                sqlx::query($query).execute(pool).await?.rows_affected()
+            }
+        };
+        Ok::<u64, anyhow::Error>(rows_affected)
+    }};
+}
+
 pub struct ConnectionManager {
-    connections: Arc<RwLock<HashMap<String, AnyPool>>>,
+    connections: Arc<RwLock<HashMap<String, DatabasePool>>>,
 }
 
 impl ConnectionManager {
@@ -51,8 +132,27 @@ impl ConnectionManager {
     }
 
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
-        let connection_string = Self::build_connection_string(&config)?;
-        let pool = AnyPool::connect(&connection_string).await?;
+        let pool = match config.db_type {
+            DatabaseType::SQLite => {
+                let path = config
+                    .file_path
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("SQLite file path is required"))?;
+                let connection_string = format!("sqlite://{}", path);
+                let pool = sqlx::SqlitePool::connect(&connection_string).await?;
+                DatabasePool::Sqlite(pool)
+            }
+            DatabaseType::PostgreSQL => {
+                let connection_string = Self::build_connection_string(&config)?;
+                let pool = sqlx::PgPool::connect(&connection_string).await?;
+                DatabasePool::Postgres(pool)
+            }
+            DatabaseType::MySQL => {
+                let connection_string = Self::build_connection_string(&config)?;
+                let pool = sqlx::MySqlPool::connect(&connection_string).await?;
+                DatabasePool::MySql(pool)
+            }
+        };
         
         let mut connections = self.connections.write().await;
         connections.insert(config.id.clone(), pool);
@@ -86,18 +186,44 @@ impl ConnectionManager {
             }
         };
 
-        let rows = sqlx::query(query).fetch_all(pool).await?;
-
-        let tables = rows
-            .into_iter()
-            .map(|row| {
-                let name: String = row.try_get(0).unwrap_or_default();
-                DatabaseTable {
-                    name,
-                    schema: None,
-                }
-            })
-            .collect();
+        let tables = match pool {
+            &DatabasePool::Sqlite(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let name: String = row.try_get(0).unwrap_or_default();
+                        DatabaseTable {
+                            name,
+                            schema: None,
+                        }
+                    })
+                    .collect()
+            }
+            &DatabasePool::Postgres(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let name: String = row.try_get(0).unwrap_or_default();
+                        DatabaseTable {
+                            name,
+                            schema: None,
+                        }
+                    })
+                    .collect()
+            }
+            &DatabasePool::MySql(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let name: String = row.try_get(0).unwrap_or_default();
+                        DatabaseTable {
+                            name,
+                            schema: None,
+                        }
+                    })
+                    .collect()
+            }
+        };
 
         Ok(tables)
     }
@@ -134,10 +260,9 @@ impl ConnectionManager {
             }
         };
 
-        let rows = sqlx::query(&query).fetch_all(pool).await?;
-
-        let columns = match db_type {
-            DatabaseType::SQLite => {
+        let columns = match pool {
+            &DatabasePool::Sqlite(ref pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(1).unwrap_or_default();
@@ -156,7 +281,8 @@ impl ConnectionManager {
                     })
                     .collect()
             }
-            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
+            &DatabasePool::Postgres(ref pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(0).unwrap_or_default();
@@ -169,7 +295,26 @@ impl ConnectionManager {
                             data_type,
                             is_nullable: is_nullable.to_uppercase() == "YES",
                             default_value,
-                            is_primary_key: false, // TODO: Add PK detection
+                            is_primary_key: false,
+                        }
+                    })
+                    .collect()
+            }
+            &DatabasePool::MySql(ref pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let name: String = row.try_get(0).unwrap_or_default();
+                        let data_type: String = row.try_get(1).unwrap_or_default();
+                        let is_nullable: String = row.try_get(2).unwrap_or_default();
+                        let default_value: Option<String> = row.try_get(3).ok();
+
+                        TableColumn {
+                            name,
+                            data_type,
+                            is_nullable: is_nullable.to_uppercase() == "YES",
+                            default_value,
+                            is_primary_key: false,
                         }
                     })
                     .collect()
@@ -189,61 +334,20 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
-        let rows = sqlx::query(query).fetch_all(pool).await?;
-
-        if rows.is_empty() {
-            return Ok(QueryResult {
-                columns: vec![],
-                rows: vec![],
-                rows_affected: 0,
-            });
+        match pool {
+            &DatabasePool::Sqlite(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                Ok(process_rows!(rows))
+            }
+            &DatabasePool::Postgres(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                Ok(process_rows!(rows))
+            }
+            &DatabasePool::MySql(ref pool) => {
+                let rows = sqlx::query(query).fetch_all(pool).await?;
+                Ok(process_rows!(rows))
+            }
         }
-
-        let columns: Vec<String> = rows[0]
-            .columns()
-            .iter()
-            .map(|col| col.name().to_string())
-            .collect();
-
-        let result_rows: Vec<serde_json::Value> = rows
-            .into_iter()
-            .map(|row| {
-                let mut map = serde_json::Map::new();
-                for (idx, col) in row.columns().iter().enumerate() {
-                    let value = match col.type_info().name() {
-                        "TEXT" | "VARCHAR" | "CHAR" => {
-                            row.try_get::<String, _>(idx)
-                                .map(|v| serde_json::Value::String(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "INTEGER" | "INT" | "BIGINT" => {
-                            row.try_get::<i64, _>(idx)
-                                .map(|v| serde_json::Value::Number(v.into()))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "REAL" | "FLOAT" | "DOUBLE" => {
-                            row.try_get::<f64, _>(idx)
-                                .map(|v| serde_json::json!(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "BOOLEAN" | "BOOL" => {
-                            row.try_get::<bool, _>(idx)
-                                .map(|v| serde_json::Value::Bool(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        _ => serde_json::Value::Null,
-                    };
-                    map.insert(col.name().to_string(), value);
-                }
-                serde_json::Value::Object(map)
-            })
-            .collect();
-
-        Ok(QueryResult {
-            columns,
-            rows: result_rows,
-            rows_affected: 0,
-        })
     }
 
     pub async fn insert_row(
@@ -282,7 +386,7 @@ impl ConnectionManager {
             table_name, column_list, value_list
         );
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully inserted 1 row into {}", table_name))
     }
@@ -322,9 +426,9 @@ impl ConnectionManager {
             table_name, set_clause, where_clause
         );
 
-        let result = sqlx::query(&query).execute(pool).await?;
+        let rows_affected = execute_query!(pool, &query)?;
 
-        Ok(format!("Successfully updated {} row(s)", result.rows_affected()))
+        Ok(format!("Successfully updated {} row(s)", rows_affected))
     }
 
     pub async fn delete_rows(
@@ -343,9 +447,9 @@ impl ConnectionManager {
             table_name, where_clause
         );
 
-        let result = sqlx::query(&query).execute(pool).await?;
+        let rows_affected = execute_query!(pool, &query)?;
 
-        Ok(format!("Successfully deleted {} row(s)", result.rows_affected()))
+        Ok(format!("Successfully deleted {} row(s)", rows_affected))
     }
 
     pub async fn create_table(
@@ -387,7 +491,7 @@ impl ConnectionManager {
             column_defs.join(", ")
         );
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully created table {}", table_name))
     }
@@ -404,7 +508,7 @@ impl ConnectionManager {
 
         let query = format!("DROP TABLE {}", table_name);
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully dropped table {}", table_name))
     }
@@ -436,7 +540,7 @@ impl ConnectionManager {
             }
         };
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully added column {} to {}", column_name, table_name))
     }
@@ -463,7 +567,7 @@ impl ConnectionManager {
             }
         };
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully dropped column {} from {}", column_name, table_name))
     }
@@ -486,7 +590,7 @@ impl ConnectionManager {
             DatabaseType::PostgreSQL => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
         };
 
-        sqlx::query(&query).execute(pool).await?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
     }
