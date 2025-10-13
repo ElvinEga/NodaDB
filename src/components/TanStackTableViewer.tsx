@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,6 +9,7 @@ import {
   SortingState,
   ColumnFiltersState,
   VisibilityState,
+  ColumnSizingState,
   flexRender,
 } from '@tanstack/react-table';
 import { invoke } from '@tauri-apps/api/core';
@@ -21,6 +22,10 @@ import {
   Trash2,
   Download,
   Columns3,
+  Edit2,
+  Check,
+  X as XIcon,
+  GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,10 +60,14 @@ export function TanStackTableViewer({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [rowSelection, setRowSelection] = useState({});
   const [globalFilter, setGlobalFilter] = useState('');
   const pageSize = 50;
   const [executionTime, setExecutionTime] = useState(0);
+  const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Load table data
   const loadData = async () => {
@@ -86,6 +95,35 @@ export function TanStackTableViewer({
   useEffect(() => {
     loadData();
   }, [connection.id, table.name]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + F - Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      // Ctrl/Cmd + R - Refresh
+      if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        handleRefresh();
+      }
+      // Escape - Clear selection and cancel editing
+      if (e.key === 'Escape') {
+        setRowSelection({});
+        setEditingCell(null);
+      }
+      // Ctrl/Cmd + A - Select all (when table focused)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        tableInstance.toggleAllRowsSelected(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Get SQL type badge color
   const getTypeBadgeColor = (dataType: string): string => {
@@ -179,20 +217,74 @@ export function TanStackTableViewer({
             </div>
           );
         },
-        cell: ({ getValue }) => {
+        cell: ({ getValue, row }) => {
           const value = getValue();
           const isNull = value === null || value === undefined;
+          const cellId = { rowId: row.id, columnId: col.name };
+          const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === col.name;
 
-          // Primary key styling
+          // Primary key styling (not editable)
           if (col.is_primary_key) {
             return <span className="font-mono text-xs text-muted-foreground">{String(value)}</span>;
           }
 
-          if (isNull) {
-            return <span className="italic text-muted-foreground/70">NULL</span>;
+          // Editing mode
+          if (isEditing) {
+            return (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveEdit(row.id, col.name);
+                    } else if (e.key === 'Escape') {
+                      setEditingCell(null);
+                    }
+                  }}
+                  className="h-7 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSaveEdit(row.id, col.name);
+                  }}
+                >
+                  <Check className="h-3 w-3 text-success" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setEditingCell(null)}
+                >
+                  <XIcon className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            );
           }
 
-          return <span className="text-sm">{String(value)}</span>;
+          // Display mode
+          return (
+            <div
+              className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
+              onDoubleClick={() => {
+                setEditingCell(cellId);
+                setEditValue(isNull ? '' : String(value));
+              }}
+            >
+              {isNull ? (
+                <span className="italic text-muted-foreground/70">NULL</span>
+              ) : (
+                <span className="text-sm">{String(value)}</span>
+              )}
+              <Edit2 className="h-3 w-3 opacity-0 group-hover:opacity-50 ml-2" />
+            </div>
+          );
         },
         size: 180,
       });
@@ -211,12 +303,16 @@ export function TanStackTableViewer({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
+    columnResizeMode: 'onChange',
+    enableColumnResizing: true,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      columnSizing,
       rowSelection,
       globalFilter,
       pagination: {
@@ -229,13 +325,79 @@ export function TanStackTableViewer({
   const selectedRows = tableInstance.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
 
+  const handleSaveEdit = async (rowId: string, columnId: string) => {
+    try {
+      const rowIndex = parseInt(rowId);
+      const row = data[rowIndex];
+      const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+      
+      if (!primaryKeyColumn) {
+        toast.error('No primary key found for update');
+        return;
+      }
+
+      const primaryKeyValue = row[primaryKeyColumn.name];
+      
+      await invoke('update_row', {
+        connectionId: connection.id,
+        tableName: table.name,
+        primaryKeyColumn: primaryKeyColumn.name,
+        primaryKeyValue,
+        columnName: columnId,
+        newValue: editValue === '' ? null : editValue,
+        dbType: connection.db_type,
+      });
+
+      // Update local data
+      const newData = [...data];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [columnId]: editValue === '' ? null : editValue,
+      };
+      setData(newData);
+      setEditingCell(null);
+      toast.success('Cell updated successfully');
+    } catch (error) {
+      toast.error(`Failed to update cell: ${error}`);
+      console.error('Update error:', error);
+    }
+  };
+
   const handleDeleteRows = async () => {
     if (selectedCount === 0) return;
 
     if (!confirm(`Delete ${selectedCount} selected row(s)?`)) return;
 
-    // TODO: Implement bulk delete
-    toast.info('Bulk delete not yet implemented');
+    try {
+      const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+      
+      if (!primaryKeyColumn) {
+        toast.error('No primary key found for delete');
+        return;
+      }
+
+      // Delete each selected row
+      const deletePromises = selectedRows.map(row => {
+        const primaryKeyValue = row.original[primaryKeyColumn.name];
+        return invoke('delete_row', {
+          connectionId: connection.id,
+          tableName: table.name,
+          primaryKeyColumn: primaryKeyColumn.name,
+          primaryKeyValue,
+          dbType: connection.db_type,
+        });
+      });
+
+      await Promise.all(deletePromises);
+      
+      // Reload data
+      await loadData();
+      setRowSelection({});
+      toast.success(`Deleted ${selectedCount} row(s)`);
+    } catch (error) {
+      toast.error(`Failed to delete rows: ${error}`);
+      console.error('Delete error:', error);
+    }
   };
 
   const handleExport = () => {
@@ -340,7 +502,8 @@ export function TanStackTableViewer({
 
           {/* Global search */}
           <Input
-            placeholder="Search..."
+            ref={searchInputRef}
+            placeholder="Search... (Ctrl+F)"
             value={globalFilter ?? ''}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="h-8 w-48 text-xs"
@@ -359,12 +522,28 @@ export function TanStackTableViewer({
                     return (
                       <th
                         key={header.id}
-                        className="h-14 px-4 text-left align-top font-medium text-muted-foreground text-xs border-r border-border/50"
+                        className="h-14 px-4 text-left align-top font-medium text-muted-foreground text-xs border-r border-border/50 relative group"
                         style={{ width: header.getSize() }}
                       >
                         {header.isPlaceholder
                           ? null
                           : flexRender(header.column.columnDef.header, header.getContext())}
+                        
+                        {/* Column Resize Handle */}
+                        {header.column.getCanResize() && (
+                          <div
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                            className={`
+                              absolute right-0 top-0 h-full w-1 cursor-col-resize
+                              opacity-0 group-hover:opacity-100
+                              hover:bg-primary/50
+                              ${header.column.getIsResizing() ? 'bg-primary opacity-100' : ''}
+                            `}
+                          >
+                            <GripVertical className="h-3 w-3 absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                          </div>
+                        )}
                       </th>
                     );
                   })}
