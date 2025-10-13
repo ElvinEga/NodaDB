@@ -7,13 +7,15 @@ import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
-import { DatabaseTable } from "@/types";
+import { DatabaseTable, TableColumn } from "@/types";
+import { invoke } from "@tauri-apps/api/core";
 
 type TabType = {
   id: string;
   type: 'table' | 'query';
   title: string;
   table?: DatabaseTable;
+  columns?: TableColumn[];
 };
 
 function App() {
@@ -28,19 +30,40 @@ function App() {
   const activeConnection = getActiveConnection();
   const activeTab = tabs.find(t => t.id === activeTabId);
 
-  const handleTableSelect = (table: DatabaseTable) => {
+  const handleTableSelect = async (table: DatabaseTable) => {
     const existingTab = tabs.find(t => t.type === 'table' && t.table?.name === table.name);
     if (existingTab) {
       setActiveTabId(existingTab.id);
     } else {
-      const newTab: TabType = {
-        id: `table-${table.name}-${Date.now()}`,
-        type: 'table',
-        title: table.name,
-        table,
-      };
-      setTabs([...tabs, newTab]);
-      setActiveTabId(newTab.id);
+      // Load table columns
+      try {
+        const columns = await invoke<TableColumn[]>('get_table_columns', {
+          connectionId: activeConnection?.id,
+          tableName: table.name,
+        });
+        
+        const newTab: TabType = {
+          id: `table-${table.name}-${Date.now()}`,
+          type: 'table',
+          title: table.name,
+          table,
+          columns,
+        };
+        setTabs([...tabs, newTab]);
+        setActiveTabId(newTab.id);
+      } catch (error) {
+        console.error('Failed to load table columns:', error);
+        // Still open tab even if columns fail to load
+        const newTab: TabType = {
+          id: `table-${table.name}-${Date.now()}`,
+          type: 'table',
+          title: table.name,
+          table,
+          columns: [],
+        };
+        setTabs([...tabs, newTab]);
+        setActiveTabId(newTab.id);
+      }
     }
   };
 
@@ -150,9 +173,24 @@ function App() {
                     <TanStackTableViewer
                       connection={activeConnection}
                       table={activeTab.table}
-                      columns={[]}
-                      onAddRow={() => {}}
-                      onRefresh={() => {}}
+                      columns={activeTab.columns || []}
+                      onAddRow={() => {
+                        // TODO: Open add row dialog
+                      }}
+                      onRefresh={async () => {
+                        // Reload columns
+                        try {
+                          const columns = await invoke<TableColumn[]>('get_table_columns', {
+                            connectionId: activeConnection.id,
+                            tableName: activeTab.table!.name,
+                          });
+                          setTabs(tabs.map(t => 
+                            t.id === activeTab.id ? { ...t, columns } : t
+                          ));
+                        } catch (error) {
+                          console.error('Failed to reload columns:', error);
+                        }
+                      }}
                     />
                   ) : (
                     <QueryEditor connection={activeConnection} />
