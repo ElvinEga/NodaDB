@@ -4,7 +4,7 @@ A modern, cross-platform database management desktop application built with Taur
 
 ## Features
 
-### ✅ Implemented (Phase 1 & 2 Complete)
+### ✅ Implemented (Phases 1, 2 & 3 Complete)
 
 #### Core Infrastructure
 - **Modern UI**: Built with React 19, TypeScript, Tailwind CSS 3.4, and shadcn/ui components
@@ -51,7 +51,38 @@ A modern, cross-platform database management desktop application built with Taur
     - Download as CSV file
   - Results and Messages tabs for detailed feedback
 
-### 📋 Planned Features (Phase 3+)
+#### CRUD Operations
+- **Insert Rows**:
+  - Add new rows dialog with form validation
+  - Auto-generate form fields from table structure
+  - Type-aware input fields (number, text, date, boolean)
+  - Primary key auto-generation support
+  - NULL value handling
+  - Default value support
+
+- **Update Rows**:
+  - Inline cell editing (double-click to edit)
+  - Enter to save, Escape to cancel
+  - Save button for confirmation
+  - Type-safe value updates
+  - Automatic refresh after update
+
+- **Delete Rows**:
+  - Row selection with checkboxes
+  - Select all/deselect all
+  - Batch delete multiple rows
+  - Confirmation dialog before deletion
+  - Delete button shows count of selected rows
+  - Primary key-based deletion
+
+- **Additional Features**:
+  - Refresh button to reload data
+  - Row highlighting for selected rows
+  - Visual feedback during operations
+  - Error handling with user-friendly messages
+  - Automatic data refresh after mutations
+
+### 📋 Planned Features (Phase 4+)
 
 - Full CRUD operations on tables and rows
 - Schema designer (create, modify, drop tables)
@@ -157,13 +188,21 @@ NodaDB/
 
 ## Available Tauri Commands
 
-### Backend API
-
+### Connection Management
 - `connect_database(config: ConnectionConfig)` - Establish a database connection
 - `disconnect_database(connection_id: String)` - Close a database connection
+
+### Schema Operations
 - `list_tables(connection_id: String, db_type: DatabaseType)` - List all tables in database
 - `get_table_structure(connection_id: String, table_name: String, db_type: DatabaseType)` - Get column information for a table
+
+### Query Execution
 - `execute_query(connection_id: String, query: String)` - Execute a SQL query
+
+### CRUD Operations
+- `insert_row(connection_id: String, table_name: String, data: JSON, db_type: DatabaseType)` - Insert a new row
+- `update_row(connection_id: String, table_name: String, data: JSON, where_clause: String, db_type: DatabaseType)` - Update existing row(s)
+- `delete_rows(connection_id: String, table_name: String, where_clause: String)` - Delete row(s)
 
 ## Usage
 
@@ -180,12 +219,18 @@ Once connected, you'll see:
 - **Left Sidebar**: Database explorer showing all tables
 - **Main Area**: Tabbed interface with "Tables" and "Query" views
 
-### 3. View Table Data
+### 3. View and Edit Table Data
 - Click any table in the explorer
 - Navigate to the "Tables" tab
 - Browse data with pagination (50 rows per page)
 - See column metadata (type, nullable, primary key)
 - Use Previous/Next buttons to navigate pages
+
+**Editing Data:**
+- **Insert**: Click "Add Row" button, fill form, click "Insert Row"
+- **Update**: Double-click any cell, edit value, press Enter or click "Save"
+- **Delete**: Select rows with checkboxes, click "Delete (X)" button
+- **Refresh**: Click refresh icon to reload data
 
 ### 4. Execute SQL Queries
 - Switch to the "Query" tab
@@ -199,6 +244,9 @@ Once connected, you'll see:
 
 ### 5. Keyboard Shortcuts
 - **Ctrl+Enter**: Execute current query (in Query Editor)
+- **Enter**: Save cell edit (in table cell editing mode)
+- **Escape**: Cancel cell edit (in table cell editing mode)
+- **Double-click**: Start editing a cell (in table viewer)
 - Standard text editing shortcuts work in Monaco editor
 
 ## Development Notes
@@ -251,11 +299,16 @@ Contributions are welcome! Please follow these steps:
 - [x] Export results (CSV)
 - [x] Keyboard shortcuts (Ctrl+Enter)
 
-### Phase 3: CRUD Operations (Next)
-- [ ] Insert new rows into tables
-- [ ] Update existing rows (inline editing)
-- [ ] Delete rows with confirmation
-- [ ] Batch operations
+### ✅ Phase 3: CRUD Operations (Complete)
+- [x] Insert new rows into tables (Add Row dialog)
+- [x] Update existing rows (double-click inline editing)
+- [x] Delete rows with confirmation dialog
+- [x] Batch operations (multi-row selection)
+- [x] Row selection with checkboxes
+- [x] Refresh data functionality
+- [x] Form validation for inserts
+- [x] Type-aware input fields
+- [x] Primary key-based operations
 
 ### Phase 4: Advanced Features
 - [ ] Schema designer for table creation/modification
