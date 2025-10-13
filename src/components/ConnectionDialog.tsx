@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Database, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -138,8 +139,8 @@ export function ConnectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>New Database Connection</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-lg">New Database Connection</DialogTitle>
+          <DialogDescription className="text-xs">
             Configure your database connection settings
           </DialogDescription>
         </DialogHeader>
@@ -147,40 +148,59 @@ export function ConnectionDialog({
         <ScrollArea className="flex-1 overflow-y-auto pr-4">
           <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <label htmlFor="name" className="text-sm font-medium">
-              Connection Name
+            <label htmlFor="name" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Connection Name <span className="text-destructive">*</span>
             </label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Database"
+              placeholder="e.g., Production DB, Local SQLite"
+              className="h-9 text-sm"
             />
           </div>
 
           <div className="grid gap-2">
-            <label htmlFor="dbType" className="text-sm font-medium">
-              Database Type
+            <label htmlFor="dbType" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Database Type <span className="text-destructive">*</span>
             </label>
             <Select
               value={dbType}
               onValueChange={(v) => setDbType(v as DatabaseType)}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sqlite">SQLite</SelectItem>
-                <SelectItem value="postgresql">PostgreSQL</SelectItem>
-                <SelectItem value="mysql">MySQL</SelectItem>
+                <SelectItem value="sqlite">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-3.5 w-3.5" />
+                    <span>SQLite</span>
+                    <span className="text-[10px] text-muted-foreground ml-2">Local file</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="postgresql">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-3.5 w-3.5" />
+                    <span>PostgreSQL</span>
+                    <span className="text-[10px] text-muted-foreground ml-2">Server</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="mysql">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-3.5 w-3.5" />
+                    <span>MySQL</span>
+                    <span className="text-[10px] text-muted-foreground ml-2">Server</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {dbType === "sqlite" ? (
             <div className="grid gap-2">
-              <label htmlFor="filePath" className="text-sm font-medium">
-                Database File
+              <label htmlFor="filePath" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Database File <span className="text-destructive">*</span>
               </label>
               <div className="flex gap-2">
                 <Input
@@ -188,90 +208,120 @@ export function ConnectionDialog({
                   value={filePath}
                   onChange={(e) => setFilePath(e.target.value)}
                   placeholder="/path/to/database.db"
+                  className="h-9 text-sm font-mono"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleBrowseFile}
+                  className="h-9 shrink-0"
                 >
                   Browse
                 </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground">
+                Select an existing .db file or enter a new path to create one
+              </p>
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <label htmlFor="host" className="text-sm font-medium">
-                    Host
-                  </label>
-                  <Input
-                    id="host"
-                    value={host}
-                    onChange={(e) => setHost(e.target.value)}
-                    placeholder="localhost"
-                  />
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                <p className="text-xs text-muted-foreground mb-3">Server Connection Details</p>
+                <div className="grid gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <label htmlFor="host" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Host <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        id="host"
+                        value={host}
+                        onChange={(e) => setHost(e.target.value)}
+                        placeholder="localhost"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label htmlFor="port" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Port <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        id="port"
+                        value={port}
+                        onChange={(e) => setPort(e.target.value)}
+                        placeholder={dbType === "postgresql" ? "5432" : "3306"}
+                        className="h-9 text-sm font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label htmlFor="database" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Database <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      id="database"
+                      value={database}
+                      onChange={(e) => setDatabase(e.target.value)}
+                      placeholder="database_name"
+                      className="h-9 text-sm font-mono"
+                    />
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <label htmlFor="port" className="text-sm font-medium">
-                    Port
-                  </label>
-                  <Input
-                    id="port"
-                    value={port}
-                    onChange={(e) => setPort(e.target.value)}
-                    placeholder={dbType === "postgresql" ? "5432" : "3306"}
-                  />
+              </div>
+
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                <p className="text-xs text-muted-foreground mb-3">Authentication</p>
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <label htmlFor="username" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Username <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="postgres"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Password <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="h-9 text-sm"
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <div className="grid gap-2">
-                <label htmlFor="username" className="text-sm font-medium">
-                  Username
-                </label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="username"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="password"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <label htmlFor="database" className="text-sm font-medium">
-                  Database
-                </label>
-                <Input
-                  id="database"
-                  value={database}
-                  onChange={(e) => setDatabase(e.target.value)}
-                  placeholder="database_name"
-                />
               </div>
             </>
           )}
           </div>
         </ScrollArea>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">
             Cancel
           </Button>
-          <Button onClick={handleConnect} disabled={isConnecting}>
-            {isConnecting ? "Connecting..." : "Connect"}
+          <Button onClick={handleConnect} disabled={isConnecting} className="h-9">
+            {isConnecting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <Database className="h-3.5 w-3.5 mr-2" />
+                Connect
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -128,9 +129,9 @@ export function AddRowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add New Row</DialogTitle>
-          <DialogDescription>
-            Insert a new row into <span className="font-semibold">{table.name}</span>
+          <DialogTitle className="text-lg">Add New Row</DialogTitle>
+          <DialogDescription className="text-xs">
+            Insert a new row into <span className="font-mono text-foreground">{table.name}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -139,20 +140,27 @@ export function AddRowDialog({
             <div className="grid gap-4 py-4">
               {columns.map((column) => (
                 <div key={column.name} className="grid gap-2">
-                  <label htmlFor={column.name} className="text-sm font-medium">
-                    {column.name}
+                  <div className="flex items-center gap-2">
+                    <label htmlFor={column.name} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {column.name}
+                      {!column.is_nullable && !column.is_primary_key && (
+                        <span className="ml-1 text-destructive">*</span>
+                      )}
+                    </label>
                     {column.is_primary_key && (
-                      <span className="ml-2 text-xs text-primary">PK</span>
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary font-mono">PK</span>
                     )}
-                    {!column.is_nullable && !column.is_primary_key && (
-                      <span className="ml-2 text-xs text-destructive">*</span>
-                    )}
-                  </label>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    {column.data_type}
-                    {column.is_nullable && ' • Nullable'}
-                    {column.default_value && ` • Default: ${column.default_value}`}
+                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-secondary border border-border font-mono">
+                      {column.data_type}
+                    </span>
                   </div>
+                  {(column.is_nullable || column.default_value) && (
+                    <div className="text-[10px] text-muted-foreground -mt-1">
+                      {column.is_nullable && 'Optional'}
+                      {column.is_nullable && column.default_value && ' • '}
+                      {column.default_value && `Default: ${column.default_value}`}
+                    </div>
+                  )}
                   <Input
                     id={column.name}
                     type={getInputType(column.data_type)}
@@ -162,22 +170,33 @@ export function AddRowDialog({
                       column.is_primary_key
                         ? 'Auto-generated (leave empty)'
                         : column.is_nullable
-                        ? 'NULL (leave empty)'
+                        ? 'NULL (optional)'
                         : 'Required'
                     }
                     disabled={column.is_primary_key && column.data_type.toUpperCase().includes('SERIAL')}
+                    className="h-9 text-sm"
                   />
                 </div>
               ))}
             </div>
           </ScrollArea>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-9">
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Inserting...' : 'Insert Row'}
+            <Button type="submit" disabled={isSubmitting} className="h-9">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                  Inserting...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  Insert Row
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>

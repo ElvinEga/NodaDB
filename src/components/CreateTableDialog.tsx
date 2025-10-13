@@ -199,36 +199,36 @@ export function CreateTableDialog({
                 {columns.map((column) => (
                   <div
                     key={column.id}
-                    className="grid grid-cols-12 gap-2 items-start p-3 border rounded-lg"
+                    className="grid grid-cols-12 gap-2 items-start p-3 border border-border rounded-lg bg-secondary/30"
                   >
                     {/* Column Name */}
                     <div className="col-span-3">
-                      <label className="text-xs text-muted-foreground">Name</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Name</label>
                       <Input
                         value={column.name}
                         onChange={(e) =>
                           updateColumn(column.id, { name: e.target.value })
                         }
                         placeholder="column_name"
-                        className="mt-1"
+                        className="mt-1 h-9 text-sm font-mono"
                       />
                     </div>
 
                     {/* Data Type */}
                     <div className="col-span-3">
-                      <label className="text-xs text-muted-foreground">Type</label>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Type</label>
                       <Select
                         value={column.type}
                         onValueChange={(value) =>
                           updateColumn(column.id, { type: value })
                         }
                       >
-                        <SelectTrigger className="mt-1">
+                        <SelectTrigger className="mt-1 h-9 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {dataTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
+                            <SelectItem key={type} value={type} className="text-xs font-mono">
                               {type}
                             </SelectItem>
                           ))}
@@ -245,7 +245,7 @@ export function CreateTableDialog({
                         onChange={(e) =>
                           updateColumn(column.id, { nullable: e.target.checked })
                         }
-                        className="cursor-pointer"
+                        className="cursor-pointer accent-primary"
                       />
                       <label
                         htmlFor={`nullable-${column.id}`}
@@ -271,7 +271,7 @@ export function CreateTableDialog({
                             )
                           );
                         }}
-                        className="cursor-pointer"
+                        className="cursor-pointer accent-primary"
                       />
                       <label
                         htmlFor={`pk-${column.id}`}
@@ -289,8 +289,9 @@ export function CreateTableDialog({
                         variant="ghost"
                         onClick={() => removeColumn(column.id)}
                         disabled={columns.length === 1}
+                        className="h-9 w-9 p-0"
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
                   </div>
