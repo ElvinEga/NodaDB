@@ -12,13 +12,29 @@
   "app": {
     "windows": [
       {
-        "title": "tauri-app",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "NodaDB - Database Management",
+        "width": 1200,
+        "height": 800
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main window capabilities",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "dialog:allow-open",
+            "dialog:allow-save",
+            "dialog:allow-message",
+            "dialog:allow-ask",
+            "dialog:allow-confirm"
+          ]
+        }
+      ]
     }
   },
   "bundle": {
