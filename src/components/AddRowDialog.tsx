@@ -126,7 +126,7 @@ export function AddRowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add New Row</DialogTitle>
           <DialogDescription>
@@ -134,8 +134,8 @@ export function AddRowDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <ScrollArea className="max-h-[400px] pr-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <ScrollArea className="flex-1 overflow-y-auto pr-4">
             <div className="grid gap-4 py-4">
               {columns.map((column) => (
                 <div key={column.name} className="grid gap-2">

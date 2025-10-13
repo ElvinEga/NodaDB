@@ -161,7 +161,7 @@ export function CreateTableDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px]">
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Create New Table</DialogTitle>
           <DialogDescription>
@@ -169,7 +169,8 @@ export function CreateTableDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <ScrollArea className="flex-1 overflow-y-auto pr-4">
+          <div className="grid gap-4 py-4">
           {/* Table Name */}
           <div className="grid gap-2">
             <label htmlFor="tableName" className="text-sm font-medium">
@@ -193,7 +194,7 @@ export function CreateTableDialog({
               </Button>
             </div>
 
-            <ScrollArea className="max-h-[350px] pr-4">
+            <div className="max-h-[350px] overflow-y-auto pr-2">
               <div className="space-y-3">
                 {columns.map((column) => (
                   <div
@@ -295,9 +296,10 @@ export function CreateTableDialog({
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </div>
-        </div>
+          </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
