@@ -340,7 +340,6 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                               type="text"
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={handleCancelEdit}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
@@ -356,9 +355,23 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                               size="sm"
                               variant="ghost"
                               className="h-6 px-2"
-                              onClick={handleSaveCell}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSaveCell();
+                              }}
                             >
                               Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleCancelEdit();
+                              }}
+                            >
+                              Cancel
                             </Button>
                           </div>
                         ) : (
