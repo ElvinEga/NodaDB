@@ -3,7 +3,7 @@ import { Database, Plus, Settings, FileCode2, Table2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { DatabaseExplorer } from "@/components/DatabaseExplorer";
-import { TableDataViewer } from "@/components/TableDataViewer";
+import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
@@ -147,9 +147,12 @@ function App() {
               {activeTab ? (
                 <>
                   {activeTab.type === 'table' && activeTab.table ? (
-                    <TableDataViewer
+                    <TanStackTableViewer
                       connection={activeConnection}
                       table={activeTab.table}
+                      columns={[]}
+                      onAddRow={() => {}}
+                      onRefresh={() => {}}
                     />
                   ) : (
                     <QueryEditor connection={activeConnection} />
