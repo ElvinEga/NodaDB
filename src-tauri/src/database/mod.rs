@@ -4,6 +4,7 @@ use sqlx::{Row, TypeInfo, Column};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use chrono::{NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
 
 pub enum DatabasePool {
     Sqlite(sqlx::SqlitePool),
@@ -53,7 +54,36 @@ macro_rules! process_rows {
                                 .map(|v| serde_json::Value::Bool(v))
                                 .unwrap_or(serde_json::Value::Null)
                         }
-                        _ => serde_json::Value::Null,
+                        "DATETIME" | "TIMESTAMP" => {
+                            row.try_get::<NaiveDateTime, _>(idx)
+                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S").to_string()))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "TIMESTAMPTZ" => {
+                            row.try_get::<DateTime<Utc>, _>(idx)
+                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S %Z").to_string()))
+                                .or_else(|_| {
+                                    row.try_get::<NaiveDateTime, _>(idx)
+                                        .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S").to_string()))
+                                })
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "DATE" => {
+                            row.try_get::<NaiveDate, _>(idx)
+                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d").to_string()))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        "TIME" => {
+                            row.try_get::<NaiveTime, _>(idx)
+                                .map(|v| serde_json::Value::String(v.format("%H:%M:%S").to_string()))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        _ => {
+                            // Fallback: try to get as string
+                            row.try_get::<String, _>(idx)
+                                .map(|v| serde_json::Value::String(v))
+                                .unwrap_or(serde_json::Value::Null)
+                        }
                     };
                     map.insert(col.name().to_string(), value);
                 }
