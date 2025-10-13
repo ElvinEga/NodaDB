@@ -66,10 +66,43 @@ pub async fn execute_query(
 }
 
 #[tauri::command]
-pub async fn open_file_dialog() -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-    
-    // This will be called from the app handle in lib.rs
-    // For now, return placeholder
-    Ok(None)
+pub async fn insert_row(
+    connection_id: String,
+    table_name: String,
+    data: serde_json::Value,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .insert_row(&connection_id, &table_name, data, &db_type)
+        .await
+        .map_err(|e| format!("Failed to insert row: {}", e))
+}
+
+#[tauri::command]
+pub async fn update_row(
+    connection_id: String,
+    table_name: String,
+    data: serde_json::Value,
+    where_clause: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .update_row(&connection_id, &table_name, data, &where_clause, &db_type)
+        .await
+        .map_err(|e| format!("Failed to update row: {}", e))
+}
+
+#[tauri::command]
+pub async fn delete_rows(
+    connection_id: String,
+    table_name: String,
+    where_clause: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .delete_rows(&connection_id, &table_name, &where_clause)
+        .await
+        .map_err(|e| format!("Failed to delete rows: {}", e))
 }

@@ -1,6 +1,6 @@
 use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn};
 use anyhow::{anyhow, Result};
-use sqlx::{sqlite::SqlitePool, Any, AnyPool, Column, Row, TypeInfo};
+use sqlx::{AnyPool, Column, Row, TypeInfo};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -244,5 +244,107 @@ impl ConnectionManager {
             rows: result_rows,
             rows_affected: 0,
         })
+    }
+
+    pub async fn insert_row(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        data: serde_json::Value,
+        _db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let obj = data.as_object()
+            .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
+
+        let columns: Vec<&String> = obj.keys().collect();
+        let values: Vec<String> = obj.values()
+            .map(|v| {
+                if v.is_null() {
+                    "NULL".to_string()
+                } else if v.is_string() {
+                    format!("'{}'", v.as_str().unwrap().replace("'", "''"))
+                } else {
+                    v.to_string()
+                }
+            })
+            .collect();
+
+        let column_list = columns.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ");
+        let value_list = values.join(", ");
+
+        let query = format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            table_name, column_list, value_list
+        );
+
+        sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully inserted 1 row into {}", table_name))
+    }
+
+    pub async fn update_row(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        data: serde_json::Value,
+        where_clause: &str,
+        _db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let obj = data.as_object()
+            .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
+
+        let set_clauses: Vec<String> = obj.iter()
+            .map(|(k, v)| {
+                if v.is_null() {
+                    format!("{} = NULL", k)
+                } else if v.is_string() {
+                    format!("{} = '{}'", k, v.as_str().unwrap().replace("'", "''"))
+                } else {
+                    format!("{} = {}", k, v)
+                }
+            })
+            .collect();
+
+        let set_clause = set_clauses.join(", ");
+
+        let query = format!(
+            "UPDATE {} SET {} WHERE {}",
+            table_name, set_clause, where_clause
+        );
+
+        let result = sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully updated {} row(s)", result.rows_affected()))
+    }
+
+    pub async fn delete_rows(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        where_clause: &str,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let query = format!(
+            "DELETE FROM {} WHERE {}",
+            table_name, where_clause
+        );
+
+        let result = sqlx::query(&query).execute(pool).await?;
+
+        Ok(format!("Successfully deleted {} row(s)", result.rows_affected()))
     }
 }
