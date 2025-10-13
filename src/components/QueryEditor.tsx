@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor from '@monaco-editor/react';
-import { Play, Loader2, Copy, Download } from 'lucide-react';
+import { Play, Loader2, Copy, Download, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConnectionConfig, QueryResult } from '@/types';
+import { QueryHistory } from '@/components/QueryHistory';
+import { queryHistory } from '@/lib/queryHistory';
 import { toast } from 'sonner';
 
 interface QueryEditorProps {
@@ -26,6 +28,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   const [error, setError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionTime, setExecutionTime] = useState<number>(0);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleExecuteQuery = async () => {
     if (!query.trim()) {
@@ -44,16 +47,47 @@ export function QueryEditor({ connection }: QueryEditorProps) {
       });
       
       const endTime = Date.now();
-      setExecutionTime(endTime - startTime);
+      const execTime = endTime - startTime;
+      setExecutionTime(execTime);
       setResult(result);
-      toast.success(`Query executed successfully in ${endTime - startTime}ms`);
+      
+      // Add to history
+      queryHistory.addQuery({
+        query: query.trim(),
+        connectionId: connection.id,
+        connectionName: connection.name,
+        executionTime: execTime,
+        rowsReturned: result.rows.length,
+        success: true,
+      });
+      
+      toast.success(`Query executed successfully in ${execTime}ms`);
     } catch (err) {
-      setError(String(err));
+      const errorMsg = String(err);
+      setError(errorMsg);
+      
+      // Add failed query to history
+      queryHistory.addQuery({
+        query: query.trim(),
+        connectionId: connection.id,
+        connectionName: connection.name,
+        executionTime: Date.now() - startTime,
+        rowsReturned: 0,
+        success: false,
+        error: errorMsg,
+      });
+      
       toast.error('Query failed');
       console.error('Query execution error:', err);
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  const handleQuerySelect = (selectedQuery: string) => {
+    setQuery(selectedQuery);
+    setShowHistory(false);
+    toast.success('Query loaded from history');
   };
 
   const handleCopyResults = () => {
@@ -103,58 +137,68 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">SQL Query Editor</h2>
-          <p className="text-sm text-muted-foreground">
-            {connection.name} • {connection.db_type.toUpperCase()}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {result && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCopyResults}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadResults}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
-            </>
-          )}
-          <Button
-            onClick={handleExecuteQuery}
-            disabled={isExecuting}
-            size="sm"
-          >
-            {isExecuting ? (
+    <div className="h-full flex">
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="border-b px-4 py-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">SQL Query Editor</h2>
+            <p className="text-sm text-muted-foreground">
+              {connection.name} • {connection.db_type.toUpperCase()}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              <History className="h-4 w-4 mr-2" />
+              History
+            </Button>
+            {result && (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Executing...
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4 mr-2" />
-                Execute (Ctrl+Enter)
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyResults}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadResults}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
               </>
             )}
-          </Button>
+            <Button
+              onClick={handleExecuteQuery}
+              disabled={isExecuting}
+              size="sm"
+            >
+              {isExecuting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Execute (Ctrl+Enter)
+                </>
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Editor and Results */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Editor and Results */}
+        <div className="flex-1 flex flex-col overflow-hidden">
         {/* Editor */}
         <div className="h-64 border-b">
           <Editor
@@ -290,6 +334,17 @@ export function QueryEditor({ connection }: QueryEditorProps) {
           </Tabs>
         </div>
       </div>
+    </div>
+
+      {/* History Sidebar */}
+      {showHistory && (
+        <div className="w-80 border-l">
+          <QueryHistory
+            connectionId={connection.id}
+            onQuerySelect={handleQuerySelect}
+          />
+        </div>
+      )}
     </div>
   );
 }

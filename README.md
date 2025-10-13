@@ -82,14 +82,52 @@ A modern, cross-platform database management desktop application built with Taur
   - Error handling with user-friendly messages
   - Automatic data refresh after mutations
 
-### 📋 Planned Features (Phase 4+)
+#### Schema Designer (Phase 4) 🆕
+- **Visual Table Creator**:
+  - Drag-and-drop column designer
+  - Database-specific data types (SQLite, PostgreSQL, MySQL)
+  - Primary key and NULL constraints
+  - Real-time validation
+  - Create tables without writing SQL
+  
+- **Table Management**:
+  - Drop tables with confirmation
+  - Rename tables
+  - Add columns to existing tables (ALTER TABLE)
+  - Context menus on table hover
+  - Plus button to create new tables
 
-- Full CRUD operations on tables and rows
-- Schema designer (create, modify, drop tables)
-- Query history and favorites
-- Import/Export (CSV, JSON, SQL)
-- Syntax highlighting and auto-completion in SQL editor
-- Data visualization
+#### Query History (Phase 4) 🆕
+- **Automatic Tracking**:
+  - Every query saved automatically
+  - Success and failure tracking
+  - Execution time metrics
+  - Rows returned count
+  - Error message capture
+  
+- **History Management**:
+  - Search queries by text or connection
+  - Filter tabs (All/Favorites/Success/Failed)
+  - Star/favorite important queries
+  - Re-run queries with one click
+  - Delete individual entries
+  - Clear history (keeps favorites)
+  - LocalStorage persistence (500 queries max)
+  - Statistics display (total, avg time)
+
+### 📋 Planned Features (Phase 5+)
+
+- Table data filtering (WHERE clause builder)
+- Column sorting in table viewer
+- Import/Export CSV to tables
+- Foreign key management UI
+- Create indexes UI
+- Visual query builder
+- ERD (Entity-Relationship Diagram) visualization
+- Database migration tools
+- Query performance analysis
+- Multi-tab query editor
+- SQL formatting and beautification
 - Dark/Light theme toggle
 
 ## Tech Stack
