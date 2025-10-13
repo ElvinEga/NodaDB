@@ -75,11 +75,11 @@ export function TanStackTableViewer({
     const startTime = Date.now();
 
     try {
-      const result = await invoke<QueryResult>('get_table_data', {
+      // Use execute_query instead of get_table_data
+      const query = `SELECT * FROM ${table.name} LIMIT 1000`;
+      const result = await invoke<QueryResult>('execute_query', {
         connectionId: connection.id,
-        tableName: table.name,
-        limit: 1000,
-        offset: 0,
+        query: query,
       });
 
       setData(result.rows);
