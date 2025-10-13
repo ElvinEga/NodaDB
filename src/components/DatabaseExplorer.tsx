@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronRight, ChevronDown, Table, Database, Loader2, RefreshCw, Plus, MoreVertical, Trash2, Edit } from 'lucide-react';
+import { Table, Database, Loader2, RefreshCw, Plus, MoreVertical, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -18,12 +18,12 @@ interface DatabaseExplorerProps {
   connection: ConnectionConfig;
   onTableSelect: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
+  onNewQuery?: () => void;
 }
 
-export function DatabaseExplorer({ connection, onTableSelect, selectedTable }: DatabaseExplorerProps) {
+export function DatabaseExplorer({ connection, onTableSelect, selectedTable, onNewQuery }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<DatabaseTable[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
   const [createTableDialogOpen, setCreateTableDialogOpen] = useState(false);
 
   const loadTables = async () => {
@@ -85,42 +85,55 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable }: D
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors"
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
+      <div className="p-3 border-b border-border">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            <h2 className="font-semibold text-sm">Tables</h2>
+            {tables.length > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-mono">
+                {tables.length}
+              </span>
             )}
-            <Database className="h-4 w-4" />
-            <span>{connection.name}</span>
-          </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={loadTables}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setCreateTableDialogOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        {onNewQuery && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={loadTables}
-            disabled={isLoading}
-            className="h-8 w-8 p-0"
+            onClick={onNewQuery}
+            className="w-full text-xs"
           >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
+            <Plus className="h-3 w-3 mr-1.5" />
+            New Query
           </Button>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {connection.db_type.toUpperCase()}
-          {connection.file_path && ` • ${connection.file_path.split('/').pop()}`}
-        </div>
+        )}
       </div>
 
-      {isExpanded && (
-        <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1">
           <div className="p-2">
             {isLoading && tables.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
@@ -196,8 +209,7 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable }: D
               </div>
             )}
           </div>
-        </ScrollArea>
-      )}
+      </ScrollArea>
 
       <CreateTableDialog
         open={createTableDialogOpen}

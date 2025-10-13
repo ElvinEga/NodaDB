@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, Plus } from "lucide-react";
+import { Database, Plus, Settings, FileCode2, Table2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { DatabaseExplorer } from "@/components/DatabaseExplorer";
@@ -8,106 +8,203 @@ import { QueryEditor } from "@/components/QueryEditor";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
 import { DatabaseTable } from "@/types";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type TabType = {
+  id: string;
+  type: 'table' | 'query';
+  title: string;
+  table?: DatabaseTable;
+};
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
-  const [selectedTable, setSelectedTable] = useState<DatabaseTable | null>(null);
+  const [tabs, setTabs] = useState<TabType[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const connections = useConnectionStore((state) => state.connections);
   const activeConnectionId = useConnectionStore((state) => state.activeConnectionId);
   const setActiveConnection = useConnectionStore((state) => state.setActiveConnection);
   const getActiveConnection = useConnectionStore((state) => state.getActiveConnection);
   
   const activeConnection = getActiveConnection();
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
+  const handleTableSelect = (table: DatabaseTable) => {
+    const existingTab = tabs.find(t => t.type === 'table' && t.table?.name === table.name);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+    } else {
+      const newTab: TabType = {
+        id: `table-${table.name}-${Date.now()}`,
+        type: 'table',
+        title: table.name,
+        table,
+      };
+      setTabs([...tabs, newTab]);
+      setActiveTabId(newTab.id);
+    }
+  };
+
+  const openQueryTab = () => {
+    const newTab: TabType = {
+      id: `query-${Date.now()}`,
+      type: 'query',
+      title: 'New Query',
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const closeTab = (tabId: string) => {
+    const newTabs = tabs.filter(t => t.id !== tabId);
+    setTabs(newTabs);
+    if (activeTabId === tabId) {
+      setActiveTabId(newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="border-b px-4 py-3 flex items-center justify-between">
+      {/* Top Navigation Bar */}
+      <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
+        {/* Logo & App Name */}
         <div className="flex items-center gap-2">
-          <Database className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-bold">NodaDB</h1>
+          <Database className="h-5 w-5 text-primary" />
+          <h1 className="text-lg font-semibold">NodaDB</h1>
         </div>
-        <Button onClick={() => setConnectionDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Connection
+
+        {/* Connection Selector */}
+        {activeConnection && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-sm">
+            <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="font-medium">{activeConnection.name}</span>
+            <span className="text-muted-foreground">({activeConnection.db_type})</span>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Right Actions */}
+        <Button variant="ghost" size="icon" onClick={() => setConnectionDialogOpen(true)}>
+          <Plus className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon">
+          <Settings className="h-4 w-4" />
         </Button>
       </header>
+
+      {/* Tab Bar */}
+      {tabs.length > 0 && (
+        <div className="h-10 border-b border-border bg-card flex items-center px-2 gap-1 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTabId(tab.id)}
+              className={`
+                flex items-center gap-2 px-3 py-1.5 rounded-md text-sm whitespace-nowrap
+                transition-colors duration-150
+                ${activeTabId === tab.id 
+                  ? 'bg-secondary text-foreground' 
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                }
+              `}
+            >
+              {tab.type === 'table' ? (
+                <Table2 className="h-3.5 w-3.5" />
+              ) : (
+                <FileCode2 className="h-3.5 w-3.5" />
+              )}
+              <span className="max-w-[150px] truncate">{tab.title}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(tab.id);
+                }}
+                className="ml-1 hover:bg-border rounded p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {activeConnectionId && activeConnection ? (
           <>
             {/* Database Explorer Sidebar */}
-            <aside className="w-64 border-r bg-muted/30">
+            <aside className="w-64 border-r border-border bg-card">
               <DatabaseExplorer
                 connection={activeConnection}
-                onTableSelect={setSelectedTable}
-                selectedTable={selectedTable}
+                onTableSelect={handleTableSelect}
+                selectedTable={activeTab?.table || null}
+                onNewQuery={openQueryTab}
               />
             </aside>
 
-            {/* Main Area - Tabbed Interface */}
-            <main className="flex-1 overflow-hidden">
-              <Tabs defaultValue="tables" className="h-full flex flex-col">
-                <TabsList className="mx-4 mt-2">
-                  <TabsTrigger value="tables">Tables</TabsTrigger>
-                  <TabsTrigger value="query">Query</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="tables" className="flex-1 overflow-hidden mt-0">
-                  {selectedTable ? (
+            {/* Main Content Area */}
+            <main className="flex-1 overflow-hidden bg-secondary/20">
+              {activeTab ? (
+                <>
+                  {activeTab.type === 'table' && activeTab.table ? (
                     <TableDataViewer
                       connection={activeConnection}
-                      table={selectedTable}
+                      table={activeTab.table}
                     />
                   ) : (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                        <h2 className="text-xl font-semibold mb-2">
-                          Select a table to view
-                        </h2>
-                        <p className="text-sm text-muted-foreground">
-                          Choose a table from the explorer to see its data
-                        </p>
-                      </div>
-                    </div>
+                    <QueryEditor connection={activeConnection} />
                   )}
-                </TabsContent>
-                
-                <TabsContent value="query" className="flex-1 overflow-hidden mt-0">
-                  <QueryEditor connection={activeConnection} />
-                </TabsContent>
-              </Tabs>
+                </>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                    <h2 className="text-xl font-semibold mb-2">
+                      Welcome to {activeConnection.name}
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Select a table from the sidebar or open a new query
+                    </p>
+                    <Button onClick={openQueryTab} variant="outline">
+                      <FileCode2 className="h-4 w-4 mr-2" />
+                      New Query
+                    </Button>
+                  </div>
+                </div>
+              )}
             </main>
           </>
         ) : connections.length > 0 ? (
           /* Connection List when no active connection */
-          <div className="flex-1 flex flex-col">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Your Connections</h2>
-              <p className="text-muted-foreground mb-4">
-                Select a connection to start exploring
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="max-w-2xl w-full">
+              <h2 className="text-2xl font-bold mb-2">Your Connections</h2>
+              <p className="text-muted-foreground mb-6">
+                Select a connection to start exploring your database
               </p>
-              <div className="grid gap-3 max-w-2xl">
+              <div className="grid gap-3">
                 {connections.map((conn) => (
                   <button
                     key={conn.id}
                     onClick={() => {
                       setActiveConnection(conn.id);
-                      setSelectedTable(null);
+                      setTabs([]);
+                      setActiveTabId(null);
                     }}
-                    className="text-left p-4 rounded-lg border hover:border-primary hover:bg-muted/50 transition-colors"
+                    className="text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
                   >
-                    <div className="flex items-center gap-3">
-                      <Database className="h-8 w-8 text-primary" />
-                      <div>
-                        <div className="font-semibold">{conn.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {conn.db_type.toUpperCase()}
-                          {conn.file_path && ` • ${conn.file_path}`}
-                          {conn.host && ` • ${conn.host}:${conn.port}`}
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Database className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold mb-1">{conn.name}</div>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
+                            {conn.db_type.toUpperCase()}
+                          </span>
+                          {conn.file_path && <span className="truncate">{conn.file_path}</span>}
+                          {conn.host && <span>{conn.host}:{conn.port}</span>}
                         </div>
                       </div>
                     </div>
@@ -119,16 +216,32 @@ function App() {
         ) : (
           /* Welcome screen for new users */
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-              <h2 className="text-2xl font-bold mb-2">Welcome to NodaDB</h2>
-              <p className="text-muted-foreground mb-4">
-                A modern database management tool built with Tauri
+            <div className="text-center max-w-md">
+              <div className="h-20 w-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <Database className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className="text-3xl font-bold mb-3">Welcome to NodaDB</h2>
+              <p className="text-muted-foreground mb-8 text-lg">
+                A modern, professional database management tool built with Tauri
               </p>
-              <Button onClick={() => setConnectionDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+              <Button onClick={() => setConnectionDialogOpen(true)} size="lg">
+                <Plus className="h-5 w-5 mr-2" />
                 Create Your First Connection
               </Button>
+              <div className="mt-8 grid grid-cols-3 gap-4 text-sm text-muted-foreground">
+                <div>
+                  <div className="font-semibold text-foreground mb-1">SQLite</div>
+                  <div className="text-xs">Local databases</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-foreground mb-1">PostgreSQL</div>
+                  <div className="text-xs">Remote servers</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-foreground mb-1">MySQL</div>
+                  <div className="text-xs">Cloud & on-premise</div>
+                </div>
+              </div>
             </div>
           </div>
         )}
