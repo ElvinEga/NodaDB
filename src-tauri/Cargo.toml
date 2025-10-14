@@ -27,4 +27,5 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "any", "sqlite", "
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
+ssh2 = "0.9"
 

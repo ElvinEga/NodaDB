@@ -1,6 +1,7 @@
 mod commands;
 mod database;
 mod models;
+mod ssh_tunnel;
 
 use database::ConnectionManager;
 

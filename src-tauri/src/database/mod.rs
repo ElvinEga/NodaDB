@@ -1,4 +1,5 @@
 use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
+use crate::ssh_tunnel::SshTunnel;
 use anyhow::{anyhow, Result};
 use sqlx::{Row, TypeInfo, Column};
 use std::collections::HashMap;
