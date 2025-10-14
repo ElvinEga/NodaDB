@@ -37,10 +37,18 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AddRowDialog } from '@/components/AddRowDialog';
 import { EditCellDialog } from '@/components/EditCellDialog';
+import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
+import { CellContextMenu } from '@/components/CellContextMenu';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
 import { getCellRenderer } from '@/lib/cellRenderers';
+import {
+  generateSetNullSql,
+  generateDeleteSql,
+  generateDuplicateSql,
+  calculateColumnStats,
+} from '@/lib/tableOperations';
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -75,6 +83,12 @@ export function TanStackTableViewer({
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Helper: Get primary key column
+  const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+  const getPrimaryKeyValue = (row: Record<string, any>) => {
+    return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
+  };
 
   // Load table data
   const loadData = async () => {
@@ -131,6 +145,93 @@ export function TanStackTableViewer({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Context menu handlers
+  const handleSetCellNull = async (row: Record<string, any>, columnName: string) => {
+    if (!primaryKeyColumn) {
+      toast.error('Cannot update: No primary key defined');
+      return;
+    }
+    
+    const pkValue = getPrimaryKeyValue(row);
+    const sql = generateSetNullSql(table.name, columnName, primaryKeyColumn.name, pkValue);
+    
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: sql,
+      });
+      toast.success(`Set ${columnName} to NULL`);
+      loadData();
+    } catch (error) {
+      toast.error(`Failed to update: ${error}`);
+    }
+  };
+
+  const handleDuplicateRow = async (row: Record<string, any>) => {
+    if (!primaryKeyColumn) {
+      toast.error('Cannot duplicate: No primary key defined');
+      return;
+    }
+    
+    const columnNames = tableColumns.map(col => col.name);
+    const sql = generateDuplicateSql(table.name, row, columnNames, primaryKeyColumn.name);
+    
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: sql,
+      });
+      toast.success('Row duplicated');
+      loadData();
+    } catch (error) {
+      toast.error(`Failed to duplicate: ${error}`);
+    }
+  };
+
+  const handleDeleteRow = async (row: Record<string, any>) => {
+    if (!primaryKeyColumn) {
+      toast.error('Cannot delete: No primary key defined');
+      return;
+    }
+    
+    const pkValue = getPrimaryKeyValue(row);
+    const sql = generateDeleteSql(table.name, primaryKeyColumn.name, pkValue);
+    
+    if (!confirm(`Delete this row?\n\n${sql}\n\nThis action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: sql,
+      });
+      toast.success('Row deleted');
+      loadData();
+    } catch (error) {
+      toast.error(`Failed to delete: ${error}`);
+    }
+  };
+
+  const handleFilterByValue = (columnName: string, value: unknown) => {
+    setColumnFilters([{ id: columnName, value: String(value) }]);
+    toast.success(`Filtered by ${columnName} = ${value}`);
+  };
+
+  const handleShowColumnStats = (columnName: string) => {
+    const stats = calculateColumnStats(data, columnName);
+    const message = `Column: ${columnName}
+Total: ${stats.count}
+Null: ${stats.nullCount}
+Unique: ${stats.uniqueCount}${stats.min !== undefined ? `
+Min: ${stats.min}
+Max: ${stats.max}
+Avg: ${stats.avg?.toFixed(2)}
+Sum: ${stats.sum}` : ''}`;
+    
+    toast.info(message, { duration: 5000 });
+  };
 
   // Get SQL type badge color
   const getTypeBadgeColor = (dataType: string): string => {
@@ -194,34 +295,47 @@ export function TanStackTableViewer({
         header: ({ column }) => {
           const isSorted = column.getIsSorted();
           return (
-            <div className="flex flex-col gap-1">
-              <button
-                className="flex items-center gap-1 hover:text-foreground transition-colors"
-                onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-              >
-                <span className="font-semibold">{col.name}</span>
-                {isSorted === 'asc' ? (
-                  <ChevronUp className="h-3.5 w-3.5 text-primary" />
-                ) : isSorted === 'desc' ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
-                ) : (
-                  <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
-                )}
-              </button>
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className={`px-1.5 py-0.5 rounded font-mono ${getTypeBadgeColor(col.data_type)}`}>
-                  {col.data_type}
-                </span>
-                {col.is_primary_key && (
-                  <span className="px-1.5 py-0.5 rounded font-mono bg-primary/10 text-primary">
-                    PK
+            <ColumnHeaderContextMenu
+              columnName={col.name}
+              dataType={col.data_type}
+              isPrimaryKey={col.is_primary_key}
+              isNullable={col.is_nullable}
+              isSorted={isSorted}
+              data={data}
+              onSort={(ascending) => column.toggleSorting(!ascending)}
+              onClearSort={() => column.clearSorting()}
+              onHide={() => column.toggleVisibility(false)}
+              onShowStats={() => handleShowColumnStats(col.name)}
+            >
+              <div className="flex flex-col gap-1">
+                <button
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                >
+                  <span className="font-semibold">{col.name}</span>
+                  {isSorted === 'asc' ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                  ) : isSorted === 'desc' ? (
+                    <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                  )}
+                </button>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className={`px-1.5 py-0.5 rounded font-mono ${getTypeBadgeColor(col.data_type)}`}>
+                    {col.data_type}
                   </span>
-                )}
-                {!col.is_nullable && !col.is_primary_key && (
-                  <span className="text-muted-foreground">NOT NULL</span>
-                )}
+                  {col.is_primary_key && (
+                    <span className="px-1.5 py-0.5 rounded font-mono bg-primary/10 text-primary">
+                      PK
+                    </span>
+                  )}
+                  {!col.is_nullable && !col.is_primary_key && (
+                    <span className="text-muted-foreground">NOT NULL</span>
+                  )}
+                </div>
               </div>
-            </div>
+            </ColumnHeaderContextMenu>
           );
         },
         cell: ({ getValue, row }) => {
@@ -246,21 +360,36 @@ export function TanStackTableViewer({
 
           // Display mode with custom renderer
           return (
-            <div
-              className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
-              onDoubleClick={handleEditClick}
+            <CellContextMenu
+              row={row.original}
+              columnName={col.name}
+              cellValue={value}
+              tableName={table.name}
+              columnNames={tableColumns.map(c => c.name)}
+              isPrimaryKey={col.is_primary_key}
+              canEdit={!col.is_primary_key}
+              onEdit={handleEditClick}
+              onSetNull={() => handleSetCellNull(row.original, col.name)}
+              onDuplicateRow={() => handleDuplicateRow(row.original)}
+              onDeleteRow={() => handleDeleteRow(row.original)}
+              onFilterByValue={() => handleFilterByValue(col.name, value)}
             >
-              <div className="flex-1 min-w-0">
-                {getCellRenderer(col.data_type, value)}
-              </div>
-              <button
-                onClick={handleEditClick}
-                className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
-                title="Click to edit"
+              <div
+                className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
+                onDoubleClick={handleEditClick}
               >
-                <Edit2 className="h-3 w-3 ml-2 shrink-0" />
-              </button>
-            </div>
+                <div className="flex-1 min-w-0">
+                  {getCellRenderer(col.data_type, value)}
+                </div>
+                <button
+                  onClick={handleEditClick}
+                  className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                  title="Click to edit"
+                >
+                  <Edit2 className="h-3 w-3 ml-2 shrink-0" />
+                </button>
+              </div>
+            </CellContextMenu>
           );
         },
         size: 180,
