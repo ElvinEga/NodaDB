@@ -490,10 +490,11 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                         key={column} 
                         className={`
                           h-10 text-xs group relative
-                          ${isPK ? 'font-mono text-muted-foreground' : ''}
+                          ${isPK ? 'font-mono text-muted-foreground' : 'cursor-pointer'}
                           ${isNull ? 'italic text-muted-foreground' : ''}
                         `}
-                        onDoubleClick={() => handleCellEdit(index, column, value)}
+                        onDoubleClick={() => !isPK && handleCellEdit(index, column, value)}
+                        title={!isPK ? 'Double-click to edit' : 'Primary key cannot be edited'}
                       >
                         {editingCell?.rowIndex === index && editingCell?.column === column ? (
                           <div className="flex flex-col gap-1">
@@ -553,8 +554,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                           </div>
                         ) : (
                           <div 
-                            className="max-w-xs truncate cursor-pointer px-2 py-1 rounded group-hover:bg-muted/30" 
-                            title={`Double-click to edit\n${formatValue(value)}`}
+                            className="max-w-xs truncate px-2 py-1 rounded group-hover:bg-muted/30"
                           >
                             {isNull ? (
                               <span className="text-muted-foreground/70">NULL</span>
