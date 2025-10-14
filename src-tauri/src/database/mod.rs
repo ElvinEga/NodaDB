@@ -1,4 +1,4 @@
-use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn};
+use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
 use anyhow::{anyhow, Result};
 use sqlx::{Row, TypeInfo, Column};
 use std::collections::HashMap;
@@ -198,57 +198,202 @@ impl ConnectionManager {
         Ok(())
     }
 
-    pub async fn list_tables(&self, connection_id: &str, db_type: &DatabaseType) -> Result<Vec<DatabaseTable>> {
+    pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult> {
+        let start = std::time::Instant::now();
+        
+        let result = match config.db_type {
+            DatabaseType::SQLite => {
+                let path = config
+                    .file_path
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("SQLite file path is required"))?;
+                let connection_string = format!("sqlite://{}", path);
+                
+                match sqlx::SqlitePool::connect(&connection_string).await {
+                    Ok(pool) => {
+                        let version_query = "SELECT sqlite_version()";
+                        let row = sqlx::query(version_query).fetch_one(&pool).await?;
+                        let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
+                        
+                        let latency_ms = start.elapsed().as_millis() as u64;
+                        
+                        pool.close().await;
+                        
+                        ConnectionTestResult {
+                            success: true,
+                            latency_ms,
+                            db_version: format!("SQLite {}", version),
+                            error: None,
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+            DatabaseType::PostgreSQL => {
+                let connection_string = Self::build_connection_string(&config)?;
+                
+                match sqlx::PgPool::connect(&connection_string).await {
+                    Ok(pool) => {
+                        let version_query = "SELECT version()";
+                        let row = sqlx::query(version_query).fetch_one(&pool).await?;
+                        let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
+                        
+                        // Extract just the version number
+                        let version_short = version.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+                        
+                        let latency_ms = start.elapsed().as_millis() as u64;
+                        
+                        pool.close().await;
+                        
+                        ConnectionTestResult {
+                            success: true,
+                            latency_ms,
+                            db_version: version_short,
+                            error: None,
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+            DatabaseType::MySQL => {
+                let connection_string = Self::build_connection_string(&config)?;
+                
+                match sqlx::MySqlPool::connect(&connection_string).await {
+                    Ok(pool) => {
+                        let version_query = "SELECT VERSION()";
+                        let row = sqlx::query(version_query).fetch_one(&pool).await?;
+                        let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
+                        
+                        let latency_ms = start.elapsed().as_millis() as u64;
+                        
+                        pool.close().await;
+                        
+                        ConnectionTestResult {
+                            success: true,
+                            latency_ms,
+                            db_version: format!("MySQL {}", version),
+                            error: None,
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+        };
+        
+        Ok(result)
+    }
+
+    pub async fn list_tables(&self, connection_id: &str, _db_type: &DatabaseType) -> Result<Vec<DatabaseTable>> {
         let connections = self.connections.read().await;
         let pool = connections
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
-        let query = match db_type {
-            DatabaseType::SQLite => {
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            }
-            DatabaseType::PostgreSQL => {
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
-            }
-            DatabaseType::MySQL => {
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name"
-            }
-        };
-
         let tables = match pool {
             &DatabasePool::Sqlite(ref pool) => {
+                // SQLite: Get table name and type from sqlite_master
+                let query = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name";
                 let rows = sqlx::query(query).fetch_all(pool).await?;
-                rows.into_iter()
-                    .map(|row| {
-                        let name: String = row.try_get(0).unwrap_or_default();
-                        DatabaseTable {
-                            name,
-                            schema: None,
-                        }
-                    })
-                    .collect()
+                
+                let mut tables = Vec::new();
+                for row in rows {
+                    let name: String = row.try_get(0).unwrap_or_default();
+                    let table_type: String = row.try_get(1).unwrap_or_default();
+                    
+                    // Get row count for tables (not views)
+                    let row_count = if table_type == "table" {
+                        let count_query = format!("SELECT COUNT(*) FROM \"{}\"", name);
+                        sqlx::query(&count_query)
+                            .fetch_one(pool)
+                            .await
+                            .ok()
+                            .and_then(|row| row.try_get::<i64, _>(0).ok())
+                    } else {
+                        None
+                    };
+                    
+                    tables.push(DatabaseTable {
+                        name,
+                        schema: None,
+                        row_count,
+                        size_kb: None, // SQLite doesn't easily provide per-table size
+                        table_type: Some(table_type.to_uppercase()),
+                    });
+                }
+                tables
             }
             &DatabasePool::Postgres(ref pool) => {
+                // PostgreSQL: Get statistics from pg_stat_user_tables and pg_class
+                let query = r#"
+                    SELECT 
+                        t.table_name,
+                        t.table_type,
+                        pg_stat.n_live_tup as row_count,
+                        pg_total_relation_size(quote_ident(t.table_schema)||'.'||quote_ident(t.table_name))::bigint / 1024 as size_kb
+                    FROM information_schema.tables t
+                    LEFT JOIN pg_stat_user_tables pg_stat ON pg_stat.relname = t.table_name
+                    WHERE t.table_schema = 'public'
+                    ORDER BY t.table_name
+                "#;
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(0).unwrap_or_default();
+                        let table_type: String = row.try_get(1).unwrap_or_default();
+                        let row_count: Option<i64> = row.try_get(2).ok();
+                        let size_kb: Option<i64> = row.try_get(3).ok();
+                        
                         DatabaseTable {
                             name,
-                            schema: None,
+                            schema: Some("public".to_string()),
+                            row_count,
+                            size_kb,
+                            table_type: Some(table_type.to_uppercase()),
                         }
                     })
                     .collect()
             }
             &DatabasePool::MySql(ref pool) => {
+                // MySQL: Get statistics from information_schema
+                let query = r#"
+                    SELECT 
+                        table_name,
+                        table_type,
+                        table_rows,
+                        ROUND((data_length + index_length) / 1024, 0) as size_kb
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE()
+                    ORDER BY table_name
+                "#;
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(0).unwrap_or_default();
+                        let table_type: String = row.try_get(1).unwrap_or_default();
+                        let row_count: Option<i64> = row.try_get::<Option<u64>, _>(2).ok().flatten().map(|v| v as i64);
+                        let size_kb: Option<i64> = row.try_get::<Option<f64>, _>(3).ok().flatten().map(|v| v as i64);
+                        
                         DatabaseTable {
                             name,
                             schema: None,
+                            row_count,
+                            size_kb,
+                            table_type: Some(table_type),
                         }
                     })
                     .collect()
@@ -378,6 +523,238 @@ impl ConnectionManager {
                 Ok(process_rows!(rows))
             }
         }
+    }
+
+    pub async fn explain_query(
+        &self,
+        connection_id: &str,
+        query: &str,
+        analyze: bool,
+        db_type: &DatabaseType,
+    ) -> Result<ExecutionPlan> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let start_time = std::time::Instant::now();
+        
+        let (plan_steps, total_cost) = match (pool, db_type) {
+            (&DatabasePool::Postgres(ref pool), DatabaseType::PostgreSQL) => {
+                let explain_query = if analyze {
+                    format!("EXPLAIN (FORMAT JSON, ANALYZE true, BUFFERS true) {}", query)
+                } else {
+                    format!("EXPLAIN (FORMAT JSON) {}", query)
+                };
+                
+                let rows = sqlx::query(&explain_query).fetch_all(pool).await?;
+                
+                if rows.is_empty() {
+                    return Err(anyhow!("No execution plan returned"));
+                }
+                
+                let plan_json: String = rows[0].try_get(0)?;
+                let parsed: serde_json::Value = serde_json::from_str(&plan_json)?;
+                
+                let plan_array = parsed.as_array()
+                    .ok_or_else(|| anyhow!("Invalid plan format"))?;
+                
+                if let Some(first_plan) = plan_array.get(0) {
+                    let plan_obj = first_plan.get("Plan")
+                        .ok_or_else(|| anyhow!("No Plan field found"))?;
+                    
+                    let total_cost = plan_obj.get("Total Cost")
+                        .and_then(|v| v.as_f64());
+                    
+                    let steps = self.parse_postgres_plan(plan_obj)?;
+                    (steps, total_cost)
+                } else {
+                    (vec![], None)
+                }
+            }
+            (&DatabasePool::MySql(ref pool), DatabaseType::MySQL) => {
+                let explain_query = format!("EXPLAIN FORMAT=JSON {}", query);
+                let rows = sqlx::query(&explain_query).fetch_all(pool).await?;
+                
+                if rows.is_empty() {
+                    return Err(anyhow!("No execution plan returned"));
+                }
+                
+                let plan_json: String = rows[0].try_get(0)?;
+                let parsed: serde_json::Value = serde_json::from_str(&plan_json)?;
+                
+                let steps = self.parse_mysql_plan(&parsed)?;
+                (steps, None)
+            }
+            (&DatabasePool::Sqlite(ref pool), DatabaseType::SQLite) => {
+                let explain_query = format!("EXPLAIN QUERY PLAN {}", query);
+                let rows = sqlx::query(&explain_query).fetch_all(pool).await?;
+                
+                let mut steps = Vec::new();
+                for row in rows {
+                    let _detail: String = row.try_get(3).unwrap_or_default();
+                    steps.push(PlanStep {
+                        step_type: "SQLite Plan".to_string(),
+                        table_name: None,
+                        rows: None,
+                        cost: None,
+                        filter_condition: None,
+                        index_used: None,
+                        children: vec![],
+                    });
+                }
+                
+                (steps, None)
+            }
+            _ => return Err(anyhow!("Database type mismatch")),
+        };
+
+        let execution_time = if analyze {
+            Some(start_time.elapsed().as_millis() as f64)
+        } else {
+            None
+        };
+
+        let recommendations = self.generate_recommendations(&plan_steps, db_type);
+
+        Ok(ExecutionPlan {
+            query: query.to_string(),
+            plan_steps,
+            total_cost,
+            execution_time_ms: execution_time,
+            recommendations,
+        })
+    }
+
+    fn parse_postgres_plan(&self, plan: &serde_json::Value) -> Result<Vec<PlanStep>> {
+        let mut steps = Vec::new();
+        
+        let step_type = plan.get("Node Type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string();
+        
+        let table_name = plan.get("Relation Name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        let rows = plan.get("Plan Rows")
+            .and_then(|v| v.as_i64());
+        
+        let cost = plan.get("Total Cost")
+            .and_then(|v| v.as_f64());
+        
+        let filter_condition = plan.get("Filter")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        let index_used = plan.get("Index Name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        let mut children = Vec::new();
+        if let Some(plans) = plan.get("Plans").and_then(|v| v.as_array()) {
+            for child_plan in plans {
+                children.extend(self.parse_postgres_plan(child_plan)?);
+            }
+        }
+        
+        steps.push(PlanStep {
+            step_type,
+            table_name,
+            rows,
+            cost,
+            filter_condition,
+            index_used,
+            children,
+        });
+        
+        Ok(steps)
+    }
+
+    fn parse_mysql_plan(&self, plan: &serde_json::Value) -> Result<Vec<PlanStep>> {
+        let mut steps = Vec::new();
+        
+        if let Some(query_block) = plan.get("query_block") {
+            if let Some(table) = query_block.get("table") {
+                let step_type = table.get("access_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+                
+                let table_name = table.get("table_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                
+                let rows = table.get("rows_examined_per_scan")
+                    .and_then(|v| v.as_i64());
+                
+                let index_used = table.get("key")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                
+                steps.push(PlanStep {
+                    step_type,
+                    table_name,
+                    rows,
+                    cost: None,
+                    filter_condition: None,
+                    index_used,
+                    children: vec![],
+                });
+            }
+        }
+        
+        Ok(steps)
+    }
+
+    fn generate_recommendations(&self, plan_steps: &[PlanStep], db_type: &DatabaseType) -> Vec<String> {
+        let mut recommendations = Vec::new();
+        
+        for step in plan_steps {
+            // Check for sequential scans
+            if step.step_type.contains("Seq Scan") || step.step_type.contains("ALL") {
+                if let Some(table) = &step.table_name {
+                    recommendations.push(format!(
+                        "Consider adding an index to table '{}' to avoid sequential scan",
+                        table
+                    ));
+                }
+            }
+            
+            // Check for high row counts
+            if let Some(rows) = step.rows {
+                if rows > 10000 {
+                    recommendations.push(format!(
+                        "High row count ({}) detected. Consider adding WHERE clause to filter data",
+                        rows
+                    ));
+                }
+            }
+            
+            // Check for high cost operations
+            if let Some(cost) = step.cost {
+                if cost > 1000.0 {
+                    recommendations.push(format!(
+                        "High cost operation detected (cost: {:.2}). Review query optimization",
+                        cost
+                    ));
+                }
+            }
+            
+            // Check children recursively
+            for rec in self.generate_recommendations(&step.children, db_type) {
+                if !recommendations.contains(&rec) {
+                    recommendations.push(rec);
+                }
+            }
+        }
+        
+        if recommendations.is_empty() {
+            recommendations.push("Query appears to be well optimized".to_string());
+        }
+        
+        recommendations
     }
 
     pub async fn insert_row(
