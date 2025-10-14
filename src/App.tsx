@@ -175,9 +175,6 @@ function App() {
                       connection={activeConnection}
                       table={activeTab.table}
                       columns={activeTab.columns || []}
-                      onAddRow={() => {
-                        // TODO: Open add row dialog
-                      }}
                       onRefresh={async () => {
                         // Reload columns
                         try {

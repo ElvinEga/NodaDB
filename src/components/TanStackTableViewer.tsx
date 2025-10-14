@@ -37,6 +37,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AddRowDialog } from '@/components/AddRowDialog';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
@@ -46,7 +47,6 @@ interface TanStackTableViewerProps {
   connection: ConnectionConfig;
   table: DatabaseTable;
   columns: TableColumn[];
-  onAddRow: () => void;
   onRefresh: () => void;
 }
 
@@ -54,7 +54,6 @@ export function TanStackTableViewer({
   connection,
   table,
   columns: tableColumns,
-  onAddRow,
 }: TanStackTableViewerProps) {
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +67,7 @@ export function TanStackTableViewer({
   const [executionTime, setExecutionTime] = useState(0);
   const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
@@ -282,7 +282,17 @@ export function TanStackTableViewer({
               <div className="flex-1 min-w-0">
                 {getCellRenderer(col.data_type, value)}
               </div>
-              <Edit2 className="h-3 w-3 opacity-0 group-hover:opacity-50 ml-2 shrink-0" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingCell(cellId);
+                  setEditValue(isNull ? '' : String(value));
+                }}
+                className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                title="Click to edit"
+              >
+                <Edit2 className="h-3 w-3 ml-2 shrink-0" />
+              </button>
             </div>
           );
         },
@@ -464,7 +474,7 @@ export function TanStackTableViewer({
           <Button
             variant="default"
             size="sm"
-            onClick={onAddRow}
+            onClick={() => setAddRowDialogOpen(true)}
             className="h-8"
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" />
@@ -675,6 +685,15 @@ export function TanStackTableViewer({
           </span>
         </div>
       </div>
+
+      <AddRowDialog
+        open={addRowDialogOpen}
+        onOpenChange={setAddRowDialogOpen}
+        connection={connection}
+        table={table}
+        columns={tableColumns}
+        onSuccess={loadData}
+      />
     </div>
   );
 }
