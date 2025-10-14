@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Database, Loader2 } from "lucide-react";
+import { Database, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,9 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ConnectionConfig, DatabaseType } from "@/types";
+import { ConnectionConfig, DatabaseType, ConnectionTestResult } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -42,11 +43,64 @@ export function ConnectionDialog({
   const [database, setDatabase] = useState("");
   const [filePath, setFilePath] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
   const addConnection = useConnectionStore((state) => state.addConnection);
   const setActiveConnection = useConnectionStore(
     (state) => state.setActiveConnection
   );
+
+  const handleTestConnection = async () => {
+    if (dbType === "sqlite" && !filePath) {
+      toast.error("Please select a database file");
+      return;
+    }
+
+    if (dbType !== "sqlite" && (!host || !username || !database)) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const config: ConnectionConfig = {
+        id: "test",
+        name: "test",
+        db_type: dbType,
+        ...(dbType === "sqlite"
+          ? { file_path: filePath }
+          : {
+              host,
+              port: parseInt(port),
+              username,
+              password,
+              database,
+            }),
+      };
+
+      const result = await invoke<ConnectionTestResult>("test_connection", { config });
+      setTestResult(result);
+      
+      if (result.success) {
+        toast.success(`Connection successful! ${result.db_version} (${result.latency_ms}ms)`);
+      } else {
+        toast.error(`Connection failed: ${result.error}`);
+      }
+    } catch (error) {
+      setTestResult({
+        success: false,
+        latency_ms: 0,
+        db_version: "",
+        error: String(error),
+      });
+      toast.error(String(error));
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   const handleBrowseFile = async () => {
     try {
@@ -306,11 +360,46 @@ export function ConnectionDialog({
           </div>
         </ScrollArea>
 
+        {testResult && (
+          <Alert variant={testResult.success ? "default" : "destructive"} className="mx-6">
+            {testResult.success ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+            <AlertTitle>{testResult.success ? "Connection Successful" : "Connection Failed"}</AlertTitle>
+            <AlertDescription>
+              {testResult.success ? (
+                <>
+                  Latency: {testResult.latency_ms}ms • {testResult.db_version}
+                </>
+              ) : (
+                <>{testResult.error}</>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">
             Cancel
           </Button>
-          <Button onClick={handleConnect} disabled={isConnecting} className="h-9">
+          <Button 
+            variant="secondary" 
+            onClick={handleTestConnection} 
+            disabled={isTesting || isConnecting} 
+            className="h-9"
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              "Test Connection"
+            )}
+          </Button>
+          <Button onClick={handleConnect} disabled={isConnecting || isTesting} className="h-9">
             {isConnecting ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
