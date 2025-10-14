@@ -13,11 +13,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
+            commands::test_connection,
             commands::connect_database,
             commands::disconnect_database,
             commands::list_tables,
             commands::get_table_structure,
             commands::execute_query,
+            commands::explain_query,
             commands::insert_row,
             commands::bulk_insert_rows,
             commands::update_row,

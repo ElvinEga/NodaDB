@@ -1,6 +1,15 @@
 use crate::database::ConnectionManager;
-use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn};
+use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, ConnectionTestResult};
 use tauri::State;
+
+#[tauri::command]
+pub async fn test_connection(
+    config: ConnectionConfig,
+) -> Result<ConnectionTestResult, String> {
+    ConnectionManager::test_connection(config)
+        .await
+        .map_err(|e| format!("Connection test failed: {}", e))
+}
 
 #[tauri::command]
 pub async fn connect_database(
@@ -63,6 +72,20 @@ pub async fn execute_query(
         .execute_query(&connection_id, &query)
         .await
         .map_err(|e| format!("Failed to execute query: {}", e))
+}
+
+#[tauri::command]
+pub async fn explain_query(
+    connection_id: String,
+    query: String,
+    analyze: bool,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<ExecutionPlan, String> {
+    manager
+        .explain_query(&connection_id, &query, analyze, &db_type)
+        .await
+        .map_err(|e| format!("Failed to explain query: {}", e))
 }
 
 #[tauri::command]

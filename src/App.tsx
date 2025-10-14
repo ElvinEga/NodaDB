@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { Database, Plus, Settings, FileCode2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Database, Plus, Settings, FileCode2, HelpCircle, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
+import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
+import { SettingsDialog } from "@/components/SettingsDialog";
+import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
@@ -21,6 +24,9 @@ import {
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [tabs, setTabs] = useState<TabType[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const connections = useConnectionStore((state) => state.connections);
@@ -92,6 +98,33 @@ function App() {
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
+  };
+
+  const handleLoadQueryFromHistory = (query: string) => {
+    // Find or create a query tab
+    let queryTab = tabs.find(t => t.type === "query");
+    
+    if (!queryTab) {
+      // Create new query tab with the query
+      const newTab: TabType = {
+        id: `query-${Date.now()}`,
+        type: "query",
+        title: "Query 1",
+        isPinned: false,
+        isDirty: true,
+        queryContent: query,
+      };
+      setTabs([...tabs, newTab]);
+      setActiveTabId(newTab.id);
+    } else {
+      // Update existing query tab
+      setTabs(tabs.map(t => 
+        t.id === queryTab!.id 
+          ? { ...t, queryContent: query, isDirty: true }
+          : t
+      ));
+      setActiveTabId(queryTab.id);
+    }
   };
 
   const closeTab = (tabId: string) => {
@@ -183,6 +216,28 @@ function App() {
     onCloseAllTabs: closeAllTabs,
   });
 
+  // Global keyboard listener for shortcuts dialog (Ctrl+? or Cmd+?)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+? or Cmd+? (Shift+/ with Ctrl/Cmd)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '?') {
+        e.preventDefault();
+        setShortcutsDialogOpen((prev) => !prev);
+      }
+      // Also support just ? when no input is focused
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+          e.preventDefault();
+          setShortcutsDialogOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <SidebarProvider>
       <div className="relative flex min-h-screen w-full">
@@ -224,10 +279,33 @@ function App() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setConnectionDialogOpen(true)}
+                  title="New Connection"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon">
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                  title="Query History"
+                  className={showHistoryPanel ? 'bg-muted' : ''}
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShortcutsDialogOpen(true)}
+                  title="Keyboard Shortcuts (Ctrl+?)"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setSettingsDialogOpen(true)}
+                  title="Settings"
+                >
                   <Settings className="h-4 w-4" />
                 </Button>
               </header>
@@ -244,15 +322,16 @@ function App() {
                 onCloseAll={closeAllTabs}
                 onCloseToRight={closeTabsToRight}
               />
-              <main className="flex-1 overflow-hidden bg-secondary/20">
-                {activeTab ? (
-                  <>
-                    {activeTab.type === "table" && activeTab.table ? (
-                      <TanStackTableViewer
-                        connection={activeConnection}
-                        table={activeTab.table}
-                        columns={activeTab.columns || []}
-                        onRefresh={async () => {
+              <main className="flex-1 overflow-hidden bg-secondary/20 flex">
+                <div className="flex-1 overflow-hidden">
+                  {activeTab ? (
+                    <>
+                      {activeTab.type === "table" && activeTab.table ? (
+                        <TanStackTableViewer
+                          connection={activeConnection}
+                          table={activeTab.table}
+                          columns={activeTab.columns || []}
+                          onRefresh={async () => {
                           // Reload columns
                           try {
                             const columns = await invoke<TableColumn[]>(
@@ -292,6 +371,17 @@ function App() {
                         New Query
                       </Button>
                     </div>
+                  </div>
+                  )}
+                </div>
+                
+                {/* Query History Panel */}
+                {showHistoryPanel && (
+                  <div className="w-80 shrink-0">
+                    <QueryHistoryPanel
+                      connectionId={activeConnection.id}
+                      onSelectQuery={handleLoadQueryFromHistory}
+                    />
                   </div>
                 )}
               </main>
@@ -385,6 +475,14 @@ function App() {
         <ConnectionDialog
           open={connectionDialogOpen}
           onOpenChange={setConnectionDialogOpen}
+        />
+        <KeyboardShortcutsDialog
+          open={shortcutsDialogOpen}
+          onOpenChange={setShortcutsDialogOpen}
+        />
+        <SettingsDialog
+          open={settingsDialogOpen}
+          onOpenChange={setSettingsDialogOpen}
         />
       </div>
     </SidebarProvider>
