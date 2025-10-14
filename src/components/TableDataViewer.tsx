@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddRowDialog } from '@/components/AddRowDialog';
+import { FilterBuilder } from '@/components/FilterBuilder';
 import {
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DatabaseTable, QueryResult, TableColumn, ConnectionConfig } from '@/types';
+import { TableFilter } from '@/types/filter';
 import { toast } from 'sonner';
 import { validateCellValue, getPlaceholderForType } from '@/lib/validation';
 
@@ -32,6 +34,8 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [editingCell, setEditingCell] = useState<{rowIndex: number; column: string} | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<TableFilter[]>([]);
+  const [activeWhereClause, setActiveWhereClause] = useState<string>('');
 
   const loadTableStructure = async () => {
     try {
@@ -51,7 +55,13 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     setIsLoading(true);
     try {
       const offset = (currentPage - 1) * rowsPerPage;
-      const query = `SELECT * FROM ${table.name} LIMIT ${rowsPerPage} OFFSET ${offset}`;
+      let query = `SELECT * FROM ${table.name}`;
+      
+      if (activeWhereClause) {
+        query += ` WHERE ${activeWhereClause}`;
+      }
+      
+      query += ` LIMIT ${rowsPerPage} OFFSET ${offset}`;
       
       const result = await invoke<QueryResult>('execute_query', {
         connectionId: connection.id,
@@ -72,16 +82,30 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     loadTableData();
   };
 
+  const handleApplyFilters = (whereClause: string) => {
+    setActiveWhereClause(whereClause);
+    setCurrentPage(1); // Reset to first page when filters change
+    toast.success(`Applied ${filters.length} filter(s)`);
+  };
+
+  const handleClearFilters = () => {
+    setActiveWhereClause('');
+    setCurrentPage(1); // Reset to first page when filters cleared
+    toast.info('Filters cleared');
+  };
+
   useEffect(() => {
     setCurrentPage(1);
     setSelectedRows(new Set());
+    setFilters([]);
+    setActiveWhereClause('');
     loadTableStructure();
     loadTableData();
   }, [table.name, connection.id]);
 
   useEffect(() => {
     loadTableData();
-  }, [currentPage]);
+  }, [currentPage, activeWhereClause]);
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
@@ -292,6 +316,17 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
           </Button>
         </div>
       </div>
+
+      {/* Filter Builder */}
+      {columns.length > 0 && (
+        <FilterBuilder
+          columns={columns}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onApply={handleApplyFilters}
+          onClear={handleClearFilters}
+        />
+      )}
 
       {/* Data Table */}
       {isLoading && !data ? (
