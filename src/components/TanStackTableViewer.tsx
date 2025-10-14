@@ -24,8 +24,6 @@ import {
   Download,
   Columns3,
   Edit2,
-  Check,
-  X as XIcon,
   GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AddRowDialog } from '@/components/AddRowDialog';
+import { EditCellDialog } from '@/components/EditCellDialog';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
@@ -65,8 +64,14 @@ export function TanStackTableViewer({
   const [globalFilter, setGlobalFilter] = useState('');
   const pageSize = 50;
   const [executionTime, setExecutionTime] = useState(0);
-  const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
+  const [editingCell, setEditingCell] = useState<{ 
+    rowId: string; 
+    columnId: string; 
+    columnName: string;
+    columnType: string;
+    currentValue: any;
+  } | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -221,73 +226,35 @@ export function TanStackTableViewer({
         },
         cell: ({ getValue, row }) => {
           const value = getValue();
-          const isNull = value === null || value === undefined;
-          const cellId = { rowId: row.id, columnId: col.name };
-          const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === col.name;
 
           // Primary key styling (not editable)
           if (col.is_primary_key) {
             return <span className="font-mono text-xs text-muted-foreground">{String(value)}</span>;
           }
 
-          // Editing mode
-          if (isEditing) {
-            return (
-              <div className="flex items-center gap-1">
-                <Input
-                  autoFocus
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSaveEdit(row.id, col.name);
-                    } else if (e.key === 'Escape') {
-                      setEditingCell(null);
-                    }
-                  }}
-                  className="h-7 text-xs"
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleSaveEdit(row.id, col.name);
-                  }}
-                >
-                  <Check className="h-3 w-3 text-success" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setEditingCell(null)}
-                >
-                  <XIcon className="h-3 w-3 text-destructive" />
-                </Button>
-              </div>
-            );
-          }
+          const handleEditClick = (e?: React.MouseEvent) => {
+            if (e) e.stopPropagation();
+            setEditingCell({
+              rowId: row.id,
+              columnId: col.name,
+              columnName: col.name,
+              columnType: col.data_type,
+              currentValue: value,
+            });
+            setEditDialogOpen(true);
+          };
 
           // Display mode with custom renderer
           return (
             <div
               className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
-              onDoubleClick={() => {
-                setEditingCell(cellId);
-                setEditValue(isNull ? '' : String(value));
-              }}
+              onDoubleClick={handleEditClick}
             >
               <div className="flex-1 min-w-0">
                 {getCellRenderer(col.data_type, value)}
               </div>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingCell(cellId);
-                  setEditValue(isNull ? '' : String(value));
-                }}
+                onClick={handleEditClick}
                 className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
                 title="Click to edit"
               >
@@ -344,9 +311,11 @@ export function TanStackTableViewer({
     overscan: 10, // Number of items to render outside visible area
   });
 
-  const handleSaveEdit = async (rowId: string, columnId: string) => {
+  const handleSaveEdit = async (newValue: string) => {
+    if (!editingCell) return;
+
     try {
-      const rowIndex = parseInt(rowId);
+      const rowIndex = parseInt(editingCell.rowId);
       const row = data[rowIndex];
       const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
       
@@ -359,7 +328,7 @@ export function TanStackTableViewer({
       
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
-        [columnId]: editValue === '' ? null : editValue,
+        [editingCell.columnId]: newValue === '' ? null : newValue,
       };
       
       // Build WHERE clause for the primary key
@@ -377,14 +346,16 @@ export function TanStackTableViewer({
       const newData = [...data];
       newData[rowIndex] = {
         ...newData[rowIndex],
-        [columnId]: editValue === '' ? null : editValue,
+        [editingCell.columnId]: newValue === '' ? null : newValue,
       };
       setData(newData);
       setEditingCell(null);
+      setEditDialogOpen(false);
       toast.success('Cell updated successfully');
     } catch (error) {
       toast.error(`Failed to update cell: ${error}`);
       console.error('Update error:', error);
+      throw error; // Re-throw to let dialog handle loading state
     }
   };
 
@@ -694,6 +665,17 @@ export function TanStackTableViewer({
         columns={tableColumns}
         onSuccess={loadData}
       />
+
+      {editingCell && (
+        <EditCellDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          columnName={editingCell.columnName}
+          columnType={editingCell.columnType}
+          currentValue={editingCell.currentValue}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }
