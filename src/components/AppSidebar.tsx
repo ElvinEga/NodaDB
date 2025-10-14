@@ -25,7 +25,7 @@ export function AppSidebar({
   onNewQuery,
 }: AppSidebarProps) {
   return (
-    <Sidebar collapsible="icon" variant="sidebar">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -39,13 +39,15 @@ export function AppSidebar({
               </div>
               <div className="flex flex-col gap-0.5 leading-none">
                 <span className="font-semibold">New Query</span>
-                <span className="text-xs text-muted-foreground">Execute SQL</span>
+                <span className="text-xs text-muted-foreground">
+                  Execute SQL
+                </span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      
+
       <SidebarContent>
         <DatabaseExplorer
           connection={connection}
@@ -54,7 +56,7 @@ export function AppSidebar({
           onNewQuery={onNewQuery}
         />
       </SidebarContent>
-      
+
       <SidebarRail />
     </Sidebar>
   );
