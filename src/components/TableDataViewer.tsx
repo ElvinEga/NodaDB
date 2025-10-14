@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddRowDialog } from '@/components/AddRowDialog';
 import { FilterBuilder } from '@/components/FilterBuilder';
@@ -23,6 +23,8 @@ interface TableDataViewerProps {
   table: DatabaseTable;
 }
 
+type SortDirection = 'ASC' | 'DESC' | null;
+
 export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [columns, setColumns] = useState<TableColumn[]>([]);
   const [data, setData] = useState<QueryResult | null>(null);
@@ -36,6 +38,8 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [filters, setFilters] = useState<TableFilter[]>([]);
   const [activeWhereClause, setActiveWhereClause] = useState<string>('');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   const loadTableStructure = async () => {
     try {
@@ -59,6 +63,10 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
       
       if (activeWhereClause) {
         query += ` WHERE ${activeWhereClause}`;
+      }
+      
+      if (sortColumn && sortDirection) {
+        query += ` ORDER BY ${sortColumn} ${sortDirection}`;
       }
       
       query += ` LIMIT ${rowsPerPage} OFFSET ${offset}`;
@@ -94,18 +102,47 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     toast.info('Filters cleared');
   };
 
+  const handleSort = (columnName: string) => {
+    if (sortColumn === columnName) {
+      // Toggle through: ASC -> DESC -> null
+      if (sortDirection === 'ASC') {
+        setSortDirection('DESC');
+      } else if (sortDirection === 'DESC') {
+        setSortColumn(null);
+        setSortDirection(null);
+      }
+    } else {
+      // New column, start with ASC
+      setSortColumn(columnName);
+      setSortDirection('ASC');
+    }
+    setCurrentPage(1); // Reset to first page when sort changes
+  };
+
+  const getSortIcon = (columnName: string) => {
+    if (sortColumn !== columnName) {
+      return <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />;
+    }
+    if (sortDirection === 'ASC') {
+      return <ArrowUp className="h-3 w-3 text-primary" />;
+    }
+    return <ArrowDown className="h-3 w-3 text-primary" />;
+  };
+
   useEffect(() => {
     setCurrentPage(1);
     setSelectedRows(new Set());
     setFilters([]);
     setActiveWhereClause('');
+    setSortColumn(null);
+    setSortDirection(null);
     loadTableStructure();
     loadTableData();
   }, [table.name, connection.id]);
 
   useEffect(() => {
     loadTableData();
-  }, [currentPage, activeWhereClause]);
+  }, [currentPage, activeWhereClause, sortColumn, sortDirection]);
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
@@ -378,14 +415,21 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                     return (
                       <TableHead key={column} className="h-10">
                         <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSort(column)}
+                            className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer group"
+                            title={`Sort by ${column}`}
+                          >
                             <span className="font-semibold text-xs">{column}</span>
                             {columnInfo?.is_primary_key && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary">
                                 PK
                               </span>
                             )}
-                          </div>
+                            <span className={sortColumn === column ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}>
+                              {getSortIcon(column)}
+                            </span>
+                          </button>
                           {columnInfo && (
                             <div className="flex items-center gap-1.5">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${getColumnTypeBadge(columnInfo.data_type)}`}>
