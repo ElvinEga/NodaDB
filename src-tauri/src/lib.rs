@@ -19,6 +19,7 @@ pub fn run() {
             commands::get_table_structure,
             commands::execute_query,
             commands::insert_row,
+            commands::bulk_insert_rows,
             commands::update_row,
             commands::delete_rows,
             commands::create_table,

@@ -80,6 +80,20 @@ pub async fn insert_row(
 }
 
 #[tauri::command]
+pub async fn bulk_insert_rows(
+    connection_id: String,
+    table_name: String,
+    rows: Vec<serde_json::Value>,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .bulk_insert_rows(&connection_id, &table_name, rows, &db_type)
+        .await
+        .map_err(|e| format!("Failed to bulk insert rows: {}", e))
+}
+
+#[tauri::command]
 pub async fn update_row(
     connection_id: String,
     table_name: String,

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddRowDialog } from '@/components/AddRowDialog';
+import { ImportCSVDialog } from '@/components/ImportCSVDialog';
 import { FilterBuilder } from '@/components/FilterBuilder';
 import {
   Table,
@@ -32,6 +33,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
+  const [importCSVDialogOpen, setImportCSVDialogOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingCell, setEditingCell] = useState<{rowIndex: number; column: string} | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -344,6 +346,15 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportCSVDialogOpen(true)}
+            className="h-8"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
+            Import CSV
+          </Button>
+          <Button
             size="sm"
             onClick={() => setAddRowDialogOpen(true)}
             className="h-8"
@@ -600,6 +611,15 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
       <AddRowDialog
         open={addRowDialogOpen}
         onOpenChange={setAddRowDialogOpen}
+        connection={connection}
+        table={table}
+        columns={columns}
+        onSuccess={refreshData}
+      />
+
+      <ImportCSVDialog
+        open={importCSVDialogOpen}
+        onOpenChange={setImportCSVDialogOpen}
         connection={connection}
         table={table}
         columns={columns}

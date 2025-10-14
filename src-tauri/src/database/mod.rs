@@ -421,6 +421,64 @@ impl ConnectionManager {
         Ok(format!("Successfully inserted 1 row into {}", table_name))
     }
 
+    pub async fn bulk_insert_rows(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        rows: Vec<serde_json::Value>,
+        _db_type: &DatabaseType,
+    ) -> Result<String> {
+        if rows.is_empty() {
+            return Ok("No rows to insert".to_string());
+        }
+
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        // Get columns from first row
+        let first_obj = rows[0].as_object()
+            .ok_or_else(|| anyhow!("Row data must be a JSON object"))?;
+        let columns: Vec<&String> = first_obj.keys().collect();
+        let column_list = columns.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ");
+
+        // Build value lists for all rows
+        let mut value_lists: Vec<String> = Vec::new();
+        
+        for row in &rows {
+            let obj = row.as_object()
+                .ok_or_else(|| anyhow!("Row data must be a JSON object"))?;
+            
+            let values: Vec<String> = columns.iter()
+                .map(|col| {
+                    let v = obj.get(*col).unwrap_or(&serde_json::Value::Null);
+                    if v.is_null() {
+                        "NULL".to_string()
+                    } else if v.is_string() {
+                        format!("'{}'", v.as_str().unwrap().replace("'", "''"))
+                    } else {
+                        v.to_string()
+                    }
+                })
+                .collect();
+            
+            value_lists.push(format!("({})", values.join(", ")));
+        }
+
+        // Insert all rows in a single query for better performance
+        let query = format!(
+            "INSERT INTO {} ({}) VALUES {}",
+            table_name,
+            column_list,
+            value_lists.join(", ")
+        );
+
+        execute_query!(pool, &query)?;
+
+        Ok(format!("Successfully inserted {} rows into {}", rows.len(), table_name))
+    }
+
     pub async fn update_row(
         &self,
         connection_id: &str,
