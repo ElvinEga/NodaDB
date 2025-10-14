@@ -25,6 +25,7 @@ import {
   Columns3,
   Edit2,
   GripVertical,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AddRowDialog } from '@/components/AddRowDialog';
 import { EditCellDialog } from '@/components/EditCellDialog';
+import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
 
@@ -81,6 +83,7 @@ export function TanStackTableViewer({
   } | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
+  const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   
@@ -581,6 +584,15 @@ Sum: ${stats.sum}` : ''}`;
             Add row
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDataGeneratorDialogOpen(true)}
+            className="h-8"
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            Generate data
+          </Button>
+          <Button
             variant="destructive"
             size="sm"
             onClick={handleDeleteRows}
@@ -789,6 +801,15 @@ Sum: ${stats.sum}` : ''}`;
       <AddRowDialog
         open={addRowDialogOpen}
         onOpenChange={setAddRowDialogOpen}
+        connection={connection}
+        table={table}
+        columns={tableColumns}
+        onSuccess={loadData}
+      />
+
+      <DataGeneratorDialog
+        open={dataGeneratorDialogOpen}
+        onOpenChange={setDataGeneratorDialogOpen}
         connection={connection}
         table={table}
         columns={tableColumns}
