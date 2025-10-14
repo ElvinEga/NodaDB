@@ -40,6 +40,16 @@
     --ring: 217 91% 60%;
     
     --radius: 0.5rem;
+    
+    /* Sidebar Colors - Professional Dark Theme */
+    --sidebar-background: 0 0% 6%;              /* Same as card */
+    --sidebar-foreground: 0 0% 96%;             /* Same as foreground */
+    --sidebar-primary: 217 91% 60%;             /* Same as primary */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;                 /* Same as accent */
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 20%;                 /* Same as border */
+    --sidebar-ring: 217 91% 60%;                /* Same as ring */
   }
 }
 

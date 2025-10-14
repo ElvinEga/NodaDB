@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Database, Plus, Settings, FileCode2, Table2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
-import { DatabaseExplorer } from "@/components/DatabaseExplorer";
+import { AppSidebar } from "@/components/AppSidebar";
 import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
 import { DatabaseTable, TableColumn } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 
 type TabType = {
   id: string;
@@ -87,6 +88,7 @@ function App() {
   };
 
   return (
+    <SidebarProvider>
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
       <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
@@ -108,6 +110,9 @@ function App() {
         <div className="flex-1" />
 
         {/* Right Actions */}
+        {activeConnectionId && activeConnection && (
+          <SidebarTrigger className="mr-2" />
+        )}
         <Button variant="ghost" size="icon" onClick={() => setConnectionDialogOpen(true)}>
           <Plus className="h-4 w-4" />
         </Button>
@@ -156,18 +161,15 @@ function App() {
       <div className="flex-1 flex overflow-hidden">
         {activeConnectionId && activeConnection ? (
           <>
-            {/* Database Explorer Sidebar */}
-            <aside className="w-64 border-r border-border bg-card">
-              <DatabaseExplorer
-                connection={activeConnection}
-                onTableSelect={handleTableSelect}
-                selectedTable={activeTab?.table || null}
-                onNewQuery={openQueryTab}
-              />
-            </aside>
-
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-hidden bg-secondary/20">
+            <AppSidebar
+              connection={activeConnection}
+              onTableSelect={handleTableSelect}
+              selectedTable={activeTab?.table || null}
+              onNewQuery={openQueryTab}
+            />
+            
+            <SidebarInset>
+              <main className="flex-1 overflow-hidden bg-secondary/20">
               {activeTab ? (
                 <>
                   {activeTab.type === 'table' && activeTab.table ? (
@@ -212,7 +214,8 @@ function App() {
                   </div>
                 </div>
               )}
-            </main>
+              </main>
+            </SidebarInset>
           </>
         ) : connections.length > 0 ? (
           /* Connection List when no active connection */
@@ -293,6 +296,7 @@ function App() {
       />
       <Toaster />
     </div>
+    </SidebarProvider>
   );
 }
 
