@@ -20,7 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ConnectionConfig, DatabaseType, ConnectionTestResult } from "@/types";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { ConnectionConfig, DatabaseType, ConnectionTestResult, SSHAuthMethod } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -46,10 +52,48 @@ export function ConnectionDialog({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
+  // SSH Tunnel state
+  const [connectionType, setConnectionType] = useState<"direct" | "ssh">("direct");
+  const [sshHost, setSshHost] = useState("");
+  const [sshPort, setSshPort] = useState("22");
+  const [sshUsername, setSshUsername] = useState("");
+  const [sshAuthMethod, setSshAuthMethod] = useState<SSHAuthMethod>("password");
+  const [sshPassword, setSshPassword] = useState("");
+  const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState("");
+
   const addConnection = useConnectionStore((state) => state.addConnection);
   const setActiveConnection = useConnectionStore(
     (state) => state.setActiveConnection
   );
+
+  const handleBrowseSshKey = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        defaultPath: sshPrivateKeyPath || undefined,
+        filters: [
+          {
+            name: "SSH Private Key",
+            extensions: ["pem", "key", "pub", "*"],
+          },
+        ],
+      });
+
+      if (!selected) {
+        return;
+      }
+
+      if (Array.isArray(selected)) {
+        setSshPrivateKeyPath(selected[0] ?? "");
+        return;
+      }
+
+      setSshPrivateKeyPath(selected);
+    } catch (error) {
+      toast.error("Failed to open file dialog");
+      console.error(error);
+    }
+  };
 
   const handleTestConnection = async () => {
     if (dbType === "sqlite" && !filePath) {
@@ -60,6 +104,22 @@ export function ConnectionDialog({
     if (dbType !== "sqlite" && (!host || !username || !database)) {
       toast.error("Please fill in all required fields");
       return;
+    }
+
+    // Validate SSH config if using SSH tunnel
+    if (connectionType === "ssh" && dbType !== "sqlite") {
+      if (!sshHost || !sshUsername) {
+        toast.error("Please fill in SSH host and username");
+        return;
+      }
+      if (sshAuthMethod === "password" && !sshPassword) {
+        toast.error("Please enter SSH password");
+        return;
+      }
+      if (sshAuthMethod === "privateKey" && !sshPrivateKeyPath) {
+        toast.error("Please select SSH private key");
+        return;
+      }
     }
 
     setIsTesting(true);
@@ -79,11 +139,24 @@ export function ConnectionDialog({
               password,
               database,
             }),
+        ...(connectionType === "ssh" && dbType !== "sqlite"
+          ? {
+              ssh_config: {
+                enabled: true,
+                host: sshHost,
+                port: parseInt(sshPort),
+                username: sshUsername,
+                authMethod: sshAuthMethod,
+                password: sshAuthMethod === "password" ? sshPassword : undefined,
+                privateKeyPath: sshAuthMethod === "privateKey" ? sshPrivateKeyPath : undefined,
+              },
+            }
+          : {}),
       };
 
       const result = await invoke<ConnectionTestResult>("test_connection", { config });
       setTestResult(result);
-      
+
       if (result.success) {
         toast.success(`Connection successful! ${result.db_version} (${result.latency_ms}ms)`);
       } else {
@@ -148,6 +221,22 @@ export function ConnectionDialog({
       return;
     }
 
+    // Validate SSH config if using SSH tunnel
+    if (connectionType === "ssh" && dbType !== "sqlite") {
+      if (!sshHost || !sshUsername) {
+        toast.error("Please fill in SSH host and username");
+        return;
+      }
+      if (sshAuthMethod === "password" && !sshPassword) {
+        toast.error("Please enter SSH password");
+        return;
+      }
+      if (sshAuthMethod === "privateKey" && !sshPrivateKeyPath) {
+        toast.error("Please select SSH private key");
+        return;
+      }
+    }
+
     setIsConnecting(true);
 
     try {
@@ -164,6 +253,19 @@ export function ConnectionDialog({
               password,
               database,
             }),
+        ...(connectionType === "ssh" && dbType !== "sqlite"
+          ? {
+              ssh_config: {
+                enabled: true,
+                host: sshHost,
+                port: parseInt(sshPort),
+                username: sshUsername,
+                authMethod: sshAuthMethod,
+                password: sshAuthMethod === "password" ? sshPassword : undefined,
+                privateKeyPath: sshAuthMethod === "privateKey" ? sshPrivateKeyPath : undefined,
+              },
+            }
+          : {}),
       };
 
       const result = await invoke<string>("connect_database", { config });
@@ -180,6 +282,13 @@ export function ConnectionDialog({
       setUsername("");
       setPassword("");
       setDatabase("");
+      setConnectionType("direct");
+      setSshHost("");
+      setSshPort("22");
+      setSshUsername("");
+      setSshAuthMethod("password");
+      setSshPassword("");
+      setSshPrivateKeyPath("");
       onOpenChange(false);
     } catch (error) {
       toast.error(String(error));
@@ -279,82 +388,273 @@ export function ConnectionDialog({
             </div>
           ) : (
             <>
-              <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                <p className="text-xs text-muted-foreground mb-3">Server Connection Details</p>
-                <div className="grid gap-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <label htmlFor="host" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Host <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        id="host"
-                        value={host}
-                        onChange={(e) => setHost(e.target.value)}
-                        placeholder="localhost"
-                        className="h-9 text-sm"
-                      />
+              <Tabs value={connectionType} onValueChange={(v) => setConnectionType(v as "direct" | "ssh")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="direct">Direct Connection</TabsTrigger>
+                  <TabsTrigger value="ssh">SSH Tunnel</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="direct" className="mt-4 space-y-3">
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">Server Connection Details</p>
+                    <div className="grid gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <label htmlFor="host" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Host <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="host"
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
+                            placeholder="localhost"
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="port" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Port <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="port"
+                            value={port}
+                            onChange={(e) => setPort(e.target.value)}
+                            placeholder={dbType === "postgresql" ? "5432" : "3306"}
+                            className="h-9 text-sm font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <label htmlFor="database" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Database <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="database"
+                          value={database}
+                          onChange={(e) => setDatabase(e.target.value)}
+                          placeholder="database_name"
+                          className="h-9 text-sm font-mono"
+                        />
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <label htmlFor="port" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Port <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        id="port"
-                        value={port}
-                        onChange={(e) => setPort(e.target.value)}
-                        placeholder={dbType === "postgresql" ? "5432" : "3306"}
-                        className="h-9 text-sm font-mono"
-                      />
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">Authentication</p>
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <label htmlFor="username" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Username <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="username"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="postgres"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+
+                      <div className="grid gap-2">
+                        <label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Password <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="ssh" className="mt-4 space-y-3">
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">SSH Tunnel Configuration</p>
+                    <div className="grid gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <label htmlFor="sshHost" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            SSH Host <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="sshHost"
+                            value={sshHost}
+                            onChange={(e) => setSshHost(e.target.value)}
+                            placeholder="ssh.example.com"
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="sshPort" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            SSH Port <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="sshPort"
+                            value={sshPort}
+                            onChange={(e) => setSshPort(e.target.value)}
+                            placeholder="22"
+                            className="h-9 text-sm font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <label htmlFor="sshUsername" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          SSH Username <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="sshUsername"
+                          value={sshUsername}
+                          onChange={(e) => setSshUsername(e.target.value)}
+                          placeholder="ubuntu"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+
+                      <div className="grid gap-2">
+                        <label htmlFor="sshAuthMethod" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Authentication Method <span className="text-destructive">*</span>
+                        </label>
+                        <Select
+                          value={sshAuthMethod}
+                          onValueChange={(v) => setSshAuthMethod(v as SSHAuthMethod)}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="password">Password</SelectItem>
+                            <SelectItem value="privateKey">Private Key</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {sshAuthMethod === "password" ? (
+                        <div className="grid gap-2">
+                          <label htmlFor="sshPassword" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            SSH Password <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="sshPassword"
+                            type="password"
+                            value={sshPassword}
+                            onChange={(e) => setSshPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                      ) : (
+                        <div className="grid gap-2">
+                          <label htmlFor="sshPrivateKeyPath" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Private Key Path <span className="text-destructive">*</span>
+                          </label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="sshPrivateKeyPath"
+                              value={sshPrivateKeyPath}
+                              onChange={(e) => setSshPrivateKeyPath(e.target.value)}
+                              placeholder="~/.ssh/id_rsa"
+                              className="h-9 text-sm font-mono"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleBrowseSshKey}
+                              className="h-9 shrink-0"
+                            >
+                              Browse
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid gap-2">
-                    <label htmlFor="database" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Database <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      id="database"
-                      value={database}
-                      onChange={(e) => setDatabase(e.target.value)}
-                      placeholder="database_name"
-                      className="h-9 text-sm font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">Database Connection (via SSH Tunnel)</p>
+                    <div className="grid gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-2">
+                          <label htmlFor="dbHost" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            DB Host <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="dbHost"
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
+                            placeholder="localhost"
+                            className="h-9 text-sm"
+                          />
+                          <p className="text-[10px] text-muted-foreground">Usually 'localhost' when using SSH tunnel</p>
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="dbPort" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            DB Port <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="dbPort"
+                            value={port}
+                            onChange={(e) => setPort(e.target.value)}
+                            placeholder={dbType === "postgresql" ? "5432" : "3306"}
+                            className="h-9 text-sm font-mono"
+                          />
+                        </div>
+                      </div>
 
-              <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                <p className="text-xs text-muted-foreground mb-3">Authentication</p>
-                <div className="grid gap-3">
-                  <div className="grid gap-2">
-                    <label htmlFor="username" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Username <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      id="username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="postgres"
-                      className="h-9 text-sm"
-                    />
+                      <div className="grid gap-2">
+                        <label htmlFor="sshDatabase" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Database <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="sshDatabase"
+                          value={database}
+                          onChange={(e) => setDatabase(e.target.value)}
+                          placeholder="database_name"
+                          className="h-9 text-sm font-mono"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid gap-2">
-                    <label htmlFor="password" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Password <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="h-9 text-sm"
-                    />
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">Database Authentication</p>
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <label htmlFor="sshDbUsername" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          DB Username <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="sshDbUsername"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="postgres"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+
+                      <div className="grid gap-2">
+                        <label htmlFor="sshDbPassword" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          DB Password <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="sshDbPassword"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </TabsContent>
+              </Tabs>
             </>
           )}
           </div>

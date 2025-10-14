@@ -138,8 +138,6 @@ fn handle_tunnel_connection(
 
     local_stream.set_nonblocking(true)
         .map_err(|e| anyhow!("Failed to set non-blocking: {}", e))?;
-    channel.set_read_timeout(Some(std::time::Duration::from_millis(100)))
-        .map_err(|e| anyhow!("Failed to set timeout: {}", e))?;
 
     loop {
         // Check if we should stop

@@ -119,50 +119,53 @@ macro_rules! execute_query {
 
 pub struct ConnectionManager {
     connections: Arc<RwLock<HashMap<String, DatabasePool>>>,
+    ssh_tunnels: Arc<RwLock<HashMap<String, SshTunnel>>>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
+            ssh_tunnels: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    fn build_connection_string(config: &ConnectionConfig) -> Result<String> {
-        match config.db_type {
-            DatabaseType::SQLite => {
-                let path = config
-                    .file_path
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("SQLite file path is required"))?;
-                Ok(format!("sqlite://{}", path))
-            }
-            DatabaseType::PostgreSQL => {
-                let host = config.host.as_ref().ok_or_else(|| anyhow!("Host is required"))?;
-                let port = config.port.ok_or_else(|| anyhow!("Port is required"))?;
-                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
-                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
-                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
-                Ok(format!(
-                    "postgresql://{}:{}@{}:{}/{}",
-                    username, password, host, port, database
-                ))
-            }
-            DatabaseType::MySQL => {
-                let host = config.host.as_ref().ok_or_else(|| anyhow!("Host is required"))?;
-                let port = config.port.ok_or_else(|| anyhow!("Port is required"))?;
-                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
-                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
-                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
-                Ok(format!(
-                    "mysql://{}:{}@{}:{}/{}",
-                    username, password, host, port, database
-                ))
-            }
-        }
-    }
 
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
+        // Handle SSH tunnel if configured
+        let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
+            if ssh_config.enabled && config.db_type != DatabaseType::SQLite {
+                let db_host = config.host.as_ref().ok_or_else(|| anyhow!("Host is required"))?;
+                let db_port = config.port.ok_or_else(|| anyhow!("Port is required"))?;
+
+                // Create SSH tunnel
+                let tunnel = SshTunnel::connect(
+                    &ssh_config.host,
+                    ssh_config.port,
+                    &ssh_config.username,
+                    ssh_config.password.as_deref(),
+                    ssh_config.private_key_path.as_deref(),
+                    db_host,
+                    db_port,
+                )?;
+
+                let local_port = tunnel.local_port();
+                ("127.0.0.1".to_string(), local_port, Some(tunnel))
+            } else {
+                (
+                    config.host.clone().unwrap_or_default(),
+                    config.port.unwrap_or_default(),
+                    None,
+                )
+            }
+        } else {
+            (
+                config.host.clone().unwrap_or_default(),
+                config.port.unwrap_or_default(),
+                None,
+            )
+        };
+
         let pool = match config.db_type {
             DatabaseType::SQLite => {
                 let path = config
@@ -174,20 +177,40 @@ impl ConnectionManager {
                 DatabasePool::Sqlite(pool)
             }
             DatabaseType::PostgreSQL => {
-                let connection_string = Self::build_connection_string(&config)?;
+                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
+
+                let connection_string = format!(
+                    "postgresql://{}:{}@{}:{}/{}",
+                    username, password, actual_host, actual_port, database
+                );
                 let pool = sqlx::PgPool::connect(&connection_string).await?;
                 DatabasePool::Postgres(pool)
             }
             DatabaseType::MySQL => {
-                let connection_string = Self::build_connection_string(&config)?;
+                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
+
+                let connection_string = format!(
+                    "mysql://{}:{}@{}:{}/{}",
+                    username, password, actual_host, actual_port, database
+                );
                 let pool = sqlx::MySqlPool::connect(&connection_string).await?;
                 DatabasePool::MySql(pool)
             }
         };
-        
+
         let mut connections = self.connections.write().await;
         connections.insert(config.id.clone(), pool);
-        
+
+        // Store SSH tunnel if one was created
+        if let Some(tunnel) = ssh_tunnel {
+            let mut tunnels = self.ssh_tunnels.write().await;
+            tunnels.insert(config.id.clone(), tunnel);
+        }
+
         Ok(())
     }
 
@@ -196,12 +219,61 @@ impl ConnectionManager {
         connections
             .remove(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        // Clean up SSH tunnel if exists
+        let mut tunnels = self.ssh_tunnels.write().await;
+        tunnels.remove(connection_id);
+
         Ok(())
     }
 
     pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult> {
         let start = std::time::Instant::now();
-        
+
+        // Handle SSH tunnel if configured
+        let (actual_host, actual_port, _ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
+            if ssh_config.enabled && config.db_type != DatabaseType::SQLite {
+                let db_host = config.host.as_ref().ok_or_else(|| anyhow!("Host is required"))?;
+                let db_port = config.port.ok_or_else(|| anyhow!("Port is required"))?;
+
+                // Create SSH tunnel for testing
+                match SshTunnel::connect(
+                    &ssh_config.host,
+                    ssh_config.port,
+                    &ssh_config.username,
+                    ssh_config.password.as_deref(),
+                    ssh_config.private_key_path.as_deref(),
+                    db_host,
+                    db_port,
+                ) {
+                    Ok(tunnel) => {
+                        let local_port = tunnel.local_port();
+                        ("127.0.0.1".to_string(), local_port, Some(tunnel))
+                    }
+                    Err(e) => {
+                        return Ok(ConnectionTestResult {
+                            success: false,
+                            latency_ms: 0,
+                            db_version: String::new(),
+                            error: Some(format!("SSH tunnel failed: {}", e)),
+                        });
+                    }
+                }
+            } else {
+                (
+                    config.host.clone().unwrap_or_default(),
+                    config.port.unwrap_or_default(),
+                    None,
+                )
+            }
+        } else {
+            (
+                config.host.clone().unwrap_or_default(),
+                config.port.unwrap_or_default(),
+                None,
+            )
+        };
+
         let result = match config.db_type {
             DatabaseType::SQLite => {
                 let path = config
@@ -209,17 +281,17 @@ impl ConnectionManager {
                     .as_ref()
                     .ok_or_else(|| anyhow!("SQLite file path is required"))?;
                 let connection_string = format!("sqlite://{}", path);
-                
+
                 match sqlx::SqlitePool::connect(&connection_string).await {
                     Ok(pool) => {
                         let version_query = "SELECT sqlite_version()";
                         let row = sqlx::query(version_query).fetch_one(&pool).await?;
                         let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
-                        
+
                         let latency_ms = start.elapsed().as_millis() as u64;
-                        
+
                         pool.close().await;
-                        
+
                         ConnectionTestResult {
                             success: true,
                             latency_ms,
@@ -236,21 +308,28 @@ impl ConnectionManager {
                 }
             }
             DatabaseType::PostgreSQL => {
-                let connection_string = Self::build_connection_string(&config)?;
-                
+                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
+
+                let connection_string = format!(
+                    "postgresql://{}:{}@{}:{}/{}",
+                    username, password, actual_host, actual_port, database
+                );
+
                 match sqlx::PgPool::connect(&connection_string).await {
                     Ok(pool) => {
                         let version_query = "SELECT version()";
                         let row = sqlx::query(version_query).fetch_one(&pool).await?;
                         let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
-                        
+
                         // Extract just the version number
                         let version_short = version.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
-                        
+
                         let latency_ms = start.elapsed().as_millis() as u64;
-                        
+
                         pool.close().await;
-                        
+
                         ConnectionTestResult {
                             success: true,
                             latency_ms,
@@ -267,18 +346,25 @@ impl ConnectionManager {
                 }
             }
             DatabaseType::MySQL => {
-                let connection_string = Self::build_connection_string(&config)?;
-                
+                let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
+
+                let connection_string = format!(
+                    "mysql://{}:{}@{}:{}/{}",
+                    username, password, actual_host, actual_port, database
+                );
+
                 match sqlx::MySqlPool::connect(&connection_string).await {
                     Ok(pool) => {
                         let version_query = "SELECT VERSION()";
                         let row = sqlx::query(version_query).fetch_one(&pool).await?;
                         let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
-                        
+
                         let latency_ms = start.elapsed().as_millis() as u64;
-                        
+
                         pool.close().await;
-                        
+
                         ConnectionTestResult {
                             success: true,
                             latency_ms,
@@ -295,7 +381,7 @@ impl ConnectionManager {
                 }
             }
         };
-        
+
         Ok(result)
     }
 
