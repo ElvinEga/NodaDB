@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddRowDialog } from '@/components/AddRowDialog';
 import {
@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DatabaseTable, QueryResult, TableColumn, ConnectionConfig } from '@/types';
 import { toast } from 'sonner';
+import { validateCellValue, getPlaceholderForType } from '@/lib/validation';
 
 interface TableDataViewerProps {
   connection: ConnectionConfig;
@@ -30,6 +31,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingCell, setEditingCell] = useState<{rowIndex: number; column: string} | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const loadTableStructure = async () => {
     try {
@@ -149,10 +151,24 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const handleCellEdit = (rowIndex: number, column: string, currentValue: unknown) => {
     setEditingCell({ rowIndex, column });
     setEditValue(formatValue(currentValue));
+    setValidationError(null);
   };
 
   const handleSaveCell = async () => {
     if (!editingCell || !data) return;
+
+    const columnInfo = columns.find(c => c.name === editingCell.column);
+    if (!columnInfo) {
+      toast.error('Column information not found');
+      return;
+    }
+
+    // Validate the input
+    const validation = validateCellValue(editValue, columnInfo.data_type);
+    if (!validation.valid) {
+      setValidationError(validation.error || 'Invalid value');
+      return;
+    }
 
     const row = data.rows[editingCell.rowIndex];
     const pkColumn = columns.find(c => c.is_primary_key);
@@ -168,7 +184,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
       : `${pkColumn.name} = ${pkValue}`;
 
     const updateData: Record<string, unknown> = {
-      [editingCell.column]: editValue === 'NULL' ? null : editValue,
+      [editingCell.column]: validation.transformedValue,
     };
 
     try {
@@ -182,6 +198,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
 
       toast.success(result);
       setEditingCell(null);
+      setValidationError(null);
       refreshData();
     } catch (error) {
       toast.error(`Failed to update: ${error}`);
@@ -192,6 +209,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const handleCancelEdit = () => {
     setEditingCell(null);
     setEditValue('');
+    setValidationError(null);
   };
 
   const toggleRowSelection = (rowIndex: number) => {
@@ -388,44 +406,60 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
                         onDoubleClick={() => handleCellEdit(index, column, value)}
                       >
                         {editingCell?.rowIndex === index && editingCell?.column === column ? (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => {
+                                  setEditValue(e.target.value);
+                                  setValidationError(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveCell();
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEdit();
+                                  }
+                                }}
+                                placeholder={columnInfo ? getPlaceholderForType(columnInfo.data_type) : 'Enter value...'}
+                                autoFocus
+                                className={`flex-1 px-2 py-1 border rounded text-xs bg-background focus:outline-none focus:ring-1 ${
+                                  validationError 
+                                    ? 'border-destructive focus:ring-destructive' 
+                                    : 'border-primary focus:ring-primary'
+                                }`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-6 px-2 text-xs"
+                                onMouseDown={(e) => {
                                   e.preventDefault();
                                   handleSaveCell();
-                                } else if (e.key === 'Escape') {
+                                }}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
                                   handleCancelEdit();
-                                }
-                              }}
-                              autoFocus
-                              className="flex-1 px-2 py-1 border border-primary rounded text-xs bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="h-6 px-2 text-xs"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleSaveCell();
-                              }}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 px-2 text-xs"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleCancelEdit();
-                              }}
-                            >
-                              Cancel
-                            </Button>
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                            {validationError && (
+                              <div className="flex items-center gap-1 text-xs text-destructive">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>{validationError}</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div 
