@@ -26,6 +26,7 @@ pub fn run() {
             commands::alter_table_add_column,
             commands::alter_table_drop_column,
             commands::rename_table,
+            commands::export_table_structure,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

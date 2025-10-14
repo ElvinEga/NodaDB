@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Table, Database, Loader2, RefreshCw, Plus, MoreVertical, Trash2, Edit } from 'lucide-react';
+import { Table, Database, Loader2, RefreshCw, Plus, MoreVertical, Trash2, Edit, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CreateTableDialog } from '@/components/CreateTableDialog';
+import { ExportTableDialog } from '@/components/ExportTableDialog';
 import { DatabaseTable, ConnectionConfig } from '@/types';
 import { toast } from 'sonner';
 
@@ -25,6 +26,8 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable, onN
   const [tables, setTables] = useState<DatabaseTable[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [createTableDialogOpen, setCreateTableDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [tableToExport, setTableToExport] = useState<DatabaseTable | null>(null);
 
   const loadTables = async () => {
     setIsLoading(true);
@@ -190,6 +193,14 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable, onN
                           <Table className="h-4 w-4 mr-2" />
                           View Data
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setTableToExport(table);
+                          setExportDialogOpen(true);
+                        }}>
+                          <FileCode className="h-4 w-4 mr-2" />
+                          Export Structure
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleRenameTable(table.name)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Rename
@@ -217,6 +228,15 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable, onN
         connection={connection}
         onSuccess={loadTables}
       />
+
+      {tableToExport && (
+        <ExportTableDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          connection={connection}
+          table={tableToExport}
+        />
+      )}
     </div>
   );
 }

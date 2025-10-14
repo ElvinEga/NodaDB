@@ -176,3 +176,16 @@ pub async fn rename_table(
         .await
         .map_err(|e| format!("Failed to rename table: {}", e))
 }
+
+#[tauri::command]
+pub async fn export_table_structure(
+    connection_id: String,
+    table_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .export_table_structure(&connection_id, &table_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to export table structure: {}", e))
+}

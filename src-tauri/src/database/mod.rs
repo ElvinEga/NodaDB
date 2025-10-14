@@ -624,4 +624,235 @@ impl ConnectionManager {
 
         Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
     }
+
+    pub async fn export_table_structure(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        // Get table structure
+        let columns = self.get_table_structure(connection_id, table_name, db_type).await?;
+        
+        if columns.is_empty() {
+            return Err(anyhow!("Table has no columns or does not exist"));
+        }
+
+        // Get primary keys
+        let primary_keys = self.get_primary_keys(pool, table_name, db_type).await?;
+        
+        // Get indexes
+        let indexes = self.get_indexes(pool, table_name, db_type).await?;
+
+        // Generate CREATE TABLE statement
+        let mut sql = format!("CREATE TABLE {} (\n", table_name);
+        
+        // Add columns
+        for (i, col) in columns.iter().enumerate() {
+            sql.push_str("  ");
+            sql.push_str(&col.name);
+            sql.push(' ');
+            sql.push_str(&col.data_type);
+            
+            if !col.is_nullable {
+                sql.push_str(" NOT NULL");
+            }
+            
+            if let Some(ref default) = col.default_value {
+                if !default.is_empty() {
+                    sql.push_str(" DEFAULT ");
+                    sql.push_str(default);
+                }
+            }
+            
+            if i < columns.len() - 1 || !primary_keys.is_empty() {
+                sql.push(',');
+            }
+            sql.push('\n');
+        }
+        
+        // Add primary key constraint
+        if !primary_keys.is_empty() {
+            sql.push_str("  PRIMARY KEY (");
+            sql.push_str(&primary_keys.join(", "));
+            sql.push_str(")\n");
+        }
+        
+        sql.push_str(");\n");
+        
+        // Add indexes
+        for index in indexes {
+            sql.push('\n');
+            sql.push_str(&index);
+            sql.push(';');
+        }
+
+        Ok(sql)
+    }
+
+    async fn get_primary_keys(
+        &self,
+        pool: &DatabasePool,
+        table_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<Vec<String>> {
+        let query = match db_type {
+            DatabaseType::SQLite => {
+                format!("PRAGMA table_info({})", table_name)
+            }
+            DatabaseType::PostgreSQL => {
+                format!(
+                    "SELECT a.attname \
+                     FROM pg_index i \
+                     JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) \
+                     WHERE i.indrelid = '{}'::regclass AND i.indisprimary",
+                    table_name
+                )
+            }
+            DatabaseType::MySQL => {
+                format!(
+                    "SELECT COLUMN_NAME \
+                     FROM information_schema.KEY_COLUMN_USAGE \
+                     WHERE TABLE_NAME = '{}' AND TABLE_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'PRIMARY' \
+                     ORDER BY ORDINAL_POSITION",
+                    table_name
+                )
+            }
+        };
+
+        let primary_keys = match pool {
+            DatabasePool::Sqlite(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .filter_map(|row| {
+                        let pk: i64 = row.try_get(5).unwrap_or(0);
+                        if pk > 0 {
+                            let name: String = row.try_get(1).unwrap_or_default();
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            }
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| row.try_get(0).unwrap_or_default())
+                    .collect()
+            }
+            DatabasePool::MySql(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| row.try_get(0).unwrap_or_default())
+                    .collect()
+            }
+        };
+
+        Ok(primary_keys)
+    }
+
+    async fn get_indexes(
+        &self,
+        pool: &DatabasePool,
+        table_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<Vec<String>> {
+        let query = match db_type {
+            DatabaseType::SQLite => {
+                format!("PRAGMA index_list({})", table_name)
+            }
+            DatabaseType::PostgreSQL => {
+                format!(
+                    "SELECT indexname, indexdef \
+                     FROM pg_indexes \
+                     WHERE tablename = '{}' AND indexname NOT LIKE '%_pkey'",
+                    table_name
+                )
+            }
+            DatabaseType::MySQL => {
+                format!(
+                    "SELECT DISTINCT INDEX_NAME, COLUMN_NAME \
+                     FROM information_schema.STATISTICS \
+                     WHERE TABLE_NAME = '{}' AND TABLE_SCHEMA = DATABASE() AND INDEX_NAME != 'PRIMARY' \
+                     ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+                    table_name
+                )
+            }
+        };
+
+        let indexes = match pool {
+            DatabasePool::Sqlite(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                let mut index_sqls = Vec::new();
+                
+                for row in rows {
+                    let index_name: String = row.try_get(1).unwrap_or_default();
+                    let is_unique: i64 = row.try_get(2).unwrap_or(0);
+                    
+                    // Get index columns
+                    let index_info_query = format!("PRAGMA index_info({})", index_name);
+                    let info_rows = sqlx::query(&index_info_query).fetch_all(pool).await?;
+                    let columns: Vec<String> = info_rows
+                        .into_iter()
+                        .map(|r| r.try_get(2).unwrap_or_default())
+                        .collect();
+                    
+                    if !columns.is_empty() {
+                        let unique = if is_unique == 1 { "UNIQUE " } else { "" };
+                        let sql = format!(
+                            "CREATE {}INDEX {} ON {} ({})",
+                            unique,
+                            index_name,
+                            table_name,
+                            columns.join(", ")
+                        );
+                        index_sqls.push(sql);
+                    }
+                }
+                
+                index_sqls
+            }
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let indexdef: String = row.try_get(1).unwrap_or_default();
+                        indexdef
+                    })
+                    .collect()
+            }
+            DatabasePool::MySql(pool) => {
+                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                let mut index_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                
+                for row in rows {
+                    let index_name: String = row.try_get(0).unwrap_or_default();
+                    let column_name: String = row.try_get(1).unwrap_or_default();
+                    
+                    index_map.entry(index_name)
+                        .or_insert_with(Vec::new)
+                        .push(column_name);
+                }
+                
+                index_map.into_iter()
+                    .map(|(index_name, columns)| {
+                        format!(
+                            "CREATE INDEX {} ON {} ({})",
+                            index_name,
+                            table_name,
+                            columns.join(", ")
+                        )
+                    })
+                    .collect()
+            }
+        };
+
+        Ok(indexes)
+    }
 }
