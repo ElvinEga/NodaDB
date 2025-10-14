@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, Plus, Settings, FileCode2, Table2, X } from "lucide-react";
+import { Database, Plus, Settings, FileCode2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -7,6 +7,8 @@ import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
+import { TabBar, type TabType } from "@/components/TabBar";
+import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
 import { DatabaseTable, TableColumn } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -15,13 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-type TabType = {
-  id: string;
-  type: "table" | "query";
-  title: string;
-  table?: DatabaseTable;
-  columns?: TableColumn[];
-};
+
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -62,6 +58,8 @@ function App() {
           title: table.name,
           table,
           columns,
+          isPinned: false,
+          isDirty: false,
         };
         setTabs([...tabs, newTab]);
         setActiveTabId(newTab.id);
@@ -74,6 +72,8 @@ function App() {
           title: table.name,
           table,
           columns: [],
+          isPinned: false,
+          isDirty: false,
         };
         setTabs([...tabs, newTab]);
         setActiveTabId(newTab.id);
@@ -86,12 +86,21 @@ function App() {
       id: `query-${Date.now()}`,
       type: "query",
       title: "New Query",
+      isPinned: false,
+      isDirty: false,
+      queryContent: '',
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
   };
 
   const closeTab = (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId);
+    // Don't close if pinned (unless it's the last tab)
+    if (tab?.isPinned && tabs.length > 1) {
+      return;
+    }
+    
     const newTabs = tabs.filter((t) => t.id !== tabId);
     setTabs(newTabs);
     if (activeTabId === tabId) {
@@ -100,6 +109,79 @@ function App() {
       );
     }
   };
+
+  const togglePin = (tabId: string) => {
+    setTabs(tabs.map(t => 
+      t.id === tabId ? { ...t, isPinned: !t.isPinned } : t
+    ));
+  };
+
+  const duplicateTab = (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab || tab.type !== 'query') return;
+    
+    const newTab: TabType = {
+      ...tab,
+      id: `query-${Date.now()}`,
+      title: `${tab.title} (Copy)`,
+      isPinned: false,
+      isDirty: false,
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const closeOtherTabs = (tabId: string) => {
+    const newTabs = tabs.filter(t => t.id === tabId || t.isPinned);
+    setTabs(newTabs);
+    setActiveTabId(tabId);
+  };
+
+  const closeAllTabs = () => {
+    const newTabs = tabs.filter(t => t.isPinned);
+    setTabs(newTabs);
+    setActiveTabId(newTabs.length > 0 ? newTabs[0].id : null);
+  };
+
+  const closeTabsToRight = (tabId: string) => {
+    const index = tabs.findIndex(t => t.id === tabId);
+    if (index === -1) return;
+    
+    const newTabs = tabs.slice(0, index + 1).concat(
+      tabs.slice(index + 1).filter(t => t.isPinned)
+    );
+    setTabs(newTabs);
+  };
+
+  const goToNextTab = () => {
+    if (tabs.length === 0) return;
+    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    setActiveTabId(tabs[nextIndex].id);
+  };
+
+  const goToPrevTab = () => {
+    if (tabs.length === 0) return;
+    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const prevIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1;
+    setActiveTabId(tabs[prevIndex].id);
+  };
+
+  const jumpToTab = (index: number) => {
+    if (index < tabs.length) {
+      setActiveTabId(tabs[index].id);
+    }
+  };
+
+  // Setup keyboard shortcuts
+  useTabKeyboardShortcuts({
+    onNewTab: openQueryTab,
+    onCloseTab: activeTabId ? () => closeTab(activeTabId) : undefined,
+    onNextTab: goToNextTab,
+    onPrevTab: goToPrevTab,
+    onJumpToTab: jumpToTab,
+    onCloseAllTabs: closeAllTabs,
+  });
 
   return (
     <SidebarProvider>
@@ -151,43 +233,17 @@ function App() {
               </header>
 
               {/* Tab Bar */}
-              {tabs.length > 0 && (
-                <div className="h-10 border-b border-border bg-card flex items-center px-2 gap-1 overflow-x-auto">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTabId(tab.id)}
-                      className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-md text-sm whitespace-nowrap
-                transition-colors duration-150
-                ${
-                  activeTabId === tab.id
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                }
-              `}
-                    >
-                      {tab.type === "table" ? (
-                        <Table2 className="h-3.5 w-3.5" />
-                      ) : (
-                        <FileCode2 className="h-3.5 w-3.5" />
-                      )}
-                      <span className="max-w-[150px] truncate">
-                        {tab.title}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeTab(tab.id);
-                        }}
-                        className="ml-1 hover:bg-border rounded p-0.5"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <TabBar
+                tabs={tabs}
+                activeTabId={activeTabId}
+                onTabClick={setActiveTabId}
+                onTabClose={closeTab}
+                onTabPin={togglePin}
+                onTabDuplicate={duplicateTab}
+                onCloseOthers={closeOtherTabs}
+                onCloseAll={closeAllTabs}
+                onCloseToRight={closeTabsToRight}
+              />
               <main className="flex-1 overflow-hidden bg-secondary/20">
                 {activeTab ? (
                   <>
