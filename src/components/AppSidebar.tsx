@@ -1,4 +1,4 @@
-import { FileCode2 } from "lucide-react";
+import { Database, FileCode2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +28,15 @@ export function AppSidebar({
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" tooltip="New Query">
+              {/* Logo & App Name */}
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                <h1 className="text-lg font-semibold">NodaDB</h1>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"

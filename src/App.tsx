@@ -117,10 +117,11 @@ function App() {
               {/* Top Navigation Bar */}
               <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
                 {/* Logo & App Name */}
-                <div className="flex items-center gap-2">
-                  <Database className="h-5 w-5 text-primary" />
-                  <h1 className="text-lg font-semibold">NodaDB</h1>
-                </div>
+                {activeConnectionId && activeConnection && (
+                  <div className="flex items-center gap-2">
+                    <SidebarTrigger />
+                  </div>
+                )}
 
                 {/* Connection Selector */}
                 {activeConnection && (
@@ -136,9 +137,7 @@ function App() {
                 <div className="flex-1" />
 
                 {/* Right Actions */}
-                {activeConnectionId && activeConnection && (
-                  <SidebarTrigger className="mr-2" />
-                )}
+
                 <Button
                   variant="ghost"
                   size="icon"
@@ -325,7 +324,7 @@ function App() {
             </div>
           </div>
         )}
-        
+
         <Toaster />
         <ConnectionDialog
           open={connectionDialogOpen}
