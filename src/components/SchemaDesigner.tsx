@@ -78,7 +78,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
     setIsLoading(true);
     try {
       // Get all tables
-      const tables = await invoke<DatabaseTable[]>('get_tables', {
+      const tables = await invoke<DatabaseTable[]>('list_tables', {
         connectionId: connection.id,
         dbType: connection.db_type,
       });
