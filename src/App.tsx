@@ -286,11 +286,16 @@ function App() {
           setShortcutsDialogOpen(true);
         }
       }
+      // Ctrl+Shift+E for Schema Designer/ERD Viewer
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        openSchemaDesignerTab();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [openSchemaDesignerTab]);
 
   return (
     <SidebarProvider>
@@ -338,7 +343,7 @@ function App() {
                     <Network className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
-                <KeyboardTooltip description="Open Schema Designer">
+                <KeyboardTooltip description="Open Schema Designer" keys={['Ctrl', 'Shift', 'E']}>
                   <Button
                     variant="ghost"
                     size="icon"
