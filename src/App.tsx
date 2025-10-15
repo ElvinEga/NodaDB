@@ -3,6 +3,7 @@ import { Database, Plus, Settings, FileCode2, HelpCircle, History, Network } fro
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
+import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -13,6 +14,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
+import { KeyboardTooltip } from "@/components/ui/keyboard-tooltip";
 import { DatabaseTable, TableColumn } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -306,47 +308,52 @@ function App() {
 
                 {/* Right Actions */}
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={openQueryBuilderTab}
-                  title="Visual Query Builder"
-                >
-                  <Network className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setConnectionDialogOpen(true)}
-                  title="New Connection"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-                  title="Query History"
-                  className={showHistoryPanel ? 'bg-muted' : ''}
-                >
-                  <History className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShortcutsDialogOpen(true)}
-                  title="Keyboard Shortcuts (Ctrl+?)"
-                >
-                  <HelpCircle className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setSettingsDialogOpen(true)}
-                  title="Settings"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
+                <KeyboardTooltip description="Open Visual Query Builder" keys={['Ctrl', 'B']}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={openQueryBuilderTab}
+                  >
+                    <Network className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
+                <KeyboardTooltip description="New Connection">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setConnectionDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
+                <KeyboardTooltip description="Query History">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                    className={showHistoryPanel ? 'bg-muted' : ''}
+                  >
+                    <History className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
+                <KeyboardTooltip description="Keyboard Shortcuts" keys={['Ctrl', '?']}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShortcutsDialogOpen(true)}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
+                <KeyboardTooltip description="Settings" keys={['Ctrl', ',']}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSettingsDialogOpen(true)}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
               </header>
 
               {/* Tab Bar */}
@@ -407,10 +414,12 @@ function App() {
                       <p className="text-sm text-muted-foreground mb-6">
                         Select a table from the sidebar or open a new query
                       </p>
-                      <Button onClick={openQueryTab} variant="outline">
-                        <FileCode2 className="h-4 w-4 mr-2" />
-                        New Query
-                      </Button>
+                      <KeyboardTooltip description="Create New Query Tab" keys={['Ctrl', 'N']}>
+                        <Button onClick={openQueryTab} variant="outline">
+                          <FileCode2 className="h-4 w-4 mr-2" />
+                          New Query
+                        </Button>
+                      </KeyboardTooltip>
                     </div>
                   </div>
                   )}
@@ -525,6 +534,7 @@ function App() {
           open={settingsDialogOpen}
           onOpenChange={setSettingsDialogOpen}
         />
+        <KeyboardCheatSheet />
       </div>
     </SidebarProvider>
   );

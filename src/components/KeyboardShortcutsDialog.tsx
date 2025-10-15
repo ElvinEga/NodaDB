@@ -30,28 +30,48 @@ const shortcuts: Shortcut[] = [
   { keys: ['Ctrl', 'Tab'], description: 'Next Tab', category: 'Tab Management' },
   { keys: ['Ctrl', 'Shift', 'Tab'], description: 'Previous Tab', category: 'Tab Management' },
   { keys: ['Ctrl', '1-9'], description: 'Jump to Tab by Number', category: 'Tab Management' },
-  
+  { keys: ['Ctrl', 'P'], description: 'Pin/Unpin Tab', category: 'Tab Management' },
+
   // Query Editor
   { keys: ['Ctrl', 'Enter'], description: 'Execute Query', category: 'Query Editor' },
   { keys: ['Ctrl', 'Shift', 'Enter'], description: 'Execute Selection', category: 'Query Editor' },
   { keys: ['Shift', 'Alt', 'F'], description: 'Format SQL', category: 'Query Editor' },
   { keys: ['Ctrl', '/'], description: 'Toggle Comment', category: 'Query Editor' },
-  
+  { keys: ['Ctrl', 'Shift', 'C'], description: 'Copy SQL Query', category: 'Query Editor' },
+  { keys: ['Ctrl', 'E'], description: 'Export Query Results', category: 'Query Editor' },
+
+  // Query Builder
+  { keys: ['Ctrl', 'B'], description: 'Open Visual Query Builder', category: 'Query Builder' },
+  { keys: ['Ctrl', 'Shift', 'B'], description: 'Add Table to Canvas', category: 'Query Builder' },
+  { keys: ['Del'], description: 'Delete Selected Node/Edge', category: 'Query Builder' },
+  { keys: ['Ctrl', 'G'], description: 'Generate SQL from Builder', category: 'Query Builder' },
+
   // Table Operations
   { keys: ['Ctrl', 'C'], description: 'Copy Cell Value', category: 'Table Operations' },
   { keys: ['Ctrl', 'D'], description: 'Duplicate Row', category: 'Table Operations' },
   { keys: ['Del'], description: 'Delete Row', category: 'Table Operations' },
   { keys: ['F2'], description: 'Edit Cell', category: 'Table Operations' },
-  
+  { keys: ['Ctrl', 'F'], description: 'Filter Table', category: 'Table Operations' },
+  { keys: ['Ctrl', 'R'], description: 'Refresh Table Data', category: 'Table Operations' },
+  { keys: ['Ctrl', 'I'], description: 'Insert New Row', category: 'Table Operations' },
+
+  // Data Generation
+  { keys: ['Ctrl', 'Shift', 'G'], description: 'Generate Test Data', category: 'Data Generation' },
+  { keys: ['Ctrl', 'Shift', 'D'], description: 'Bulk Delete Rows', category: 'Data Generation' },
+
   // Navigation
   { keys: ['Ctrl', 'K'], description: 'Focus Search/Command Palette', category: 'Navigation' },
   { keys: ['Ctrl', '?'], description: 'Show Keyboard Shortcuts', category: 'Navigation' },
   { keys: ['Esc'], description: 'Close Dialog/Cancel', category: 'Navigation' },
-  
+  { keys: ['Ctrl', 'L'], description: 'Focus Connection List', category: 'Navigation' },
+  { keys: ['Ctrl', 'T'], description: 'Focus Table List', category: 'Navigation' },
+
   // General
   { keys: ['Ctrl', 'S'], description: 'Save Changes', category: 'General' },
   { keys: ['Ctrl', 'Z'], description: 'Undo', category: 'General' },
   { keys: ['Ctrl', 'Shift', 'Z'], description: 'Redo', category: 'General' },
+  { keys: ['Ctrl', ','], description: 'Open Settings', category: 'General' },
+  { keys: ['F5'], description: 'Refresh Application', category: 'General' },
 ];
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
