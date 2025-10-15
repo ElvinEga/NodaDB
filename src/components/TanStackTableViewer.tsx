@@ -217,19 +217,47 @@ export function TanStackTableViewer({
       toast.error('Cannot delete: No primary key defined');
       return;
     }
-    
+
     const pkValue = getPrimaryKeyValue(row);
-    const sql = generateDeleteSql(table.name, primaryKeyColumn.name, pkValue);
-    
-    if (!confirm(`Delete this row?\n\n${sql}\n\nThis action cannot be undone.`)) {
+    const deleteSql = generateDeleteSql(table.name, primaryKeyColumn.name, pkValue);
+
+    if (!confirm(`Delete this row?\n\n${deleteSql}`)) {
       return;
     }
-    
+
     try {
+      // Generate INSERT SQL for undo
+      const columns = tableColumns.map(col => col.name);
+      const values = columns.map(col => {
+        const value = row[col];
+        if (value === null) return 'NULL';
+        if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+        return value;
+      });
+      const insertSql = `INSERT INTO ${table.name} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+
       await invoke('execute_query', {
         connectionId: connection.id,
-        query: sql,
+        query: deleteSql,
       });
+
+      // Add to undo/redo history
+      addAction(tableKey, {
+        id: `delete-${Date.now()}`,
+        type: 'delete',
+        timestamp: new Date(),
+        tableName: table.name,
+        connectionId: connection.id,
+        dbType: connection.db_type,
+        data: {
+          rows: [row],
+          primaryKeyColumn: primaryKeyColumn.name,
+          primaryKeyValues: [pkValue],
+        },
+        undoSql: insertSql,
+        redoSql: deleteSql,
+      });
+
       toast.success('Row deleted');
       loadData();
     } catch (error) {
@@ -470,22 +498,34 @@ Sum: ${stats.sum}` : ''}`;
       const rowIndex = parseInt(editingCell.rowId);
       const row = data[rowIndex];
       const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
-      
+
       if (!primaryKeyColumn) {
         toast.error('No primary key found for update');
         return;
       }
 
       const primaryKeyValue = row[primaryKeyColumn.name];
-      
+      const oldValue = editingCell.currentValue;
+      const columnName = editingCell.columnId;
+
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
-        [editingCell.columnId]: newValue === '' ? null : newValue,
+        [columnName]: newValue === '' ? null : newValue,
       };
-      
+
       // Build WHERE clause for the primary key
       const whereClause = `${primaryKeyColumn.name} = ${typeof primaryKeyValue === 'string' ? `'${primaryKeyValue}'` : primaryKeyValue}`;
-      
+
+      // Generate SQL for undo/redo
+      const formatValue = (val: any) => {
+        if (val === null || val === '') return 'NULL';
+        if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+        return val;
+      };
+
+      const updateSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(newValue === '' ? null : newValue)} WHERE ${whereClause}`;
+      const undoSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(oldValue)} WHERE ${whereClause}`;
+
       await invoke('update_row', {
         connectionId: connection.id,
         tableName: table.name,
@@ -494,11 +534,29 @@ Sum: ${stats.sum}` : ''}`;
         dbType: connection.db_type,
       });
 
+      // Add to undo/redo history
+      addAction(tableKey, {
+        id: `update-${Date.now()}`,
+        type: 'update',
+        timestamp: new Date(),
+        tableName: table.name,
+        connectionId: connection.id,
+        dbType: connection.db_type,
+        data: {
+          oldValues: [{ [columnName]: oldValue }],
+          newValues: [{ [columnName]: newValue === '' ? null : newValue }],
+          primaryKeyColumn: primaryKeyColumn.name,
+          primaryKeyValues: [primaryKeyValue],
+        },
+        undoSql,
+        redoSql: updateSql,
+      });
+
       // Update local data
       const newData = [...data];
       newData[rowIndex] = {
         ...newData[rowIndex],
-        [editingCell.columnId]: newValue === '' ? null : newValue,
+        [columnName]: newValue === '' ? null : newValue,
       };
       setData(newData);
       setEditingCell(null);
@@ -518,7 +576,7 @@ Sum: ${stats.sum}` : ''}`;
 
     try {
       const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
-      
+
       if (!primaryKeyColumn) {
         toast.error('No primary key found for delete');
         return;
@@ -529,8 +587,22 @@ Sum: ${stats.sum}` : ''}`;
         const pkValue = row.original[primaryKeyColumn.name];
         return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
       });
-      
+
       const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
+      const deleteSql = `DELETE FROM ${table.name} WHERE ${whereClause}`;
+
+      // Generate INSERT SQL for undo (multiple rows)
+      const insertStatements = selectedRows.map(row => {
+        const columns = tableColumns.map(col => col.name);
+        const values = columns.map(col => {
+          const value = row.original[col];
+          if (value === null) return 'NULL';
+          if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+          return value;
+        });
+        return `INSERT INTO ${table.name} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+      });
+      const undoSql = insertStatements.join('; ');
 
       await invoke('delete_rows', {
         connectionId: connection.id,
@@ -538,7 +610,24 @@ Sum: ${stats.sum}` : ''}`;
         whereClause: whereClause,
         dbType: connection.db_type,
       });
-      
+
+      // Add to undo/redo history
+      addAction(tableKey, {
+        id: `batch-delete-${Date.now()}`,
+        type: 'batch_delete',
+        timestamp: new Date(),
+        tableName: table.name,
+        connectionId: connection.id,
+        dbType: connection.db_type,
+        data: {
+          rows: selectedRows.map(r => r.original),
+          primaryKeyColumn: primaryKeyColumn.name,
+          primaryKeyValues: primaryKeyValues.map(v => typeof v === 'string' ? v.replace(/'/g, '') : v),
+        },
+        undoSql,
+        redoSql: deleteSql,
+      });
+
       // Reload data
       await loadData();
       setRowSelection({});
@@ -565,14 +654,51 @@ Sum: ${stats.sum}` : ''}`;
       return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
     });
 
+    // Capture old values for undo
+    const oldValues = selectedRows.map(row => ({
+      [primaryKeyColumn.name]: row.original[primaryKeyColumn.name],
+      [columnName]: row.original[columnName],
+    }));
+
     const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
     const setValue = value === 'NULL' ? 'NULL' : `'${value}'`;
+
+    const updateSql = `UPDATE ${table.name} SET ${columnName} = ${setValue} WHERE ${whereClause}`;
+
+    // Generate undo SQL (individual UPDATEs for each row to restore original values)
+    const undoSqlStatements = oldValues.map(oldVal => {
+      const pkValue = oldVal[primaryKeyColumn.name];
+      const oldValue = oldVal[columnName];
+      const formattedOldValue = oldValue === null ? 'NULL' : typeof oldValue === 'string' ? `'${oldValue.replace(/'/g, "''")}'` : oldValue;
+      const formattedPkValue = typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
+      return `UPDATE ${table.name} SET ${columnName} = ${formattedOldValue} WHERE ${primaryKeyColumn.name} = ${formattedPkValue}`;
+    });
+    const undoSql = undoSqlStatements.join('; ');
 
     try {
       await invoke('execute_query', {
         connectionId: connection.id,
-        query: `UPDATE ${table.name} SET ${columnName} = ${setValue} WHERE ${whereClause}`,
+        query: updateSql,
         dbType: connection.db_type,
+      });
+
+      // Add to undo/redo history
+      addAction(tableKey, {
+        id: `batch-update-${Date.now()}`,
+        type: 'batch_update',
+        timestamp: new Date(),
+        tableName: table.name,
+        connectionId: connection.id,
+        dbType: connection.db_type,
+        data: {
+          oldValues,
+          columnName,
+          value,
+          primaryKeyColumn: primaryKeyColumn.name,
+          primaryKeyValues: primaryKeyValues.map(v => typeof v === 'string' ? v.replace(/'/g, '') : v),
+        },
+        undoSql,
+        redoSql: updateSql,
       });
 
       await loadData();
