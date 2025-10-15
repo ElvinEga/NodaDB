@@ -39,6 +39,7 @@ import {
 import { AddRowDialog } from '@/components/AddRowDialog';
 import { EditCellDialog } from '@/components/EditCellDialog';
 import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
+import { ExportDataDialog } from '@/components/ExportDataDialog';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
 
@@ -84,6 +85,7 @@ export function TanStackTableViewer({
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   
@@ -529,30 +531,27 @@ Sum: ${stats.sum}` : ''}`;
     }
   };
 
-  const handleExport = () => {
-    const csv = [
-      tableInstance.getAllColumns()
-        .filter((col: any) => col.id !== 'select' && col.id !== 'rowNumber')
-        .map((col: any) => col.id)
-        .join(','),
-      ...tableInstance.getFilteredRowModel().rows.map((row: any) =>
-        tableInstance.getAllColumns()
-          .filter((col: any) => col.id !== 'select' && col.id !== 'rowNumber')
-          .map((col: any) => JSON.stringify(row.getValue(col.id)))
-          .join(',')
-      ),
-    ].join('\n');
+  // Prepare data for export
+  const getExportData = (): QueryResult => {
+    const filteredRows = tableInstance.getFilteredRowModel().rows;
+    const columns = tableInstance
+      .getAllColumns()
+      .filter((col: any) => col.id !== 'select' && col.id !== 'rowNumber')
+      .map((col: any) => col.id);
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${table.name}_${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success('Table exported as CSV');
+    const rows = filteredRows.map((row: any) => {
+      const rowData: Record<string, any> = {};
+      columns.forEach((col) => {
+        rowData[col] = row.getValue(col);
+      });
+      return rowData;
+    });
+
+    return {
+      columns,
+      rows,
+      rows_affected: rows.length,
+    };
   };
 
   const handleRefresh = async () => {
@@ -759,7 +758,7 @@ Sum: ${stats.sum}` : ''}`;
       {/* Footer / Pagination */}
       <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={handleExport} className="h-8 text-xs">
+          <Button variant="ghost" size="sm" onClick={() => setExportDialogOpen(true)} className="h-8 text-xs">
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export
           </Button>
@@ -814,6 +813,13 @@ Sum: ${stats.sum}` : ''}`;
         table={table}
         columns={tableColumns}
         onSuccess={loadData}
+      />
+
+      <ExportDataDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        data={getExportData()}
+        tableName={table.name}
       />
 
       {editingCell && (
