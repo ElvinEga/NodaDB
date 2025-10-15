@@ -51,40 +51,18 @@ function App() {
     if (existingTab) {
       setActiveTabId(existingTab.id);
     } else {
-      // Load table columns
-      try {
-        const columns = await invoke<TableColumn[]>("get_table_structure", {
-          connectionId: activeConnection?.id,
-          tableName: table.name,
-          dbType: activeConnection?.db_type,
-        });
-
-        const newTab: TabType = {
-          id: `table-${table.name}-${Date.now()}`,
-          type: "table",
-          title: table.name,
-          table,
-          columns,
-          isPinned: false,
-          isDirty: false,
-        };
-        setTabs([...tabs, newTab]);
-        setActiveTabId(newTab.id);
-      } catch (error) {
-        console.error("Failed to load table columns:", error);
-        // Still open tab even if columns fail to load
-        const newTab: TabType = {
-          id: `table-${table.name}-${Date.now()}`,
-          type: "table",
-          title: table.name,
-          table,
-          columns: [],
-          isPinned: false,
-          isDirty: false,
-        };
-        setTabs([...tabs, newTab]);
-        setActiveTabId(newTab.id);
-      }
+      // Create tab without loading columns (lazy loading)
+      const newTab: TabType = {
+        id: `table-${table.name}-${Date.now()}`,
+        type: "table",
+        title: table.name,
+        table,
+        columns: undefined, // Will be loaded when tab becomes active
+        isPinned: false,
+        isDirty: false,
+      };
+      setTabs([...tabs, newTab]);
+      setActiveTabId(newTab.id);
     }
   };
 
@@ -218,6 +196,46 @@ function App() {
       setActiveTabId(tabs[index].id);
     }
   };
+
+  // Lazy load table columns when tab becomes active
+  useEffect(() => {
+    const loadColumnsForActiveTab = async () => {
+      if (!activeTab || activeTab.type !== 'table' || !activeTab.table) {
+        return;
+      }
+
+      // Check if columns are already loaded
+      if (activeTab.columns !== undefined) {
+        return;
+      }
+
+      // Load columns
+      try {
+        const columns = await invoke<TableColumn[]>("get_table_structure", {
+          connectionId: activeConnection?.id,
+          tableName: activeTab.table.name,
+          dbType: activeConnection?.db_type,
+        });
+
+        // Update the tab with loaded columns
+        setTabs(tabs.map(t =>
+          t.id === activeTab.id
+            ? { ...t, columns }
+            : t
+        ));
+      } catch (error) {
+        console.error("Failed to load table columns:", error);
+        // Set empty array to prevent infinite retry
+        setTabs(tabs.map(t =>
+          t.id === activeTab.id
+            ? { ...t, columns: [] }
+            : t
+        ));
+      }
+    };
+
+    loadColumnsForActiveTab();
+  }, [activeTabId, activeTab, activeConnection, tabs]);
 
   // Setup keyboard shortcuts
   useTabKeyboardShortcuts({
