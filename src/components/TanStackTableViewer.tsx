@@ -508,7 +508,11 @@ Sum: ${stats.sum}` : ''}`;
     count: rows.length,
     getScrollElement: () => tableContainerRef.current,
     estimateSize: () => 36, // Row height in pixels (h-9 = 36px)
-    overscan: 10, // Number of items to render outside visible area
+    overscan: 20, // Number of items to render outside visible area (increased for smoother scrolling)
+    measureElement:
+      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
+        ? (element) => element?.getBoundingClientRect().height
+        : undefined,
   });
 
   const handleSaveEdit = async (newValue: string) => {
@@ -1039,6 +1043,7 @@ Sum: ${stats.sum}` : ''}`;
                 display: 'grid',
                 height: `${rowVirtualizer.getTotalSize()}px`,
                 position: 'relative',
+                willChange: 'transform',
               }}
             >
               {isLoading ? (
@@ -1088,8 +1093,9 @@ Sum: ${stats.sum}` : ''}`;
                       style={{
                         display: 'flex',
                         position: 'absolute',
-                        transform: `translateY(${virtualRow.start}px)`,
+                        transform: `translate3d(0, ${virtualRow.start}px, 0)`,
                         width: '100%',
+                        willChange: 'transform',
                       }}
                       className={`
                         h-9 border-b border-r border-l border-border transition-colors

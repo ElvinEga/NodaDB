@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { ReactNode } from "react";
+import { ReactNode, memo } from "react";
 
 /**
  * Format a date value with relative or absolute display
@@ -75,7 +75,7 @@ export function formatNumber(value: any, dataType: string): string {
 /**
  * Render a boolean value as a visual indicator
  */
-export function BooleanCell({ value }: { value: any }) {
+export const BooleanCell = memo(({ value }: { value: any }) => {
   const isTrue =
     value === true || value === 1 || value === "true" || value === "t";
   const isFalse =
@@ -100,12 +100,13 @@ export function BooleanCell({ value }: { value: any }) {
       )}
     </div>
   );
-}
+});
+BooleanCell.displayName = 'BooleanCell';
 
 /**
  * Render JSON data with pretty formatting
  */
-export function JsonCell({ value }: { value: any }) {
+export const JsonCell = memo(({ value }: { value: any }) => {
   if (!value) return <span className="text-muted-foreground italic">NULL</span>;
 
   try {
@@ -133,12 +134,13 @@ export function JsonCell({ value }: { value: any }) {
   } catch {
     return <span className="font-mono text-xs">{String(value)}</span>;
   }
-}
+});
+JsonCell.displayName = 'JsonCell';
 
 /**
  * Render a date cell with formatted display
  */
-export function DateCell({ value }: { value: any }) {
+export const DateCell = memo(({ value }: { value: any }) => {
   if (!value) return <span className="text-muted-foreground italic">NULL</span>;
 
   const formatted = formatDate(value);
@@ -158,18 +160,19 @@ export function DateCell({ value }: { value: any }) {
       </div>
     </div>
   );
-}
+});
+DateCell.displayName = 'DateCell';
 
 /**
  * Render a number cell with formatted display
  */
-export function NumberCell({
+export const NumberCell = memo(({
   value,
   dataType,
 }: {
   value: any;
   dataType: string;
-}) {
+}) => {
   if (value === null || value === undefined) {
     return <span className="text-muted-foreground italic">NULL</span>;
   }
@@ -181,18 +184,19 @@ export function NumberCell({
       {formatted}
     </span>
   );
-}
+});
+NumberCell.displayName = 'NumberCell';
 
 /**
  * Render a text cell with truncation and tooltip
  */
-export function TextCell({
+export const TextCell = memo(({
   value,
   maxLength = 50,
 }: {
   value: any;
   maxLength?: number;
-}) {
+}) => {
   if (value === null || value === undefined) {
     return <span className="text-muted-foreground italic">NULL</span>;
   }
@@ -213,7 +217,8 @@ export function TextCell({
       </div>
     </div>
   );
-}
+});
+TextCell.displayName = 'TextCell';
 
 /**
  * Get appropriate cell renderer based on data type
