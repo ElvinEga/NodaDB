@@ -435,14 +435,14 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
               <Table>
                 <TableHeader className="sticky top-0 bg-secondary z-10">
                   <TableRow className="border-border hover:bg-transparent">
-                    <TableHead className="w-16 h-10 text-center text-xs font-medium">#</TableHead>
+                    <TableHead className="w-16 h-9 text-center text-xs font-normal">#</TableHead>
                     {data.columns.map((column) => {
                       const columnInfo = columns.find((c) => c.name === column);
 
                       return (
-                        <TableHead key={column} className="h-10">
+                        <TableHead key={column} className="h-9">
                           <div className="flex flex-col gap-1">
-                            <span className="font-semibold text-xs">{column}</span>
+                            <span className="font-normal text-xs">{column}</span>
                             {columnInfo && (
                               <span className="text-[10px] text-muted-foreground">
                                 {columnInfo.data_type}
@@ -460,10 +460,10 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
                       key={rowIndex}
                       className={`
                         border-border transition-colors
-                        ${rowIndex % 2 === 0 ? 'bg-background' : 'bg-secondary/20'}
+                        ${rowIndex % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
                       `}
                     >
-                      <TableCell className="h-10 text-center text-muted-foreground font-mono text-[11px]">
+                      <TableCell className="h-9 text-center text-muted-foreground font-mono text-[11px]">
                         {(currentPage - 1) * rowsPerPage + rowIndex + 1}
                       </TableCell>
                       {data.columns.map((column, columnIndex) => {
@@ -475,14 +475,14 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
                           <TableCell
                             key={column}
                             className={`
-                              h-10 text-xs cursor-cell select-none
+                              h-9 text-xs cursor-cell select-none
                               ${isNull ? 'italic text-muted-foreground' : ''}
                               ${isSelected ? 'bg-primary/20 ring-1 ring-primary ring-inset' : ''}
                             `}
                             onMouseDown={(e) => handleCellMouseDown(rowIndex, columnIndex, e)}
                             onMouseEnter={() => handleCellMouseEnter(rowIndex, columnIndex)}
                           >
-                            <div className="max-w-xs truncate px-2 py-1">
+                            <div className="max-w-xs truncate px-1 py-0.5">
                               {isNull ? (
                                 <span className="text-muted-foreground/70">NULL</span>
                               ) : (

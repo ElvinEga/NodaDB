@@ -1102,7 +1102,13 @@ Sum: ${stats.sum}` : ''}`;
                         <td
                           key={cell.id}
                           className="px-3 py-1 flex items-center text-xs border-r border-border"
-                          style={{ width: cell.column.getSize() }}
+                          style={{
+                            width: cell.column.getSize(),
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: cell.column.getSize()
+                          }}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
