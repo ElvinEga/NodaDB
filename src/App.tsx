@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Database, Plus, Settings, FileCode2, HelpCircle, History } from "lucide-react";
+import { Database, Plus, Settings, FileCode2, HelpCircle, History, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
@@ -8,6 +8,7 @@ import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { QueryEditor } from "@/components/QueryEditor";
+import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
@@ -95,6 +96,18 @@ function App() {
       isPinned: false,
       isDirty: false,
       queryContent: '',
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const openQueryBuilderTab = () => {
+    const newTab: TabType = {
+      id: `query-builder-${Date.now()}`,
+      type: "query-builder",
+      title: "Visual Query Builder",
+      isPinned: false,
+      isDirty: false,
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
@@ -278,13 +291,21 @@ function App() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  onClick={openQueryBuilderTab}
+                  title="Visual Query Builder"
+                >
+                  <Network className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setConnectionDialogOpen(true)}
                   title="New Connection"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="icon"
                   onClick={() => setShowHistoryPanel(!showHistoryPanel)}
                   title="Query History"
@@ -352,6 +373,8 @@ function App() {
                           }
                         }}
                       />
+                    ) : activeTab.type === "query-builder" ? (
+                      <VisualQueryBuilder connection={activeConnection} />
                     ) : (
                       <QueryEditor connection={activeConnection} />
                     )}
