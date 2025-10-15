@@ -26,6 +26,7 @@ import {
   Edit2,
   GripVertical,
   Sparkles,
+  Workflow,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,7 @@ import { AddRowDialog } from '@/components/AddRowDialog';
 import { EditCellDialog } from '@/components/EditCellDialog';
 import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
 import { ExportDataDialog } from '@/components/ExportDataDialog';
+import { BatchOperationsDialog } from '@/components/BatchOperationsDialog';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -87,6 +89,7 @@ export function TanStackTableViewer({
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   
@@ -532,15 +535,87 @@ Sum: ${stats.sum}` : ''}`;
     }
   };
 
+  // Batch operations handlers
+  const handleBatchDelete = async () => {
+    return handleDeleteRows();
+  };
+
+  const handleBatchUpdate = async (columnName: string, value: string) => {
+    if (!primaryKeyColumn) {
+      toast.error('No primary key found for update');
+      return;
+    }
+
+    const primaryKeyValues = selectedRows.map(row => {
+      const pkValue = row.original[primaryKeyColumn.name];
+      return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
+    });
+
+    const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
+    const setValue = value === 'NULL' ? 'NULL' : `'${value}'`;
+
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: `UPDATE ${table.name} SET ${columnName} = ${setValue} WHERE ${whereClause}`,
+        dbType: connection.db_type,
+      });
+
+      await loadData();
+      setRowSelection({});
+      toast.success(`Updated ${selectedCount} row(s)`);
+    } catch (error) {
+      toast.error(`Failed to update rows: ${error}`);
+      console.error('Update error:', error);
+    }
+  };
+
+  const handleBatchDuplicate = async () => {
+    try {
+      const editableColumns = tableColumns.filter(
+        col => !col.is_primary_key
+      );
+
+      for (const row of selectedRows) {
+        const newRow: Record<string, any> = {};
+        editableColumns.forEach(col => {
+          newRow[col.name] = row.original[col.name];
+        });
+
+        await invoke('insert_row', {
+          connectionId: connection.id,
+          tableName: table.name,
+          row: newRow,
+          dbType: connection.db_type,
+        });
+      }
+
+      await loadData();
+      setRowSelection({});
+      toast.success(`Duplicated ${selectedCount} row(s)`);
+    } catch (error) {
+      toast.error(`Failed to duplicate rows: ${error}`);
+      console.error('Duplicate error:', error);
+    }
+  };
+
+  const handleBatchExport = () => {
+    setExportDialogOpen(true);
+  };
+
   // Prepare data for export
   const getExportData = (): QueryResult => {
-    const filteredRows = tableInstance.getFilteredRowModel().rows;
+    // If rows are selected, export only selected rows
+    const rowsToExport = selectedCount > 0
+      ? tableInstance.getSelectedRowModel().rows
+      : tableInstance.getFilteredRowModel().rows;
+
     const columns = tableInstance
       .getAllColumns()
       .filter((col: any) => col.id !== 'select' && col.id !== 'rowNumber')
       .map((col: any) => col.id);
 
-    const rows = filteredRows.map((row: any) => {
+    const rows = rowsToExport.map((row: any) => {
       const rowData: Record<string, any> = {};
       columns.forEach((col) => {
         rowData[col] = row.getValue(col);
@@ -603,9 +678,20 @@ Sum: ${stats.sum}` : ''}`;
             Delete row
           </Button>
           {selectedCount > 0 && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {selectedCount} selected
-            </span>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBatchOperationsDialogOpen(true)}
+                className="h-8"
+              >
+                <Workflow className="h-3.5 w-3.5 mr-1.5" />
+                Batch ops
+              </Button>
+              <span className="text-xs text-muted-foreground ml-2">
+                {selectedCount} selected
+              </span>
+            </>
           )}
         </div>
 
@@ -843,6 +929,17 @@ Sum: ${stats.sum}` : ''}`;
         onOpenChange={setExportDialogOpen}
         data={getExportData()}
         tableName={table.name}
+      />
+
+      <BatchOperationsDialog
+        open={batchOperationsDialogOpen}
+        onOpenChange={setBatchOperationsDialogOpen}
+        selectedRowCount={selectedCount}
+        columns={tableColumns}
+        onBatchDelete={handleBatchDelete}
+        onBatchUpdate={handleBatchUpdate}
+        onBatchExport={handleBatchExport}
+        onBatchDuplicate={handleBatchDuplicate}
       />
 
       {editingCell && (
