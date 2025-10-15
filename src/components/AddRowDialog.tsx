@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConnectionConfig, TableColumn, DatabaseTable } from '@/types';
 import { toast } from 'sonner';
+import { TableAction } from '@/stores/undoRedoStore';
 
 interface AddRowDialogProps {
   open: boolean;
@@ -22,6 +23,8 @@ interface AddRowDialogProps {
   table: DatabaseTable;
   columns: TableColumn[];
   onSuccess: () => void;
+  tableKey?: string;
+  onAddAction?: (tableKey: string, action: TableAction) => void;
 }
 
 export function AddRowDialog({
@@ -31,6 +34,8 @@ export function AddRowDialog({
   table,
   columns,
   onSuccess,
+  tableKey,
+  onAddAction,
 }: AddRowDialogProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,12 +96,38 @@ export function AddRowDialog({
         }
       });
 
+      // Generate INSERT SQL for tracking
+      const columns_list = Object.keys(data).join(', ');
+      const values_list = Object.values(data).map(v => {
+        if (v === null) return 'NULL';
+        if (typeof v === 'string') return `'${v.replace(/'/g, "''")}'`;
+        return v;
+      }).join(', ');
+      const insertSql = `INSERT INTO ${table.name} (${columns_list}) VALUES (${values_list})`;
+
       const result = await invoke<string>('insert_row', {
         connectionId: connection.id,
         tableName: table.name,
         data,
         dbType: connection.db_type,
       });
+
+      // Add to undo/redo history if callback provided
+      if (tableKey && onAddAction) {
+        onAddAction(tableKey, {
+          id: `insert-${Date.now()}`,
+          type: 'insert',
+          timestamp: new Date(),
+          tableName: table.name,
+          connectionId: connection.id,
+          dbType: connection.db_type,
+          data: {
+            rows: [data],
+          },
+          undoSql: `-- Insert undo requires knowing the new primary key after insertion`,
+          redoSql: insertSql,
+        });
+      }
 
       toast.success(result);
       onSuccess();

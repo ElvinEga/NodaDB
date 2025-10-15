@@ -196,15 +196,35 @@ export function TanStackTableViewer({
       toast.error('Cannot duplicate: No primary key defined');
       return;
     }
-    
+
     const columnNames = tableColumns.map(col => col.name);
-    const sql = generateDuplicateSql(table.name, row, columnNames, primaryKeyColumn.name);
-    
+    const insertSql = generateDuplicateSql(table.name, row, columnNames, primaryKeyColumn.name);
+
     try {
       await invoke('execute_query', {
         connectionId: connection.id,
-        query: sql,
+        query: insertSql,
       });
+
+      // For insert operations, undo is difficult without knowing the new PK
+      // We'll store a simplified version that tracks the inserted data
+      const newRow = { ...row };
+      delete newRow[primaryKeyColumn.name]; // Remove auto-generated PK
+
+      addAction(tableKey, {
+        id: `duplicate-${Date.now()}`,
+        type: 'insert',
+        timestamp: new Date(),
+        tableName: table.name,
+        connectionId: connection.id,
+        dbType: connection.db_type,
+        data: {
+          rows: [newRow],
+        },
+        undoSql: `-- Insert undo requires the new primary key value after reload`,
+        redoSql: insertSql,
+      });
+
       toast.success('Row duplicated');
       loadData();
     } catch (error) {
@@ -363,7 +383,7 @@ Sum: ${stats.sum}` : ''}`;
                   className="flex items-center gap-1 hover:text-foreground transition-colors"
                   onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
                 >
-                  <span className="font-semibold">{col.name}</span>
+                  <span className="font-normal">{col.name}</span>
                   {isSorted === 'asc' ? (
                     <ChevronUp className="h-3.5 w-3.5 text-primary" />
                   ) : isSorted === 'desc' ? (
@@ -372,12 +392,12 @@ Sum: ${stats.sum}` : ''}`;
                     <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
                   )}
                 </button>
-                <div className="flex items-center gap-1.5 text-[10px]">
-                  <span className={`px-1.5 py-0.5 rounded font-mono ${getTypeBadgeColor(col.data_type)}`}>
+                <div className="flex items-center gap-1 text-[10px]">
+                  <span className={`px-1 py-0.5 rounded font-mono ${getTypeBadgeColor(col.data_type)}`}>
                     {col.data_type}
                   </span>
                   {col.is_primary_key && (
-                    <span className="px-1.5 py-0.5 rounded font-mono bg-primary/10 text-primary">
+                    <span className="px-1 py-0.5 rounded font-mono bg-primary/10 text-primary">
                       PK
                     </span>
                   )}
@@ -426,7 +446,7 @@ Sum: ${stats.sum}` : ''}`;
               onFilterByValue={() => handleFilterByValue(col.name, value)}
             >
               <div
-                className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded"
+                className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-1 px-1 py-0.5 rounded"
                 onDoubleClick={handleEditClick}
               >
                 <div className="flex-1 min-w-0">
@@ -437,7 +457,7 @@ Sum: ${stats.sum}` : ''}`;
                   className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
                   title="Click to edit"
                 >
-                  <Edit2 className="h-3 w-3 ml-2 shrink-0" />
+                  <Edit2 className="h-3 w-3 ml-1 shrink-0" />
                 </button>
               </div>
             </CellContextMenu>
@@ -487,7 +507,7 @@ Sum: ${stats.sum}` : ''}`;
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 40, // Row height in pixels
+    estimateSize: () => 36, // Row height in pixels (h-9 = 36px)
     overscan: 10, // Number of items to render outside visible area
   });
 
@@ -973,19 +993,19 @@ Sum: ${stats.sum}` : ''}`;
         style={{ contain: 'strict' }}
       >
         <div style={{ position: 'relative' }}>
-          <table className="w-full text-sm" style={{ display: 'grid' }}>
+          <table className="w-full text-xs border-t border-l border-r border-border" style={{ display: 'grid' }}>
             {/* Sticky Header */}
-            <thead className="sticky top-0 z-10 bg-secondary" style={{ display: 'grid', position: 'sticky', top: 0 }}>
+            <thead className="sticky top-0 z-10 bg-muted/30" style={{ display: 'grid', position: 'sticky', top: 0 }}>
               {tableInstance.getHeaderGroups().map((headerGroup: any) => (
-                <tr key={headerGroup.id} className="border-b-2 border-border" style={{ display: 'flex', width: '100%' }}>
+                <tr key={headerGroup.id} className="border-b border-border" style={{ display: 'flex', width: '100%' }}>
                   {headerGroup.headers.map((header: any) => {
                     return (
                       <th
                         key={header.id}
-                        className="h-14 px-4 text-left align-top font-medium text-muted-foreground text-xs border-r border-border/50 relative group"
+                        className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
                         style={{ width: header.getSize(), display: 'flex', alignItems: 'start' }}
                       >
-                        <div className="flex-1 pt-2">
+                        <div className="flex-1 pt-0">
                           {header.isPlaceholder
                             ? null
                             : flexRender(header.column.columnDef.header, header.getContext())}
@@ -1031,10 +1051,10 @@ Sum: ${stats.sum}` : ''}`;
                       top: 0,
                       left: 0,
                       width: '100%',
-                      height: `${41}px`,
-                      transform: `translateY(${index * 41}px)`,
+                      height: `${36}px`,
+                      transform: `translateY(${index * 36}px)`,
                     }}
-                    className="border-b border-border"
+                    className="border-b border-r border-l border-border"
                   >
                     {tableInstance.getAllColumns().map((column) => (
                       <td
@@ -1042,18 +1062,19 @@ Sum: ${stats.sum}` : ''}`;
                         style={{
                           display: 'flex',
                           width: column.getSize(),
-                          padding: '8px',
+                          padding: '6px 12px',
                           alignItems: 'center',
                         }}
+                        className="border-r border-border"
                       >
-                        <Skeleton className="h-5 w-full" />
+                        <Skeleton className="h-4 w-full" />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : rows.length === 0 ? (
-                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
-                  <td colSpan={columns.length} className="text-center text-muted-foreground w-full">
+                <tr className="absolute top-0 left-0 w-full border-b border-r border-l border-border" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
+                  <td colSpan={columns.length} className="text-center text-muted-foreground w-full text-xs">
                     No data
                   </td>
                 </tr>
@@ -1071,16 +1092,16 @@ Sum: ${stats.sum}` : ''}`;
                         width: '100%',
                       }}
                       className={`
-                        h-10 border-b border-border/50 transition-colors
-                        ${virtualRow.index % 2 === 0 ? 'bg-background' : 'bg-secondary/20'}
-                        hover:bg-accent
+                        h-9 border-b border-r border-l border-border transition-colors
+                        ${virtualRow.index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
+                        hover:bg-accent/50
                         data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
                       `}
                     >
                       {row.getVisibleCells().map((cell: any) => (
                         <td
                           key={cell.id}
-                          className="px-4 py-2 flex items-center"
+                          className="px-3 py-1 flex items-center text-xs border-r border-border"
                           style={{ width: cell.column.getSize() }}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1153,6 +1174,8 @@ Sum: ${stats.sum}` : ''}`;
         table={table}
         columns={tableColumns}
         onSuccess={loadData}
+        tableKey={tableKey}
+        onAddAction={addAction}
       />
 
       <DataGeneratorDialog
