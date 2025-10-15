@@ -30,6 +30,7 @@ import {
   Undo2,
   Redo2,
   History,
+  Database,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +50,14 @@ import { TransactionHistoryPanel } from '@/components/TransactionHistoryPanel';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { useUndoRedoStore } from '@/stores/undoRedoStore';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
@@ -1078,9 +1087,25 @@ Sum: ${stats.sum}` : ''}`;
                   </tr>
                 ))
               ) : rows.length === 0 ? (
-                <tr className="absolute top-0 left-0 w-full border-b border-r border-l border-border" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
-                  <td colSpan={columns.length} className="text-center text-muted-foreground w-full text-xs">
-                    No data
+                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', minHeight: '400px', alignItems: 'center', justifyContent: 'center' }}>
+                  <td colSpan={columns.length} className="w-full">
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Database />
+                        </EmptyMedia>
+                        <EmptyTitle>No data</EmptyTitle>
+                        <EmptyDescription>
+                          This table is empty. Add some data to get started.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        <Button onClick={() => setAddRowDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Row
+                        </Button>
+                      </EmptyContent>
+                    </Empty>
                   </td>
                 </tr>
               ) : (
