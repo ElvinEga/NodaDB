@@ -42,6 +42,7 @@ import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
 import { ExportDataDialog } from '@/components/ExportDataDialog';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
@@ -704,13 +705,35 @@ Sum: ${stats.sum}` : ''}`;
               }}
             >
               {isLoading ? (
-                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
-                  <td colSpan={columns.length} className="text-center w-full">
-                    <div className="flex items-center justify-center">
-                      <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 10 }).map((_, index) => (
+                  <tr
+                    key={`skeleton-${index}`}
+                    style={{
+                      display: 'flex',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${41}px`,
+                      transform: `translateY(${index * 41}px)`,
+                    }}
+                    className="border-b border-border"
+                  >
+                    {tableInstance.getAllColumns().map((column) => (
+                      <td
+                        key={column.id}
+                        style={{
+                          display: 'flex',
+                          width: column.getSize(),
+                          padding: '8px',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Skeleton className="h-5 w-full" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : rows.length === 0 ? (
                 <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', height: '128px', alignItems: 'center', justifyContent: 'center' }}>
                   <td colSpan={columns.length} className="text-center text-muted-foreground w-full">

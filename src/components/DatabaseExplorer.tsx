@@ -28,6 +28,7 @@ import { CreateTableDialog } from '@/components/CreateTableDialog';
 import { ExportTableDialog } from '@/components/ExportTableDialog';
 import { DatabaseTable, ConnectionConfig } from '@/types';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DatabaseExplorerProps {
   connection: ConnectionConfig;
@@ -210,9 +211,15 @@ export function DatabaseExplorer({ connection, onTableSelect, selectedTable, onN
       <ScrollArea className="flex-1">
           <div className="p-2">
             {isLoading && tables.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Loading tables...
+              <div className="space-y-1 px-2">
+                <Skeleton className="h-4 w-32 mb-3" />
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 px-2 py-2">
+                    <Skeleton className="h-4 w-4 flex-shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                ))}
               </div>
             ) : filteredTables.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">

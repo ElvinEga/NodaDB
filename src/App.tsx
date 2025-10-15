@@ -8,6 +8,7 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TanStackTableViewer } from "@/components/TanStackTableViewer";
+import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -373,32 +374,36 @@ function App() {
                   {activeTab ? (
                     <>
                       {activeTab.type === "table" && activeTab.table ? (
-                        <TanStackTableViewer
-                          connection={activeConnection}
-                          table={activeTab.table}
-                          columns={activeTab.columns || []}
-                          onRefresh={async () => {
-                          // Reload columns
-                          try {
-                            const columns = await invoke<TableColumn[]>(
-                              "get_table_structure",
-                              {
-                                connectionId: activeConnection.id,
-                                tableName: activeTab.table!.name,
-                                dbType: activeConnection.db_type,
-                              }
-                            );
-                            setTabs(
-                              tabs.map((t) =>
-                                t.id === activeTab.id ? { ...t, columns } : t
-                              )
-                            );
-                          } catch (error) {
-                            console.error("Failed to reload columns:", error);
-                          }
-                        }}
-                      />
-                    ) : activeTab.type === "query-builder" ? (
+                        activeTab.columns === undefined ? (
+                          <TableSkeleton />
+                        ) : (
+                          <TanStackTableViewer
+                            connection={activeConnection}
+                            table={activeTab.table}
+                            columns={activeTab.columns}
+                            onRefresh={async () => {
+                            // Reload columns
+                            try {
+                              const columns = await invoke<TableColumn[]>(
+                                "get_table_structure",
+                                {
+                                  connectionId: activeConnection.id,
+                                  tableName: activeTab.table!.name,
+                                  dbType: activeConnection.db_type,
+                                }
+                              );
+                              setTabs(
+                                tabs.map((t) =>
+                                  t.id === activeTab.id ? { ...t, columns } : t
+                                )
+                              );
+                            } catch (error) {
+                              console.error("Failed to reload columns:", error);
+                            }
+                          }}
+                        />
+                        )
+                      ) : activeTab.type === "query-builder" ? (
                       <VisualQueryBuilder connection={activeConnection} />
                     ) : (
                       <QueryEditor connection={activeConnection} />
