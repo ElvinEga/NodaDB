@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Database, Plus, Settings, FileCode2, HelpCircle, History, Network } from "lucide-react";
+import { Database, Plus, Settings, FileCode2, HelpCircle, History, Network, Shapes } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
@@ -11,6 +11,7 @@ import { TanStackTableViewer } from "@/components/TanStackTableViewer";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
+import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Toaster } from "@/components/ui/sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
@@ -87,6 +88,25 @@ function App() {
       id: `query-builder-${Date.now()}`,
       type: "query-builder",
       title: "Visual Query Builder",
+      isPinned: false,
+      isDirty: false,
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const openSchemaDesignerTab = () => {
+    // Check if schema tab already exists
+    const existingSchemaTab = tabs.find(t => t.type === "schema");
+    if (existingSchemaTab) {
+      setActiveTabId(existingSchemaTab.id);
+      return;
+    }
+
+    const newTab: TabType = {
+      id: `schema-${Date.now()}`,
+      type: "schema",
+      title: "Schema Designer",
       isPinned: false,
       isDirty: false,
     };
@@ -318,6 +338,15 @@ function App() {
                     <Network className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
+                <KeyboardTooltip description="Open Schema Designer">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={openSchemaDesignerTab}
+                  >
+                    <Shapes className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
                 <KeyboardTooltip description="New Connection">
                   <Button
                     variant="ghost"
@@ -404,10 +433,12 @@ function App() {
                         />
                         )
                       ) : activeTab.type === "query-builder" ? (
-                      <VisualQueryBuilder connection={activeConnection} />
-                    ) : (
-                      <QueryEditor connection={activeConnection} />
-                    )}
+                        <VisualQueryBuilder connection={activeConnection} />
+                      ) : activeTab.type === "schema" ? (
+                        <SchemaDesigner connection={activeConnection} />
+                      ) : (
+                        <QueryEditor connection={activeConnection} />
+                      )}
                   </>
                 ) : (
                   <div className="h-full flex items-center justify-center">

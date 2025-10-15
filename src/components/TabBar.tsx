@@ -1,4 +1,4 @@
-import { FileCode2, Table2, X, Pin, Copy, XCircle, Network } from "lucide-react";
+import { FileCode2, Table2, X, Pin, Copy, XCircle, Network, Shapes } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,7 +10,7 @@ import { DatabaseTable, TableColumn } from "@/types";
 
 export type TabType = {
   id: string;
-  type: "table" | "query" | "query-builder";
+  type: "table" | "query" | "query-builder" | "schema";
   title: string;
   table?: DatabaseTable;
   columns?: TableColumn[];
@@ -70,6 +70,8 @@ export function TabBar({
                 <Table2 className="h-3.5 w-3.5 flex-shrink-0" />
               ) : tab.type === "query-builder" ? (
                 <Network className="h-3.5 w-3.5 flex-shrink-0" />
+              ) : tab.type === "schema" ? (
+                <Shapes className="h-3.5 w-3.5 flex-shrink-0" />
               ) : (
                 <FileCode2 className="h-3.5 w-3.5 flex-shrink-0" />
               )}
