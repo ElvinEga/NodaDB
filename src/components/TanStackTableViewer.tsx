@@ -27,6 +27,9 @@ import {
   GripVertical,
   Sparkles,
   Workflow,
+  Undo2,
+  Redo2,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,9 +45,11 @@ import { EditCellDialog } from '@/components/EditCellDialog';
 import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
 import { ExportDataDialog } from '@/components/ExportDataDialog';
 import { BatchOperationsDialog } from '@/components/BatchOperationsDialog';
+import { TransactionHistoryPanel } from '@/components/TransactionHistoryPanel';
 import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
 import { CellContextMenu } from '@/components/CellContextMenu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUndoRedoStore } from '@/stores/undoRedoStore';
 
 import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
 import { toast } from 'sonner';
@@ -90,8 +95,17 @@ export function TanStackTableViewer({
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] = useState(false);
+  const [showTransactionHistory, setShowTransactionHistory] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Undo/Redo store
+  const tableKey = `${connection.id}-${table.name}`;
+  const addAction = useUndoRedoStore((state) => state.addAction);
+  const undo = useUndoRedoStore((state) => state.undo);
+  const redo = useUndoRedoStore((state) => state.redo);
+  const canUndo = useUndoRedoStore((state) => state.canUndo(tableKey));
+  const canRedo = useUndoRedoStore((state) => state.canRedo(tableKey));
   
   // Helper: Get primary key column
   const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
@@ -630,15 +644,86 @@ Sum: ${stats.sum}` : ''}`;
     };
   };
 
+  // Undo/Redo handlers
+  const handleUndo = async () => {
+    const action = undo(tableKey);
+    if (!action) {
+      toast.error('Nothing to undo');
+      return;
+    }
+
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: action.undoSql,
+        dbType: connection.db_type,
+      });
+
+      await loadData();
+      toast.success(`Undone: ${action.type}`);
+    } catch (error) {
+      toast.error(`Failed to undo: ${error}`);
+      console.error('Undo error:', error);
+      // Re-add the action if undo failed
+      addAction(tableKey, action);
+    }
+  };
+
+  const handleRedo = async () => {
+    const action = redo(tableKey);
+    if (!action) {
+      toast.error('Nothing to redo');
+      return;
+    }
+
+    try {
+      await invoke('execute_query', {
+        connectionId: connection.id,
+        query: action.redoSql,
+        dbType: connection.db_type,
+      });
+
+      await loadData();
+      toast.success(`Redone: ${action.type}`);
+    } catch (error) {
+      toast.error(`Failed to redo: ${error}`);
+      console.error('Redo error:', error);
+    }
+  };
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+
+      // Ctrl/Cmd + Z - Undo
+      if (ctrlOrCmd && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        if (canUndo) handleUndo();
+      }
+
+      // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y - Redo
+      if ((ctrlOrCmd && e.shiftKey && e.key === 'Z') || (ctrlOrCmd && e.key === 'y')) {
+        e.preventDefault();
+        if (canRedo) handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canUndo, canRedo]);
+
   const handleRefresh = async () => {
     await loadData();
     toast.success('Table data refreshed');
   };
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Toolbar */}
-      <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
+    <div className="h-full flex bg-background">
+      <div className="flex-1 flex flex-col">
+        {/* Toolbar */}
+        <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -648,6 +733,26 @@ Sum: ${stats.sum}` : ''}`;
             className="h-8"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            className="h-8"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRedo}
+            disabled={!canRedo}
+            className="h-8"
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="default"
@@ -871,6 +976,15 @@ Sum: ${stats.sum}` : ''}`;
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export
           </Button>
+          <Button
+            variant={showTransactionHistory ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setShowTransactionHistory(!showTransactionHistory)}
+            className="h-8 text-xs"
+          >
+            <History className="h-3.5 w-3.5 mr-1.5" />
+            History
+          </Button>
           <span className="text-xs text-muted-foreground">
             Query Duration: <span className="font-mono">{executionTime}ms</span>
           </span>
@@ -942,15 +1056,27 @@ Sum: ${stats.sum}` : ''}`;
         onBatchDuplicate={handleBatchDuplicate}
       />
 
-      {editingCell && (
-        <EditCellDialog
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-          columnName={editingCell.columnName}
-          columnType={editingCell.columnType}
-          currentValue={editingCell.currentValue}
-          onSave={handleSaveEdit}
-        />
+        {editingCell && (
+          <EditCellDialog
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            columnName={editingCell.columnName}
+            columnType={editingCell.columnType}
+            currentValue={editingCell.currentValue}
+            onSave={handleSaveEdit}
+          />
+        )}
+      </div>
+
+      {/* Transaction History Panel */}
+      {showTransactionHistory && (
+        <div className="w-80 shrink-0">
+          <TransactionHistoryPanel
+            tableKey={tableKey}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+          />
+        </div>
       )}
     </div>
   );
