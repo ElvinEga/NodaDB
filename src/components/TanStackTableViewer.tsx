@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,9 +11,9 @@ import {
   VisibilityState,
   ColumnSizingState,
   flexRender,
-} from '@tanstack/react-table';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { invoke } from '@tauri-apps/api/core';
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ChevronDown,
   ChevronUp,
@@ -31,25 +31,25 @@ import {
   Redo2,
   History,
   Database,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { AddRowDialog } from '@/components/AddRowDialog';
-import { EditCellDialog } from '@/components/EditCellDialog';
-import { DataGeneratorDialog } from '@/components/DataGeneratorDialog';
-import { ExportDataDialog } from '@/components/ExportDataDialog';
-import { BatchOperationsDialog } from '@/components/BatchOperationsDialog';
-import { TransactionHistoryPanel } from '@/components/TransactionHistoryPanel';
-import { ColumnHeaderContextMenu } from '@/components/ColumnHeaderContextMenu';
-import { CellContextMenu } from '@/components/CellContextMenu';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@/components/ui/dropdown-menu";
+import { AddRowDialog } from "@/components/AddRowDialog";
+import { EditCellDialog } from "@/components/EditCellDialog";
+import { DataGeneratorDialog } from "@/components/DataGeneratorDialog";
+import { ExportDataDialog } from "@/components/ExportDataDialog";
+import { BatchOperationsDialog } from "@/components/BatchOperationsDialog";
+import { TransactionHistoryPanel } from "@/components/TransactionHistoryPanel";
+import { ColumnHeaderContextMenu } from "@/components/ColumnHeaderContextMenu";
+import { CellContextMenu } from "@/components/CellContextMenu";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
   EmptyContent,
@@ -57,19 +57,24 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { useUndoRedoStore } from '@/stores/undoRedoStore';
+} from "@/components/ui/empty";
+import { useUndoRedoStore } from "@/stores/undoRedoStore";
 
-import { ConnectionConfig, DatabaseTable, TableColumn, QueryResult } from '@/types';
-import { toast } from 'sonner';
-import { getCellRenderer } from '@/lib/cellRenderers';
+import {
+  ConnectionConfig,
+  DatabaseTable,
+  TableColumn,
+  QueryResult,
+} from "@/types";
+import { toast } from "sonner";
+import { getCellRenderer } from "@/lib/cellRenderers";
 import {
   generateSetNullSql,
   generateDeleteSql,
   generateDuplicateSql,
   calculateColumnStats,
-} from '@/lib/tableOperations';
-import { buildSelectQuery } from '@/lib/sqlUtils';
+} from "@/lib/tableOperations";
+import { buildSelectQuery } from "@/lib/sqlUtils";
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -90,12 +95,12 @@ export function TanStackTableViewer({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [rowSelection, setRowSelection] = useState({});
-  const [globalFilter, setGlobalFilter] = useState('');
+  const [globalFilter, setGlobalFilter] = useState("");
   const pageSize = 50;
   const [executionTime, setExecutionTime] = useState(0);
-  const [editingCell, setEditingCell] = useState<{ 
-    rowId: string; 
-    columnId: string; 
+  const [editingCell, setEditingCell] = useState<{
+    rowId: string;
+    columnId: string;
     columnName: string;
     columnType: string;
     currentValue: any;
@@ -104,7 +109,8 @@ export function TanStackTableViewer({
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] = useState(false);
+  const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] =
+    useState(false);
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -116,9 +122,9 @@ export function TanStackTableViewer({
   const redo = useUndoRedoStore((state) => state.redo);
   const canUndo = useUndoRedoStore((state) => state.canUndo(tableKey));
   const canRedo = useUndoRedoStore((state) => state.canRedo(tableKey));
-  
+
   // Helper: Get primary key column
-  const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+  const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
   const getPrimaryKeyValue = (row: Record<string, any>) => {
     return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
   };
@@ -137,7 +143,7 @@ export function TanStackTableViewer({
         1000
       );
 
-      const result = await invoke<QueryResult>('execute_query', {
+      const result = await invoke<QueryResult>("execute_query", {
         connectionId: connection.id,
         query: query,
       });
@@ -146,7 +152,7 @@ export function TanStackTableViewer({
       setExecutionTime(Date.now() - startTime);
     } catch (error) {
       toast.error(`Failed to load data: ${error}`);
-      console.error('Load data error:', error);
+      console.error("Load data error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -160,38 +166,45 @@ export function TanStackTableViewer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl/Cmd + F - Focus search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
       // Ctrl/Cmd + R - Refresh
-      if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "r") {
         e.preventDefault();
         handleRefresh();
       }
       // Escape - Clear selection and cancel editing
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setRowSelection({});
         setEditingCell(null);
       }
       // Ctrl/Cmd + A - Select all (when table focused)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement?.tagName !== 'INPUT') {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === "a" &&
+        document.activeElement?.tagName !== "INPUT"
+      ) {
         e.preventDefault();
         tableInstance.toggleAllRowsSelected(true);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // Context menu handlers
-  const handleSetCellNull = async (row: Record<string, any>, columnName: string) => {
+  const handleSetCellNull = async (
+    row: Record<string, any>,
+    columnName: string
+  ) => {
     if (!primaryKeyColumn) {
-      toast.error('Cannot update: No primary key defined');
+      toast.error("Cannot update: No primary key defined");
       return;
     }
-    
+
     const pkValue = getPrimaryKeyValue(row);
     const sql = generateSetNullSql(
       table.name,
@@ -203,7 +216,7 @@ export function TanStackTableViewer({
     );
 
     try {
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: sql,
       });
@@ -216,11 +229,11 @@ export function TanStackTableViewer({
 
   const handleDuplicateRow = async (row: Record<string, any>) => {
     if (!primaryKeyColumn) {
-      toast.error('Cannot duplicate: No primary key defined');
+      toast.error("Cannot duplicate: No primary key defined");
       return;
     }
 
-    const columnNames = tableColumns.map(col => col.name);
+    const columnNames = tableColumns.map((col) => col.name);
     const insertSql = generateDuplicateSql(
       table.name,
       row,
@@ -231,7 +244,7 @@ export function TanStackTableViewer({
     );
 
     try {
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: insertSql,
       });
@@ -243,7 +256,7 @@ export function TanStackTableViewer({
 
       addAction(tableKey, {
         id: `duplicate-${Date.now()}`,
-        type: 'insert',
+        type: "insert",
         timestamp: new Date(),
         tableName: table.name,
         connectionId: connection.id,
@@ -255,7 +268,7 @@ export function TanStackTableViewer({
         redoSql: insertSql,
       });
 
-      toast.success('Row duplicated');
+      toast.success("Row duplicated");
       loadData();
     } catch (error) {
       toast.error(`Failed to duplicate: ${error}`);
@@ -264,7 +277,7 @@ export function TanStackTableViewer({
 
   const handleDeleteRow = async (row: Record<string, any>) => {
     if (!primaryKeyColumn) {
-      toast.error('Cannot delete: No primary key defined');
+      toast.error("Cannot delete: No primary key defined");
       return;
     }
 
@@ -283,16 +296,18 @@ export function TanStackTableViewer({
 
     try {
       // Generate INSERT SQL for undo
-      const columns = tableColumns.map(col => col.name);
-      const values = columns.map(col => {
+      const columns = tableColumns.map((col) => col.name);
+      const values = columns.map((col) => {
         const value = row[col];
-        if (value === null) return 'NULL';
-        if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+        if (value === null) return "NULL";
+        if (typeof value === "string") return `'${value.replace(/'/g, "''")}'`;
         return value;
       });
-      const insertSql = `INSERT INTO ${table.name} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+      const insertSql = `INSERT INTO ${table.name} (${columns.join(
+        ", "
+      )}) VALUES (${values.join(", ")})`;
 
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: deleteSql,
       });
@@ -300,7 +315,7 @@ export function TanStackTableViewer({
       // Add to undo/redo history
       addAction(tableKey, {
         id: `delete-${Date.now()}`,
-        type: 'delete',
+        type: "delete",
         timestamp: new Date(),
         tableName: table.name,
         connectionId: connection.id,
@@ -314,7 +329,7 @@ export function TanStackTableViewer({
         redoSql: deleteSql,
       });
 
-      toast.success('Row deleted');
+      toast.success("Row deleted");
       loadData();
     } catch (error) {
       toast.error(`Failed to delete: ${error}`);
@@ -331,26 +346,41 @@ export function TanStackTableViewer({
     const message = `Column: ${columnName}
 Total: ${stats.count}
 Null: ${stats.nullCount}
-Unique: ${stats.uniqueCount}${stats.min !== undefined ? `
+Unique: ${stats.uniqueCount}${
+      stats.min !== undefined
+        ? `
 Min: ${stats.min}
 Max: ${stats.max}
 Avg: ${stats.avg?.toFixed(2)}
-Sum: ${stats.sum}` : ''}`;
-    
+Sum: ${stats.sum}`
+        : ""
+    }`;
+
     toast.info(message, { duration: 5000 });
   };
 
   // Get SQL type badge color
   const getTypeBadgeColor = (dataType: string): string => {
     const type = dataType.toUpperCase();
-    if (type.includes('INT') || type.includes('SERIAL')) return 'text-blue-400 bg-blue-500/10';
-    if (type.includes('VARCHAR') || type.includes('TEXT') || type.includes('CHAR'))
-      return 'text-green-400 bg-green-500/10';
-    if (type.includes('DATE') || type.includes('TIME')) return 'text-yellow-400 bg-yellow-500/10';
-    if (type.includes('BOOL')) return 'text-purple-400 bg-purple-500/10';
-    if (type.includes('FLOAT') || type.includes('REAL') || type.includes('DOUBLE') || type.includes('NUMERIC'))
-      return 'text-orange-400 bg-orange-500/10';
-    return 'text-gray-400 bg-gray-500/10';
+    if (type.includes("INT") || type.includes("SERIAL"))
+      return "text-blue-400 bg-blue-500/10";
+    if (
+      type.includes("VARCHAR") ||
+      type.includes("TEXT") ||
+      type.includes("CHAR")
+    )
+      return "text-green-400 bg-green-500/10";
+    if (type.includes("DATE") || type.includes("TIME"))
+      return "text-yellow-400 bg-yellow-500/10";
+    if (type.includes("BOOL")) return "text-purple-400 bg-purple-500/10";
+    if (
+      type.includes("FLOAT") ||
+      type.includes("REAL") ||
+      type.includes("DOUBLE") ||
+      type.includes("NUMERIC")
+    )
+      return "text-orange-400 bg-orange-500/10";
+    return "text-gray-400 bg-gray-500/10";
   };
 
   // Define columns for TanStack Table
@@ -358,11 +388,13 @@ Sum: ${stats.sum}` : ''}`;
     const cols: ColumnDef<Record<string, any>>[] = [
       // Selection column
       {
-        id: 'select',
+        id: "select",
         header: ({ table }) => (
           <Checkbox
             checked={table.getIsAllPageRowsSelected()}
-            onCheckedChange={(value: any) => table.toggleAllPageRowsSelected(!!value)}
+            onCheckedChange={(value: any) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
             aria-label="Select all"
             className="accent-primary"
           />
@@ -381,8 +413,8 @@ Sum: ${stats.sum}` : ''}`;
       },
       // Row number column
       {
-        id: 'rowNumber',
-        header: '#',
+        id: "rowNumber",
+        header: "#",
         cell: ({ row }) => (
           <span className="font-mono text-[11px] text-muted-foreground">
             {row.index + 1}
@@ -417,19 +449,26 @@ Sum: ${stats.sum}` : ''}`;
               <div className="flex flex-col gap-1">
                 <button
                   className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                  onClick={() =>
+                    column.toggleSorting(column.getIsSorted() === "asc")
+                  }
                 >
                   <span className="font-normal">{col.name}</span>
-                  {isSorted === 'asc' ? (
+
+                  {isSorted === "asc" ? (
                     <ChevronUp className="h-3.5 w-3.5 text-primary" />
-                  ) : isSorted === 'desc' ? (
+                  ) : isSorted === "desc" ? (
                     <ChevronDown className="h-3.5 w-3.5 text-primary" />
                   ) : (
                     <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
                   )}
                 </button>
                 <div className="flex items-center gap-1 text-[10px]">
-                  <span className={`px-1 py-0.5 rounded font-mono ${getTypeBadgeColor(col.data_type)}`}>
+                  <span
+                    className={`px-1 py-0.5 rounded font-mono ${getTypeBadgeColor(
+                      col.data_type
+                    )}`}
+                  >
                     {col.data_type}
                   </span>
                   {col.is_primary_key && (
@@ -450,7 +489,11 @@ Sum: ${stats.sum}` : ''}`;
 
           // Primary key styling (not editable)
           if (col.is_primary_key) {
-            return <span className="font-mono text-xs text-muted-foreground">{String(value)}</span>;
+            return (
+              <span className="font-mono text-xs text-muted-foreground">
+                {String(value)}
+              </span>
+            );
           }
 
           const handleEditClick = (e?: React.MouseEvent) => {
@@ -472,7 +515,7 @@ Sum: ${stats.sum}` : ''}`;
               columnName={col.name}
               cellValue={value}
               tableName={table.name}
-              columnNames={tableColumns.map(c => c.name)}
+              columnNames={tableColumns.map((c) => c.name)}
               isPrimaryKey={col.is_primary_key}
               canEdit={!col.is_primary_key}
               onEdit={handleEditClick}
@@ -519,7 +562,7 @@ Sum: ${stats.sum}` : ''}`;
     onColumnSizingChange: setColumnSizing,
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
-    columnResizeMode: 'onChange',
+    columnResizeMode: "onChange",
     enableColumnResizing: true,
     state: {
       sorting,
@@ -546,7 +589,8 @@ Sum: ${stats.sum}` : ''}`;
     estimateSize: () => 36, // Row height in pixels (h-9 = 36px)
     overscan: 20, // Number of items to render outside visible area (increased for smoother scrolling)
     measureElement:
-      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
+      typeof window !== "undefined" &&
+      navigator.userAgent.indexOf("Firefox") === -1
         ? (element) => element?.getBoundingClientRect().height
         : undefined,
   });
@@ -557,10 +601,10 @@ Sum: ${stats.sum}` : ''}`;
     try {
       const rowIndex = parseInt(editingCell.rowId);
       const row = data[rowIndex];
-      const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+      const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
 
       if (!primaryKeyColumn) {
-        toast.error('No primary key found for update');
+        toast.error("No primary key found for update");
         return;
       }
 
@@ -570,23 +614,31 @@ Sum: ${stats.sum}` : ''}`;
 
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
-        [columnName]: newValue === '' ? null : newValue,
+        [columnName]: newValue === "" ? null : newValue,
       };
 
       // Build WHERE clause for the primary key
-      const whereClause = `${primaryKeyColumn.name} = ${typeof primaryKeyValue === 'string' ? `'${primaryKeyValue}'` : primaryKeyValue}`;
+      const whereClause = `${primaryKeyColumn.name} = ${
+        typeof primaryKeyValue === "string"
+          ? `'${primaryKeyValue}'`
+          : primaryKeyValue
+      }`;
 
       // Generate SQL for undo/redo
       const formatValue = (val: any) => {
-        if (val === null || val === '') return 'NULL';
-        if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+        if (val === null || val === "") return "NULL";
+        if (typeof val === "string") return `'${val.replace(/'/g, "''")}'`;
         return val;
       };
 
-      const updateSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(newValue === '' ? null : newValue)} WHERE ${whereClause}`;
-      const undoSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(oldValue)} WHERE ${whereClause}`;
+      const updateSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
+        newValue === "" ? null : newValue
+      )} WHERE ${whereClause}`;
+      const undoSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
+        oldValue
+      )} WHERE ${whereClause}`;
 
-      await invoke('update_row', {
+      await invoke("update_row", {
         connectionId: connection.id,
         tableName: table.name,
         data: updateData,
@@ -597,14 +649,14 @@ Sum: ${stats.sum}` : ''}`;
       // Add to undo/redo history
       addAction(tableKey, {
         id: `update-${Date.now()}`,
-        type: 'update',
+        type: "update",
         timestamp: new Date(),
         tableName: table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
           oldValues: [{ [columnName]: oldValue }],
-          newValues: [{ [columnName]: newValue === '' ? null : newValue }],
+          newValues: [{ [columnName]: newValue === "" ? null : newValue }],
           primaryKeyColumn: primaryKeyColumn.name,
           primaryKeyValues: [primaryKeyValue],
         },
@@ -616,15 +668,15 @@ Sum: ${stats.sum}` : ''}`;
       const newData = [...data];
       newData[rowIndex] = {
         ...newData[rowIndex],
-        [columnName]: newValue === '' ? null : newValue,
+        [columnName]: newValue === "" ? null : newValue,
       };
       setData(newData);
       setEditingCell(null);
       setEditDialogOpen(false);
-      toast.success('Cell updated successfully');
+      toast.success("Cell updated successfully");
     } catch (error) {
       toast.error(`Failed to update cell: ${error}`);
-      console.error('Update error:', error);
+      console.error("Update error:", error);
       throw error; // Re-throw to let dialog handle loading state
     }
   };
@@ -635,36 +687,41 @@ Sum: ${stats.sum}` : ''}`;
     if (!confirm(`Delete ${selectedCount} selected row(s)?`)) return;
 
     try {
-      const primaryKeyColumn = tableColumns.find(col => col.is_primary_key);
+      const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
 
       if (!primaryKeyColumn) {
-        toast.error('No primary key found for delete');
+        toast.error("No primary key found for delete");
         return;
       }
 
       // Build WHERE clause with all selected primary key values
-      const primaryKeyValues = selectedRows.map(row => {
+      const primaryKeyValues = selectedRows.map((row) => {
         const pkValue = row.original[primaryKeyColumn.name];
-        return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
+        return typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
       });
 
-      const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
+      const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(
+        ", "
+      )})`;
       const deleteSql = `DELETE FROM ${table.name} WHERE ${whereClause}`;
 
       // Generate INSERT SQL for undo (multiple rows)
-      const insertStatements = selectedRows.map(row => {
-        const columns = tableColumns.map(col => col.name);
-        const values = columns.map(col => {
+      const insertStatements = selectedRows.map((row) => {
+        const columns = tableColumns.map((col) => col.name);
+        const values = columns.map((col) => {
           const value = row.original[col];
-          if (value === null) return 'NULL';
-          if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+          if (value === null) return "NULL";
+          if (typeof value === "string")
+            return `'${value.replace(/'/g, "''")}'`;
           return value;
         });
-        return `INSERT INTO ${table.name} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
+        return `INSERT INTO ${table.name} (${columns.join(
+          ", "
+        )}) VALUES (${values.join(", ")})`;
       });
-      const undoSql = insertStatements.join('; ');
+      const undoSql = insertStatements.join("; ");
 
-      await invoke('delete_rows', {
+      await invoke("delete_rows", {
         connectionId: connection.id,
         tableName: table.name,
         whereClause: whereClause,
@@ -674,15 +731,17 @@ Sum: ${stats.sum}` : ''}`;
       // Add to undo/redo history
       addAction(tableKey, {
         id: `batch-delete-${Date.now()}`,
-        type: 'batch_delete',
+        type: "batch_delete",
         timestamp: new Date(),
         tableName: table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
-          rows: selectedRows.map(r => r.original),
+          rows: selectedRows.map((r) => r.original),
           primaryKeyColumn: primaryKeyColumn.name,
-          primaryKeyValues: primaryKeyValues.map(v => typeof v === 'string' ? v.replace(/'/g, '') : v),
+          primaryKeyValues: primaryKeyValues.map((v) =>
+            typeof v === "string" ? v.replace(/'/g, "") : v
+          ),
         },
         undoSql,
         redoSql: deleteSql,
@@ -694,7 +753,7 @@ Sum: ${stats.sum}` : ''}`;
       toast.success(`Deleted ${selectedCount} row(s)`);
     } catch (error) {
       toast.error(`Failed to delete rows: ${error}`);
-      console.error('Delete error:', error);
+      console.error("Delete error:", error);
     }
   };
 
@@ -705,38 +764,46 @@ Sum: ${stats.sum}` : ''}`;
 
   const handleBatchUpdate = async (columnName: string, value: string) => {
     if (!primaryKeyColumn) {
-      toast.error('No primary key found for update');
+      toast.error("No primary key found for update");
       return;
     }
 
-    const primaryKeyValues = selectedRows.map(row => {
+    const primaryKeyValues = selectedRows.map((row) => {
       const pkValue = row.original[primaryKeyColumn.name];
-      return typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
+      return typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
     });
 
     // Capture old values for undo
-    const oldValues = selectedRows.map(row => ({
+    const oldValues = selectedRows.map((row) => ({
       [primaryKeyColumn.name]: row.original[primaryKeyColumn.name],
       [columnName]: row.original[columnName],
     }));
 
-    const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(', ')})`;
-    const setValue = value === 'NULL' ? 'NULL' : `'${value}'`;
+    const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(
+      ", "
+    )})`;
+    const setValue = value === "NULL" ? "NULL" : `'${value}'`;
 
     const updateSql = `UPDATE ${table.name} SET ${columnName} = ${setValue} WHERE ${whereClause}`;
 
     // Generate undo SQL (individual UPDATEs for each row to restore original values)
-    const undoSqlStatements = oldValues.map(oldVal => {
+    const undoSqlStatements = oldValues.map((oldVal) => {
       const pkValue = oldVal[primaryKeyColumn.name];
       const oldValue = oldVal[columnName];
-      const formattedOldValue = oldValue === null ? 'NULL' : typeof oldValue === 'string' ? `'${oldValue.replace(/'/g, "''")}'` : oldValue;
-      const formattedPkValue = typeof pkValue === 'string' ? `'${pkValue}'` : pkValue;
+      const formattedOldValue =
+        oldValue === null
+          ? "NULL"
+          : typeof oldValue === "string"
+          ? `'${oldValue.replace(/'/g, "''")}'`
+          : oldValue;
+      const formattedPkValue =
+        typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
       return `UPDATE ${table.name} SET ${columnName} = ${formattedOldValue} WHERE ${primaryKeyColumn.name} = ${formattedPkValue}`;
     });
-    const undoSql = undoSqlStatements.join('; ');
+    const undoSql = undoSqlStatements.join("; ");
 
     try {
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: updateSql,
         dbType: connection.db_type,
@@ -745,7 +812,7 @@ Sum: ${stats.sum}` : ''}`;
       // Add to undo/redo history
       addAction(tableKey, {
         id: `batch-update-${Date.now()}`,
-        type: 'batch_update',
+        type: "batch_update",
         timestamp: new Date(),
         tableName: table.name,
         connectionId: connection.id,
@@ -755,7 +822,9 @@ Sum: ${stats.sum}` : ''}`;
           columnName,
           value,
           primaryKeyColumn: primaryKeyColumn.name,
-          primaryKeyValues: primaryKeyValues.map(v => typeof v === 'string' ? v.replace(/'/g, '') : v),
+          primaryKeyValues: primaryKeyValues.map((v) =>
+            typeof v === "string" ? v.replace(/'/g, "") : v
+          ),
         },
         undoSql,
         redoSql: updateSql,
@@ -766,23 +835,21 @@ Sum: ${stats.sum}` : ''}`;
       toast.success(`Updated ${selectedCount} row(s)`);
     } catch (error) {
       toast.error(`Failed to update rows: ${error}`);
-      console.error('Update error:', error);
+      console.error("Update error:", error);
     }
   };
 
   const handleBatchDuplicate = async () => {
     try {
-      const editableColumns = tableColumns.filter(
-        col => !col.is_primary_key
-      );
+      const editableColumns = tableColumns.filter((col) => !col.is_primary_key);
 
       for (const row of selectedRows) {
         const newRow: Record<string, any> = {};
-        editableColumns.forEach(col => {
+        editableColumns.forEach((col) => {
           newRow[col.name] = row.original[col.name];
         });
 
-        await invoke('insert_row', {
+        await invoke("insert_row", {
           connectionId: connection.id,
           tableName: table.name,
           row: newRow,
@@ -795,7 +862,7 @@ Sum: ${stats.sum}` : ''}`;
       toast.success(`Duplicated ${selectedCount} row(s)`);
     } catch (error) {
       toast.error(`Failed to duplicate rows: ${error}`);
-      console.error('Duplicate error:', error);
+      console.error("Duplicate error:", error);
     }
   };
 
@@ -806,13 +873,14 @@ Sum: ${stats.sum}` : ''}`;
   // Prepare data for export
   const getExportData = (): QueryResult => {
     // If rows are selected, export only selected rows
-    const rowsToExport = selectedCount > 0
-      ? tableInstance.getSelectedRowModel().rows
-      : tableInstance.getFilteredRowModel().rows;
+    const rowsToExport =
+      selectedCount > 0
+        ? tableInstance.getSelectedRowModel().rows
+        : tableInstance.getFilteredRowModel().rows;
 
     const columns = tableInstance
       .getAllColumns()
-      .filter((col: any) => col.id !== 'select' && col.id !== 'rowNumber')
+      .filter((col: any) => col.id !== "select" && col.id !== "rowNumber")
       .map((col: any) => col.id);
 
     const rows = rowsToExport.map((row: any) => {
@@ -834,12 +902,12 @@ Sum: ${stats.sum}` : ''}`;
   const handleUndo = async () => {
     const action = undo(tableKey);
     if (!action) {
-      toast.error('Nothing to undo');
+      toast.error("Nothing to undo");
       return;
     }
 
     try {
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: action.undoSql,
         dbType: connection.db_type,
@@ -849,7 +917,7 @@ Sum: ${stats.sum}` : ''}`;
       toast.success(`Undone: ${action.type}`);
     } catch (error) {
       toast.error(`Failed to undo: ${error}`);
-      console.error('Undo error:', error);
+      console.error("Undo error:", error);
       // Re-add the action if undo failed
       addAction(tableKey, action);
     }
@@ -858,12 +926,12 @@ Sum: ${stats.sum}` : ''}`;
   const handleRedo = async () => {
     const action = redo(tableKey);
     if (!action) {
-      toast.error('Nothing to redo');
+      toast.error("Nothing to redo");
       return;
     }
 
     try {
-      await invoke('execute_query', {
+      await invoke("execute_query", {
         connectionId: connection.id,
         query: action.redoSql,
         dbType: connection.db_type,
@@ -873,36 +941,39 @@ Sum: ${stats.sum}` : ''}`;
       toast.success(`Redone: ${action.type}`);
     } catch (error) {
       toast.error(`Failed to redo: ${error}`);
-      console.error('Redo error:', error);
+      console.error("Redo error:", error);
     }
   };
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
 
       // Ctrl/Cmd + Z - Undo
-      if (ctrlOrCmd && !e.shiftKey && e.key === 'z') {
+      if (ctrlOrCmd && !e.shiftKey && e.key === "z") {
         e.preventDefault();
         if (canUndo) handleUndo();
       }
 
       // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y - Redo
-      if ((ctrlOrCmd && e.shiftKey && e.key === 'Z') || (ctrlOrCmd && e.key === 'y')) {
+      if (
+        (ctrlOrCmd && e.shiftKey && e.key === "Z") ||
+        (ctrlOrCmd && e.key === "y")
+      ) {
         e.preventDefault();
         if (canRedo) handleRedo();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [canUndo, canRedo]);
 
   const handleRefresh = async () => {
     await loadData();
-    toast.success('Table data refreshed');
+    toast.success("Table data refreshed");
   };
 
   return (
@@ -910,364 +981,412 @@ Sum: ${stats.sum}` : ''}`;
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="h-8"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleUndo}
-            disabled={!canUndo}
-            className="h-8"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRedo}
-            disabled={!canRedo}
-            className="h-8"
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setAddRowDialogOpen(true)}
-            className="h-8"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Add row
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDataGeneratorDialogOpen(true)}
-            className="h-8"
-          >
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            Generate data
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleDeleteRows}
-            disabled={selectedCount === 0}
-            className="h-8"
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-            Delete row
-          </Button>
-          {selectedCount > 0 && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setBatchOperationsDialogOpen(true)}
-                className="h-8"
-              >
-                <Workflow className="h-3.5 w-3.5 mr-1.5" />
-                Batch ops
-              </Button>
-              <span className="text-xs text-muted-foreground ml-2">
-                {selectedCount} selected
-              </span>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Column visibility dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8">
-                <Columns3 className="h-3.5 w-3.5 mr-1.5" />
-                Columns
-                <ChevronDown className="h-3.5 w-3.5 ml-1.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {tableInstance
-                .getAllColumns()
-                .filter((column: any) => column.getCanHide())
-                .map((column: any) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize text-xs"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value: boolean) => column.toggleVisibility(!!value)}
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Global search */}
-          <Input
-            ref={searchInputRef}
-            placeholder="Search... (Ctrl+F)"
-            value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="h-8 w-48 text-xs"
-          />
-        </div>
-      </div>
-
-      {/* Table with Virtual Scrolling */}
-      <div
-        ref={tableContainerRef}
-        className="flex-1 overflow-auto"
-        style={{ contain: 'strict' }}
-      >
-        <div style={{ position: 'relative' }}>
-          <table className="w-full text-xs border-t border-l border-r border-border" style={{ display: 'grid' }}>
-            {/* Sticky Header */}
-            <thead className="sticky top-0 z-10 bg-muted/30" style={{ display: 'grid', position: 'sticky', top: 0 }}>
-              {tableInstance.getHeaderGroups().map((headerGroup: any) => (
-                <tr key={headerGroup.id} className="border-b border-border" style={{ display: 'flex', width: '100%' }}>
-                  {headerGroup.headers.map((header: any) => {
-                    return (
-                      <th
-                        key={header.id}
-                        className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
-                        style={{ width: header.getSize(), display: 'flex', alignItems: 'start' }}
-                      >
-                        <div className="flex-1 pt-0">
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(header.column.columnDef.header, header.getContext())}
-                        </div>
-                        
-                        {/* Column Resize Handle */}
-                        {header.column.getCanResize() && (
-                          <div
-                            onMouseDown={header.getResizeHandler()}
-                            onTouchStart={header.getResizeHandler()}
-                            className={`
-                              absolute right-0 top-0 h-full w-1 cursor-col-resize
-                              opacity-0 group-hover:opacity-100
-                              hover:bg-primary/50
-                              ${header.column.getIsResizing() ? 'bg-primary opacity-100' : ''}
-                            `}
-                          >
-                            <GripVertical className="h-3 w-3 absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                          </div>
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-
-            {/* Virtual Body */}
-            <tbody
-              style={{
-                display: 'grid',
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                position: 'relative',
-                willChange: 'transform',
-              }}
-            >
-              {isLoading ? (
-                Array.from({ length: 10 }).map((_, index) => (
-                  <tr
-                    key={`skeleton-${index}`}
-                    style={{
-                      display: 'flex',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: `${36}px`,
-                      transform: `translateY(${index * 36}px)`,
-                    }}
-                    className="border-b border-r border-l border-border"
-                  >
-                    {tableInstance.getAllColumns().map((column) => (
-                      <td
-                        key={column.id}
-                        style={{
-                          display: 'flex',
-                          width: column.getSize(),
-                          padding: '6px 12px',
-                          alignItems: 'center',
-                        }}
-                        className="border-r border-border"
-                      >
-                        <Skeleton className="h-4 w-full" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : rows.length === 0 ? (
-                <tr className="absolute top-0 left-0 w-full" style={{ display: 'flex', minHeight: '400px', alignItems: 'center', justifyContent: 'center' }}>
-                  <td colSpan={columns.length} className="w-full">
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <Database />
-                        </EmptyMedia>
-                        <EmptyTitle>No data</EmptyTitle>
-                        <EmptyDescription>
-                          This table is empty. Add some data to get started.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                      <EmptyContent>
-                        <Button onClick={() => setAddRowDialogOpen(true)}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Row
-                        </Button>
-                      </EmptyContent>
-                    </Empty>
-                  </td>
-                </tr>
-              ) : (
-                rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const row = rows[virtualRow.index];
-                  return (
-                    <tr
-                      key={row.id}
-                      data-state={row.getIsSelected() ? 'selected' : undefined}
-                      style={{
-                        display: 'flex',
-                        position: 'absolute',
-                        transform: `translate3d(0, ${virtualRow.start}px, 0)`,
-                        width: '100%',
-                        willChange: 'transform',
-                      }}
-                      className={`
-                        h-9 border-b border-r border-l border-border transition-colors
-                        ${virtualRow.index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
-                        hover:bg-accent/50
-                        data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
-                      `}
-                    >
-                      {row.getVisibleCells().map((cell: any) => (
-                        <td
-                          key={cell.id}
-                          className="px-3 py-1 flex items-center text-xs border-r border-border"
-                          style={{
-                            width: cell.column.getSize(),
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: cell.column.getSize()
-                          }}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Footer / Pagination */}
-      <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => setExportDialogOpen(true)} className="h-8 text-xs">
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export
-          </Button>
-          <Button
-            variant={showTransactionHistory ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setShowTransactionHistory(!showTransactionHistory)}
-            className="h-8 text-xs"
-          >
-            <History className="h-3.5 w-3.5 mr-1.5" />
-            History
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Query Duration: <span className="font-mono">{executionTime}ms</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => tableInstance.previousPage()}
-              disabled={!tableInstance.getCanPreviousPage()}
-              className="h-8 w-8 p-0"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="h-8"
             >
-              ←
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+              />
             </Button>
-            <span className="text-xs text-muted-foreground font-mono">
-              {pageSize}
-            </span>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => tableInstance.nextPage()}
-              disabled={!tableInstance.getCanNextPage()}
-              className="h-8 w-8 p-0"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className="h-8"
+              title="Undo (Ctrl+Z)"
             >
-              →
+              <Undo2 className="h-3.5 w-3.5" />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              className="h-8"
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setAddRowDialogOpen(true)}
+              className="h-8"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Add row
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDataGeneratorDialogOpen(true)}
+              className="h-8"
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Generate data
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteRows}
+              disabled={selectedCount === 0}
+              className="h-8"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete row
+            </Button>
+            {selectedCount > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBatchOperationsDialogOpen(true)}
+                  className="h-8"
+                >
+                  <Workflow className="h-3.5 w-3.5 mr-1.5" />
+                  Batch ops
+                </Button>
+                <span className="text-xs text-muted-foreground ml-2">
+                  {selectedCount} selected
+                </span>
+              </>
+            )}
           </div>
-          <span className="text-xs text-muted-foreground font-mono">
-            {tableInstance.getState().pagination.pageIndex}
-          </span>
+
+          <div className="flex items-center gap-2">
+            {/* Column visibility dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8">
+                  <Columns3 className="h-3.5 w-3.5 mr-1.5" />
+                  Columns
+                  <ChevronDown className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {tableInstance
+                  .getAllColumns()
+                  .filter((column: any) => column.getCanHide())
+                  .map((column: any) => {
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize text-xs"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value: boolean) =>
+                          column.toggleVisibility(!!value)
+                        }
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Global search */}
+            <Input
+              ref={searchInputRef}
+              placeholder="Search... (Ctrl+F)"
+              value={globalFilter ?? ""}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="h-8 w-48 text-xs"
+            />
+          </div>
         </div>
-      </div>
 
-      <AddRowDialog
-        open={addRowDialogOpen}
-        onOpenChange={setAddRowDialogOpen}
-        connection={connection}
-        table={table}
-        columns={tableColumns}
-        onSuccess={loadData}
-        tableKey={tableKey}
-        onAddAction={addAction}
-      />
+        {/* Table with Virtual Scrolling */}
+        <div
+          ref={tableContainerRef}
+          className="flex-1 overflow-auto"
+          style={{ contain: "strict" }}
+        >
+          <div style={{ position: "relative" }}>
+            <table
+              className="w-full text-xs border-t border-l border-r border-border"
+              style={{ display: "grid" }}
+            >
+              {/* Sticky Header */}
+              <thead
+                className="sticky top-0 z-10 bg-muted/30"
+                style={{ display: "grid", position: "sticky", top: 0 }}
+              >
+                {tableInstance.getHeaderGroups().map((headerGroup: any) => (
+                  <tr
+                    key={headerGroup.id}
+                    className="border-b border-border"
+                    style={{ display: "flex", width: "100%" }}
+                  >
+                    {headerGroup.headers.map((header: any) => {
+                      return (
+                        <th
+                          key={header.id}
+                          className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
+                          style={{
+                            width: header.getSize(),
+                            display: "flex",
+                            alignItems: "start",
+                          }}
+                        >
+                          <div className="flex-1 pt-0">
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </div>
 
-      <DataGeneratorDialog
-        open={dataGeneratorDialogOpen}
-        onOpenChange={setDataGeneratorDialogOpen}
-        connection={connection}
-        table={table}
-        columns={tableColumns}
-        onSuccess={loadData}
-      />
+                          {/* Column Resize Handle */}
+                          {header.column.getCanResize() && (
+                            <div
+                              onMouseDown={header.getResizeHandler()}
+                              onTouchStart={header.getResizeHandler()}
+                              className={`
+                              absolute right-0 top-0 h-full w-1 cursor-col-resize
+                              opacity-0 group-hover:opacity-100
+                              hover:bg-primary/50
+                              ${
+                                header.column.getIsResizing()
+                                  ? "bg-primary opacity-100"
+                                  : ""
+                              }
+                            `}
+                            >
+                              <GripVertical className="h-3 w-3 absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                            </div>
+                          )}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
 
-      <ExportDataDialog
-        open={exportDialogOpen}
-        onOpenChange={setExportDialogOpen}
-        data={getExportData()}
-        tableName={table.name}
-      />
+              {/* Virtual Body */}
+              <tbody
+                style={{
+                  display: "grid",
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  position: "relative",
+                  willChange: "transform",
+                }}
+              >
+                {isLoading ? (
+                  Array.from({ length: 10 }).map((_, index) => (
+                    <tr
+                      key={`skeleton-${index}`}
+                      style={{
+                        display: "flex",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${36}px`,
+                        transform: `translateY(${index * 36}px)`,
+                      }}
+                      className="border-b border-r border-l border-border"
+                    >
+                      {tableInstance.getAllColumns().map((column) => (
+                        <td
+                          key={column.id}
+                          style={{
+                            display: "flex",
+                            width: column.getSize(),
+                            padding: "6px 12px",
+                            alignItems: "center",
+                          }}
+                          className="border-r border-border"
+                        >
+                          <Skeleton className="h-4 w-full" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : rows.length === 0 ? (
+                  <tr
+                    className="absolute top-0 left-0 w-full"
+                    style={{
+                      display: "flex",
+                      minHeight: "400px",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <td colSpan={columns.length} className="w-full">
+                      <Empty>
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <Database />
+                          </EmptyMedia>
+                          <EmptyTitle>No data</EmptyTitle>
+                          <EmptyDescription>
+                            This table is empty. Add some data to get started.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button onClick={() => setAddRowDialogOpen(true)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Row
+                          </Button>
+                        </EmptyContent>
+                      </Empty>
+                    </td>
+                  </tr>
+                ) : (
+                  rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    return (
+                      <tr
+                        key={row.id}
+                        data-state={
+                          row.getIsSelected() ? "selected" : undefined
+                        }
+                        style={{
+                          display: "flex",
+                          position: "absolute",
+                          transform: `translate3d(0, ${virtualRow.start}px, 0)`,
+                          width: "100%",
+                          willChange: "transform",
+                        }}
+                        className={`
+                        h-9 border-b border-r border-l border-border transition-colors
+                        ${
+                          virtualRow.index % 2 === 0
+                            ? "bg-background"
+                            : "bg-muted/10"
+                        }
+                        hover:bg-accent/50
+                        data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
+                      `}
+                      >
+                        {row.getVisibleCells().map((cell: any) => (
+                          <td
+                            key={cell.id}
+                            className="px-3 py-1 flex items-center text-xs border-r border-border"
+                            style={{
+                              width: cell.column.getSize(),
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: cell.column.getSize(),
+                            }}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <BatchOperationsDialog
-        open={batchOperationsDialogOpen}
-        onOpenChange={setBatchOperationsDialogOpen}
-        selectedRowCount={selectedCount}
-        columns={tableColumns}
-        onBatchDelete={handleBatchDelete}
-        onBatchUpdate={handleBatchUpdate}
-        onBatchExport={handleBatchExport}
-        onBatchDuplicate={handleBatchDuplicate}
-      />
+        {/* Footer / Pagination */}
+        <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExportDialogOpen(true)}
+              className="h-8 text-xs"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export
+            </Button>
+            <Button
+              variant={showTransactionHistory ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setShowTransactionHistory(!showTransactionHistory)}
+              className="h-8 text-xs"
+            >
+              <History className="h-3.5 w-3.5 mr-1.5" />
+              History
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Query Duration:{" "}
+              <span className="font-mono">{executionTime}ms</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => tableInstance.previousPage()}
+                disabled={!tableInstance.getCanPreviousPage()}
+                className="h-8 w-8 p-0"
+              >
+                ←
+              </Button>
+              <span className="text-xs text-muted-foreground font-mono">
+                {pageSize}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => tableInstance.nextPage()}
+                disabled={!tableInstance.getCanNextPage()}
+                className="h-8 w-8 p-0"
+              >
+                →
+              </Button>
+            </div>
+            <span className="text-xs text-muted-foreground font-mono">
+              {tableInstance.getState().pagination.pageIndex}
+            </span>
+          </div>
+        </div>
+
+        <AddRowDialog
+          open={addRowDialogOpen}
+          onOpenChange={setAddRowDialogOpen}
+          connection={connection}
+          table={table}
+          columns={tableColumns}
+          onSuccess={loadData}
+          tableKey={tableKey}
+          onAddAction={addAction}
+        />
+
+        <DataGeneratorDialog
+          open={dataGeneratorDialogOpen}
+          onOpenChange={setDataGeneratorDialogOpen}
+          connection={connection}
+          table={table}
+          columns={tableColumns}
+          onSuccess={loadData}
+        />
+
+        <ExportDataDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          data={getExportData()}
+          tableName={table.name}
+        />
+
+        <BatchOperationsDialog
+          open={batchOperationsDialogOpen}
+          onOpenChange={setBatchOperationsDialogOpen}
+          selectedRowCount={selectedCount}
+          columns={tableColumns}
+          onBatchDelete={handleBatchDelete}
+          onBatchUpdate={handleBatchUpdate}
+          onBatchExport={handleBatchExport}
+          onBatchDuplicate={handleBatchDuplicate}
+        />
 
         {editingCell && (
           <EditCellDialog

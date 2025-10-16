@@ -37,23 +37,6 @@ export function AppSidebar({
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              onClick={onNewQuery}
-              tooltip="New Query"
-            >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <FileCode2 className="size-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">New Query</span>
-                <span className="text-xs text-muted-foreground">
-                  Execute SQL
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
