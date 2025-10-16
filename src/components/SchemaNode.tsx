@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Table2, Key, Link } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -18,12 +18,13 @@ export interface SchemaNodeData extends Record<string, unknown> {
 
 export const SchemaNode = memo(({ data, selected }: NodeProps) => {
   const nodeData = data as SchemaNodeData;
+  const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
 
   return (
     <Card
       className={`
         min-w-[280px] max-w-[320px] bg-background border-2 transition-all
-        ${selected ? 'border-primary shadow-lg' : 'border-border shadow-md'}
+        ${selected ? 'border-primary shadow-xl ring-2 ring-primary/20' : 'border-border shadow-md hover:shadow-lg'}
       `}
     >
       {/* Table Header */}
@@ -46,7 +47,15 @@ export const SchemaNode = memo(({ data, selected }: NodeProps) => {
         {nodeData.columns.map((column, index) => (
           <div
             key={column.name}
-            className="relative px-3 py-2 text-xs border-b border-border/50 last:border-b-0 hover:bg-muted/30 transition-colors"
+            className={`
+              relative px-3 py-2 text-xs border-b border-border/50 last:border-b-0
+              transition-all duration-200
+              ${hoveredColumn === column.name ? 'bg-primary/5 scale-[1.02]' : 'hover:bg-muted/30'}
+              ${column.isPrimaryKey ? 'bg-primary/5' : ''}
+              ${column.isForeignKey ? 'bg-orange-500/5' : ''}
+            `}
+            onMouseEnter={() => setHoveredColumn(column.name)}
+            onMouseLeave={() => setHoveredColumn(null)}
           >
             {/* Connection Handles */}
             {column.isPrimaryKey && (
@@ -54,7 +63,7 @@ export const SchemaNode = memo(({ data, selected }: NodeProps) => {
                 type="source"
                 position={Position.Right}
                 id={`${nodeData.tableName}-${column.name}-source`}
-                className="!w-2 !h-2 !bg-primary !border !border-background"
+                className="!w-3 !h-3 !bg-primary !border-2 !border-background hover:!scale-125 transition-transform"
                 style={{ top: 46 + index * 33 + 16 }}
               />
             )}
@@ -63,7 +72,7 @@ export const SchemaNode = memo(({ data, selected }: NodeProps) => {
                 type="target"
                 position={Position.Left}
                 id={`${nodeData.tableName}-${column.name}-target`}
-                className="!w-2 !h-2 !bg-orange-500 !border !border-background"
+                className="!w-3 !h-3 !bg-orange-500 !border-2 !border-background hover:!scale-125 transition-transform"
                 style={{ top: 46 + index * 33 + 16 }}
               />
             )}
@@ -72,18 +81,21 @@ export const SchemaNode = memo(({ data, selected }: NodeProps) => {
               {/* Column Icons */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {column.isPrimaryKey && (
-                  <Key className="h-3 w-3 text-primary" />
+                  <Key className="h-3.5 w-3.5 text-primary" />
                 )}
                 {column.isForeignKey && (
-                  <Link className="h-3 w-3 text-orange-500" />
+                  <Link className="h-3.5 w-3.5 text-orange-500" />
                 )}
               </div>
 
               {/* Column Name */}
               <span
                 className={`font-mono flex-1 truncate ${
-                  column.isPrimaryKey ? 'font-semibold' : ''
+                  column.isPrimaryKey ? 'font-bold text-primary' : ''
+                } ${
+                  column.isForeignKey ? 'font-semibold text-orange-600' : ''
                 }`}
+                title={column.name}
               >
                 {column.name}
               </span>
@@ -91,15 +103,19 @@ export const SchemaNode = memo(({ data, selected }: NodeProps) => {
               {/* Data Type */}
               <Badge
                 variant="outline"
-                className="text-[10px] px-1.5 py-0 font-mono flex-shrink-0"
+                className={`text-[10px] px-1.5 py-0 font-mono flex-shrink-0 ${
+                  column.isPrimaryKey ? 'border-primary text-primary' : ''
+                } ${
+                  column.isForeignKey ? 'border-orange-500 text-orange-600' : ''
+                }`}
               >
                 {column.type}
               </Badge>
 
               {/* Nullable Indicator */}
               {!column.isNullable && (
-                <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                  NOT NULL
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 font-semibold">
+                  NN
                 </span>
               )}
             </div>

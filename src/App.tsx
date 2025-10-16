@@ -48,6 +48,12 @@ function App() {
   const activeConnection = getActiveConnection();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
+  // Clear all tabs when active connection changes
+  useEffect(() => {
+    setTabs([]);
+    setActiveTabId(null);
+  }, [activeConnectionId]);
+
   const handleTableSelect = async (table: DatabaseTable) => {
     const existingTab = tabs.find(
       (t) => t.type === "table" && t.table?.name === table.name
@@ -492,8 +498,6 @@ function App() {
                     key={conn.id}
                     onClick={() => {
                       setActiveConnection(conn.id);
-                      setTabs([]);
-                      setActiveTabId(null);
                     }}
                     className="text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
                   >

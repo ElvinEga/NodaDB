@@ -30,6 +30,7 @@ import { ConnectionConfig, DatabaseType, ConnectionTestResult, SSHAuthMethod } f
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { parsePostgresConnectionString } from "@/lib/connectionStringParser";
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -52,8 +53,11 @@ export function ConnectionDialog({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
+  // Connection string state
+  const [connectionString, setConnectionString] = useState("");
+
   // SSH Tunnel state
-  const [connectionType, setConnectionType] = useState<"direct" | "ssh">("direct");
+  const [connectionType, setConnectionType] = useState<"direct" | "ssh" | "connectionString">("direct");
   const [sshHost, setSshHost] = useState("");
   const [sshPort, setSshPort] = useState("22");
   const [sshUsername, setSshUsername] = useState("");
@@ -65,6 +69,25 @@ export function ConnectionDialog({
   const setActiveConnection = useConnectionStore(
     (state) => state.setActiveConnection
   );
+
+  const handleParseConnectionString = () => {
+    if (!connectionString.trim()) {
+      toast.error("Please enter a connection string");
+      return;
+    }
+
+    try {
+      const parsed = parsePostgresConnectionString(connectionString);
+      setHost(parsed.host);
+      setPort(parsed.port);
+      setUsername(parsed.username);
+      setPassword(parsed.password);
+      setDatabase(parsed.database);
+      toast.success("Connection string parsed successfully");
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
 
   const handleBrowseSshKey = async () => {
     try {
@@ -388,11 +411,57 @@ export function ConnectionDialog({
             </div>
           ) : (
             <>
-              <Tabs value={connectionType} onValueChange={(v) => setConnectionType(v as "direct" | "ssh")}>
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs value={connectionType} onValueChange={(v) => setConnectionType(v as "direct" | "ssh" | "connectionString")}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="connectionString">Connection String</TabsTrigger>
                   <TabsTrigger value="direct">Direct Connection</TabsTrigger>
                   <TabsTrigger value="ssh">SSH Tunnel</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="connectionString" className="mt-4 space-y-3">
+                  <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                    <p className="text-xs text-muted-foreground mb-3">PostgreSQL Connection String</p>
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <label htmlFor="connectionString" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Connection String <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="connectionString"
+                          value={connectionString}
+                          onChange={(e) => setConnectionString(e.target.value)}
+                          placeholder="postgres://username:password@host:port/database?sslmode=require"
+                          className="h-9 text-sm font-mono"
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Example: postgres://user:password@db.example.com:5432/mydb?sslmode=require
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleParseConnectionString}
+                        className="h-9 w-full"
+                      >
+                        Parse Connection String
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Show parsed values if available */}
+                  {(host && username && database && connectionString) && (
+                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                      <p className="text-xs font-medium mb-2">Parsed Connection Details:</p>
+                      <div className="grid gap-1 text-xs text-muted-foreground font-mono">
+                        <div><span className="text-foreground">Host:</span> {host}:{port}</div>
+                        <div><span className="text-foreground">Database:</span> {database}</div>
+                        <div><span className="text-foreground">Username:</span> {username}</div>
+                        <div><span className="text-foreground">Password:</span> {password ? '••••••••' : 'Not set'}</div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
 
                 <TabsContent value="direct" className="mt-4 space-y-3">
                   <div className="p-3 rounded-lg bg-secondary/30 border border-border">

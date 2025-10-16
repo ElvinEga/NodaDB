@@ -35,27 +35,21 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [tableCount, setTableCount] = useState(0);
 
-  // Auto-layout nodes in a grid
+  // Auto-layout nodes in a hierarchical way
   const autoLayout = useCallback((tables: DatabaseTable[], columnsMap: Map<string, any[]>) => {
-    const nodesPerRow = Math.ceil(Math.sqrt(tables.length));
     const nodeWidth = 320;
     const nodeHeight = 300;
-    const horizontalSpacing = 100;
-    const verticalSpacing = 150;
+    const horizontalSpacing = 150;
+    const verticalSpacing = 180;
 
-    const newNodes: Node<SchemaNodeData>[] = tables.map((table, index) => {
-      const row = Math.floor(index / nodesPerRow);
-      const col = index % nodesPerRow;
-
+    // Create nodes first
+    const newNodes: Node<SchemaNodeData>[] = tables.map((table) => {
       const columns = columnsMap.get(table.name) || [];
 
       return {
         id: table.name,
         type: 'schemaNode',
-        position: {
-          x: col * (nodeWidth + horizontalSpacing) + 50,
-          y: row * (nodeHeight + verticalSpacing) + 50,
-        },
+        position: { x: 0, y: 0 }, // Will be calculated
         data: {
           tableName: table.name,
           columns: columns.map((col: any) => ({
@@ -68,6 +62,52 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           rowCount: table.row_count,
         },
       };
+    });
+
+    // Analyze relationships to group related tables
+    const hasPrimaryKey = new Set<string>();
+    const hasForeignKey = new Set<string>();
+
+    newNodes.forEach(node => {
+      const hasPK = node.data.columns.some(c => c.isPrimaryKey);
+      const hasFK = node.data.columns.some(c => {
+        const name = c.name.toLowerCase();
+        return (name.endsWith('_id') || name.endsWith('id')) && !c.isPrimaryKey;
+      });
+
+      if (hasPK && !hasFK) hasPrimaryKey.add(node.id);
+      if (hasFK) hasForeignKey.add(node.id);
+    });
+
+    // Position nodes: parent tables on left, child tables on right
+    let parentY = 50;
+    let childY = 50;
+
+    newNodes.forEach((node, index) => {
+      if (hasPrimaryKey.has(node.id)) {
+        // Parent table - position on left
+        node.position = {
+          x: 50,
+          y: parentY,
+        };
+        parentY += nodeHeight + verticalSpacing;
+      } else if (hasForeignKey.has(node.id)) {
+        // Child table - position on right
+        node.position = {
+          x: nodeWidth + horizontalSpacing + 50,
+          y: childY,
+        };
+        childY += nodeHeight + verticalSpacing;
+      } else {
+        // Other tables - position in middle or use grid
+        const nodesPerRow = Math.ceil(Math.sqrt(tables.length));
+        const row = Math.floor(index / nodesPerRow);
+        const col = index % nodesPerRow;
+        node.position = {
+          x: col * (nodeWidth + horizontalSpacing) + 50,
+          y: row * (nodeHeight + verticalSpacing) + 50,
+        };
+      }
     });
 
     return newNodes;
@@ -106,19 +146,51 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
       const layoutedNodes = autoLayout(tables, columnsMap);
       setNodes(layoutedNodes);
 
-      // Try to detect foreign key relationships
-      // This is a simplified approach - real FK detection would require backend support
+      // Enhanced foreign key relationship detection
       const detectedEdges: Edge[] = [];
+      const foreignKeyColumns = new Set<string>();
+
       layoutedNodes.forEach((sourceNode) => {
         sourceNode.data.columns.forEach((sourceCol) => {
-          // Simple heuristic: column names like "table_id" or "tableId" might be FKs
           const colNameLower = sourceCol.name.toLowerCase();
-          if (colNameLower.endsWith('_id') || colNameLower.endsWith('id')) {
-            // Try to find matching table
-            const possibleTableName = colNameLower
-              .replace(/_id$/, '')
-              .replace(/id$/, '');
 
+          // Skip if it's the primary key of this table
+          if (sourceCol.isPrimaryKey) return;
+
+          // Enhanced heuristics for FK detection
+          let possibleTableNames: string[] = [];
+
+          // Pattern 1: table_id, tableid
+          if (colNameLower.endsWith('_id')) {
+            const tableName = colNameLower.replace(/_id$/, '');
+            possibleTableNames.push(tableName);
+            // Also try plural forms
+            possibleTableNames.push(tableName + 's');
+            // Try removing 's' for plural to singular
+            if (tableName.endsWith('s')) {
+              possibleTableNames.push(tableName.slice(0, -1));
+            }
+          } else if (colNameLower.endsWith('id') && colNameLower.length > 2) {
+            const tableName = colNameLower.slice(0, -2);
+            possibleTableNames.push(tableName);
+            possibleTableNames.push(tableName + 's');
+            if (tableName.endsWith('s')) {
+              possibleTableNames.push(tableName.slice(0, -1));
+            }
+          }
+
+          // Pattern 2: tableId (camelCase)
+          if (/[a-z][A-Z]/.test(sourceCol.name)) {
+            const parts = sourceCol.name.split(/(?=[A-Z])/);
+            if (parts[parts.length - 1]?.toLowerCase() === 'id') {
+              const tableName = parts.slice(0, -1).join('').toLowerCase();
+              possibleTableNames.push(tableName);
+              possibleTableNames.push(tableName + 's');
+            }
+          }
+
+          // Try to find matching table
+          for (const possibleTableName of possibleTableNames) {
             const targetNode = layoutedNodes.find(
               (n) => n.data.tableName.toLowerCase() === possibleTableName
             );
@@ -127,32 +199,61 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
               // Find primary key in target table
               const targetPK = targetNode.data.columns.find((c) => c.isPrimaryKey);
               if (targetPK) {
-                detectedEdges.push({
-                  id: `${sourceNode.id}-${sourceCol.name}-${targetNode.id}`,
-                  source: targetNode.id,
-                  target: sourceNode.id,
-                  sourceHandle: `${targetNode.data.tableName}-${targetPK.name}-source`,
-                  targetHandle: `${sourceNode.data.tableName}-${sourceCol.name}-target`,
-                  type: 'smoothstep',
-                  animated: true,
-                  style: { stroke: '#f97316', strokeWidth: 2 },
-                  markerEnd: {
-                    type: MarkerType.ArrowClosed,
-                    color: '#f97316',
-                  },
-                  label: sourceCol.name,
-                  labelStyle: { fontSize: 10, fill: '#666' },
-                  labelBgStyle: { fill: '#fff' },
-                });
+                const edgeId = `${sourceNode.id}-${sourceCol.name}-${targetNode.id}`;
 
-                // Mark column as foreign key
-                sourceCol.isForeignKey = true;
+                // Check if edge already exists
+                if (!detectedEdges.find(e => e.id === edgeId)) {
+                  const edge: Edge = {
+                    id: edgeId,
+                    source: targetNode.id,
+                    target: sourceNode.id,
+                    sourceHandle: `${targetNode.data.tableName}-${targetPK.name}-source`,
+                    targetHandle: `${sourceNode.data.tableName}-${sourceCol.name}-target`,
+                    type: 'smoothstep',
+                    animated: false,
+                    style: { stroke: '#f97316', strokeWidth: 2.5 },
+                    markerEnd: {
+                      type: MarkerType.ArrowClosed,
+                      color: '#f97316',
+                      width: 20,
+                      height: 20,
+                    },
+                    label: sourceCol.name,
+                    labelStyle: {
+                      fontSize: 11,
+                      fill: '#f97316',
+                      fontWeight: 600,
+                    },
+                    labelBgStyle: {
+                      fill: '#fff',
+                      fillOpacity: 0.9,
+                    },
+                    labelBgPadding: [4, 6] as [number, number],
+                    labelBgBorderRadius: 4,
+                  };
+                  detectedEdges.push(edge);
+
+                  // Mark column as foreign key
+                  foreignKeyColumns.add(`${sourceNode.id}-${sourceCol.name}`);
+                }
+                break; // Found a match, stop looking
               }
             }
           }
         });
       });
 
+      // Update nodes to mark foreign key columns
+      layoutedNodes.forEach(node => {
+        node.data.columns.forEach(col => {
+          const key = `${node.id}-${col.name}`;
+          if (foreignKeyColumns.has(key)) {
+            col.isForeignKey = true;
+          }
+        });
+      });
+
+      setNodes(layoutedNodes);
       setEdges(detectedEdges);
       toast.success(`Loaded schema with ${tables.length} tables`);
     } catch (error) {
@@ -179,6 +280,31 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
     toast.info('Image export coming soon!');
   }, []);
 
+  // Handle edge hover
+  const handleEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setEdges((eds) =>
+      eds.map((e) =>
+        e.id === edge.id
+          ? {
+              ...e,
+              animated: true,
+              style: { ...e.style, strokeWidth: 4, stroke: '#ea580c' },
+            }
+          : e
+      )
+    );
+  }, [setEdges]);
+
+  const handleEdgeMouseLeave = useCallback(() => {
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        animated: false,
+        style: { ...e.style, strokeWidth: 2.5, stroke: '#f97316' },
+      }))
+    );
+  }, [setEdges]);
+
   return (
     <div className="h-full w-full bg-background relative">
       <ReactFlow
@@ -186,6 +312,8 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onEdgeMouseEnter={handleEdgeMouseEnter}
+        onEdgeMouseLeave={handleEdgeMouseLeave}
         nodeTypes={nodeTypes}
         fitView
         minZoom={0.1}
