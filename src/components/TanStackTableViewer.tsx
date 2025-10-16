@@ -544,7 +544,7 @@ Sum: ${stats.sum}`
             </CellContextMenu>
           );
         },
-        size: 180,
+        size: 270,
       });
     });
 
