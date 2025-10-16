@@ -453,15 +453,17 @@ Sum: ${stats.sum}`
                     column.toggleSorting(column.getIsSorted() === "asc")
                   }
                 >
-                  <span className="font-normal">{col.name}</span>
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-normal">{col.name}</span>
 
-                  {isSorted === "asc" ? (
-                    <ChevronUp className="h-3.5 w-3.5 text-primary" />
-                  ) : isSorted === "desc" ? (
-                    <ChevronDown className="h-3.5 w-3.5 text-primary" />
-                  ) : (
-                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
-                  )}
+                    {isSorted === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : isSorted === "desc" ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                    )}
+                  </div>
                 </button>
                 <div className="flex items-center gap-1 text-[10px]">
                   <span
