@@ -507,16 +507,30 @@ impl ConnectionManager {
             }
             DatabaseType::PostgreSQL => {
                 format!(
-                    "SELECT column_name, data_type, is_nullable, column_default \
-                     FROM information_schema.columns WHERE table_name = '{}' ORDER BY ordinal_position",
-                    table_name
+                    "SELECT c.column_name, c.data_type, c.is_nullable, c.column_default, \
+                     CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key \
+                     FROM information_schema.columns c \
+                     LEFT JOIN ( \
+                         SELECT ku.column_name \
+                         FROM information_schema.table_constraints tc \
+                         JOIN information_schema.key_column_usage ku \
+                             ON tc.constraint_name = ku.constraint_name \
+                             AND tc.table_schema = ku.table_schema \
+                         WHERE tc.constraint_type = 'PRIMARY KEY' \
+                             AND tc.table_name = '{}' \
+                     ) pk ON c.column_name = pk.column_name \
+                     WHERE c.table_name = '{}' \
+                     ORDER BY c.ordinal_position",
+                    table_name, table_name
                 )
             }
             DatabaseType::MySQL => {
                 format!(
-                    "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT \
-                     FROM information_schema.columns WHERE table_name = '{}' AND table_schema = DATABASE() \
-                     ORDER BY ORDINAL_POSITION",
+                    "SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT, \
+                     IF(c.COLUMN_KEY = 'PRI', 1, 0) as is_primary_key \
+                     FROM information_schema.columns c \
+                     WHERE c.table_name = '{}' AND c.table_schema = DATABASE() \
+                     ORDER BY c.ORDINAL_POSITION",
                     table_name
                 )
             }
@@ -551,13 +565,14 @@ impl ConnectionManager {
                         let data_type: String = row.try_get(1).unwrap_or_default();
                         let is_nullable: String = row.try_get(2).unwrap_or_default();
                         let default_value: Option<String> = row.try_get(3).ok();
+                        let is_primary_key: bool = row.try_get(4).unwrap_or(false);
 
                         TableColumn {
                             name,
                             data_type,
                             is_nullable: is_nullable.to_uppercase() == "YES",
                             default_value,
-                            is_primary_key: false,
+                            is_primary_key,
                         }
                     })
                     .collect()
@@ -570,13 +585,14 @@ impl ConnectionManager {
                         let data_type: String = row.try_get(1).unwrap_or_default();
                         let is_nullable: String = row.try_get(2).unwrap_or_default();
                         let default_value: Option<String> = row.try_get(3).ok();
+                        let is_primary_key: i32 = row.try_get(4).unwrap_or(0);
 
                         TableColumn {
                             name,
                             data_type,
                             is_nullable: is_nullable.to_uppercase() == "YES",
                             default_value,
-                            is_primary_key: false,
+                            is_primary_key: is_primary_key > 0,
                         }
                     })
                     .collect()
