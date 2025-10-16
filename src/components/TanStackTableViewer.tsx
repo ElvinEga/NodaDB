@@ -1025,15 +1025,6 @@ Sum: ${stats.sum}`
               Add row
             </Button>
             <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDataGeneratorDialogOpen(true)}
-              className="h-8"
-            >
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              Generate data
-            </Button>
-            <Button
               variant="destructive"
               size="sm"
               onClick={handleDeleteRows}
@@ -1043,6 +1034,16 @@ Sum: ${stats.sum}`
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               Delete row
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDataGeneratorDialogOpen(true)}
+              className="h-8"
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Generate data
+            </Button>
+
             {selectedCount > 0 && (
               <>
                 <Button
