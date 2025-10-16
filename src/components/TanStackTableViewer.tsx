@@ -69,6 +69,7 @@ import {
   generateDuplicateSql,
   calculateColumnStats,
 } from '@/lib/tableOperations';
+import { buildSelectQuery } from '@/lib/sqlUtils';
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -128,8 +129,14 @@ export function TanStackTableViewer({
     const startTime = Date.now();
 
     try {
-      // Use execute_query instead of get_table_data
-      const query = `SELECT * FROM ${table.name} LIMIT 1000`;
+      // Build proper query with schema qualification and identifier quoting
+      const query = buildSelectQuery(
+        table.name,
+        table.schema,
+        connection.db_type,
+        1000
+      );
+
       const result = await invoke<QueryResult>('execute_query', {
         connectionId: connection.id,
         query: query,
@@ -186,8 +193,15 @@ export function TanStackTableViewer({
     }
     
     const pkValue = getPrimaryKeyValue(row);
-    const sql = generateSetNullSql(table.name, columnName, primaryKeyColumn.name, pkValue);
-    
+    const sql = generateSetNullSql(
+      table.name,
+      columnName,
+      primaryKeyColumn.name,
+      pkValue,
+      table.schema,
+      connection.db_type
+    );
+
     try {
       await invoke('execute_query', {
         connectionId: connection.id,
@@ -207,7 +221,14 @@ export function TanStackTableViewer({
     }
 
     const columnNames = tableColumns.map(col => col.name);
-    const insertSql = generateDuplicateSql(table.name, row, columnNames, primaryKeyColumn.name);
+    const insertSql = generateDuplicateSql(
+      table.name,
+      row,
+      columnNames,
+      primaryKeyColumn.name,
+      table.schema,
+      connection.db_type
+    );
 
     try {
       await invoke('execute_query', {
@@ -248,7 +269,13 @@ export function TanStackTableViewer({
     }
 
     const pkValue = getPrimaryKeyValue(row);
-    const deleteSql = generateDeleteSql(table.name, primaryKeyColumn.name, pkValue);
+    const deleteSql = generateDeleteSql(
+      table.name,
+      primaryKeyColumn.name,
+      pkValue,
+      table.schema,
+      connection.db_type
+    );
 
     if (!confirm(`Delete this row?\n\n${deleteSql}`)) {
       return;

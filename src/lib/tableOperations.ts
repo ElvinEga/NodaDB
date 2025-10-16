@@ -1,4 +1,6 @@
 import { toast } from 'sonner';
+import { DatabaseType } from '@/types';
+import { quoteIdentifier, qualifyTableName } from './sqlUtils';
 
 /**
  * Copy text to clipboard with fallback
@@ -76,8 +78,16 @@ export async function copyRowAsCsv(row: Record<string, unknown>, columns: string
 /**
  * Copy entire row as SQL INSERT
  */
-export async function copyRowAsSql(row: Record<string, unknown>, tableName: string, columns: string[]) {
-  const columnList = columns.join(', ');
+export async function copyRowAsSql(
+  row: Record<string, unknown>,
+  tableName: string,
+  columns: string[],
+  schema?: string,
+  dbType?: DatabaseType
+) {
+  const type = dbType || 'sqlite';
+  const quotedColumns = columns.map(col => quoteIdentifier(col, type));
+  const columnList = quotedColumns.join(', ');
   const values = columns.map(col => {
     const value = row[col];
     if (value === null || value === undefined) {
@@ -91,7 +101,8 @@ export async function copyRowAsSql(row: Record<string, unknown>, tableName: stri
     }
     return String(value);
   });
-  const sql = `INSERT INTO ${tableName} (${columnList}) VALUES (${values.join(', ')});`;
+  const qualifiedTable = qualifyTableName(tableName, schema, type);
+  const sql = `INSERT INTO ${qualifiedTable} (${columnList}) VALUES (${values.join(', ')});`;
   await copyToClipboard(sql, 'Row copied as SQL INSERT');
 }
 
@@ -150,38 +161,64 @@ export function exportColumnToCsv(data: Record<string, unknown>[], columnName: s
 /**
  * Generate SQL UPDATE statement for setting cell to NULL
  */
-export function generateSetNullSql(tableName: string, columnName: string, primaryKeyColumn: string, primaryKeyValue: unknown): string {
-  const pkValue = typeof primaryKeyValue === 'string' 
-    ? `'${primaryKeyValue.replace(/'/g, "''")}'` 
+export function generateSetNullSql(
+  tableName: string,
+  columnName: string,
+  primaryKeyColumn: string,
+  primaryKeyValue: unknown,
+  schema?: string,
+  dbType?: DatabaseType
+): string {
+  const type = dbType || 'sqlite';
+  const pkValue = typeof primaryKeyValue === 'string'
+    ? `'${primaryKeyValue.replace(/'/g, "''")}'`
     : String(primaryKeyValue);
-  
-  return `UPDATE ${tableName} SET ${columnName} = NULL WHERE ${primaryKeyColumn} = ${pkValue};`;
+
+  const qualifiedTable = qualifyTableName(tableName, schema, type);
+  const quotedColumn = quoteIdentifier(columnName, type);
+  const quotedPkColumn = quoteIdentifier(primaryKeyColumn, type);
+
+  return `UPDATE ${qualifiedTable} SET ${quotedColumn} = NULL WHERE ${quotedPkColumn} = ${pkValue};`;
 }
 
 /**
  * Generate SQL DELETE statement
  */
-export function generateDeleteSql(tableName: string, primaryKeyColumn: string, primaryKeyValue: unknown): string {
-  const pkValue = typeof primaryKeyValue === 'string' 
-    ? `'${primaryKeyValue.replace(/'/g, "''")}'` 
+export function generateDeleteSql(
+  tableName: string,
+  primaryKeyColumn: string,
+  primaryKeyValue: unknown,
+  schema?: string,
+  dbType?: DatabaseType
+): string {
+  const type = dbType || 'sqlite';
+  const pkValue = typeof primaryKeyValue === 'string'
+    ? `'${primaryKeyValue.replace(/'/g, "''")}'`
     : String(primaryKeyValue);
-  
-  return `DELETE FROM ${tableName} WHERE ${primaryKeyColumn} = ${pkValue};`;
+
+  const qualifiedTable = qualifyTableName(tableName, schema, type);
+  const quotedPkColumn = quoteIdentifier(primaryKeyColumn, type);
+
+  return `DELETE FROM ${qualifiedTable} WHERE ${quotedPkColumn} = ${pkValue};`;
 }
 
 /**
  * Generate SQL INSERT for duplicating a row
  */
 export function generateDuplicateSql(
-  tableName: string, 
-  row: Record<string, unknown>, 
+  tableName: string,
+  row: Record<string, unknown>,
   columns: string[],
-  primaryKeyColumn: string
+  primaryKeyColumn: string,
+  schema?: string,
+  dbType?: DatabaseType
 ): string {
+  const type = dbType || 'sqlite';
   // Exclude primary key from columns
   const columnsWithoutPk = columns.filter(col => col !== primaryKeyColumn);
-  const columnList = columnsWithoutPk.join(', ');
-  
+  const quotedColumns = columnsWithoutPk.map(col => quoteIdentifier(col, type));
+  const columnList = quotedColumns.join(', ');
+
   const values = columnsWithoutPk.map(col => {
     const value = row[col];
     if (value === null || value === undefined) {
@@ -195,8 +232,10 @@ export function generateDuplicateSql(
     }
     return String(value);
   });
-  
-  return `INSERT INTO ${tableName} (${columnList}) VALUES (${values.join(', ')});`;
+
+  const qualifiedTable = qualifyTableName(tableName, schema, type);
+
+  return `INSERT INTO ${qualifiedTable} (${columnList}) VALUES (${values.join(', ')});`;
 }
 
 /**
