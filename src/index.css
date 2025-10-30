@@ -326,6 +326,19 @@
     font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New", monospace !important;
   }
 
+  /* Font size classes */
+  .font-small {
+    font-size: 14px !important;
+  }
+
+  .font-medium {
+    font-size: 16px !important;
+  }
+
+  .font-large {
+    font-size: 18px !important;
+  }
+
   /* Custom Scrollbar */
   ::-webkit-scrollbar {
     width: 8px;

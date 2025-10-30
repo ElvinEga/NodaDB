@@ -37,7 +37,7 @@ import {
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
-  const { fontFamily } = useSettingsStore();
+  const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
@@ -314,12 +314,18 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openSchemaDesignerTab]);
 
-  // Apply font family to root element
+  // Apply font family and font size to root element
   useEffect(() => {
     const root = window.document.documentElement;
+
+    // Apply font family
     root.classList.remove("font-outfit", "font-jetbrains-mono");
     root.classList.add(`font-${fontFamily.toLowerCase().replace(" ", "-")}`);
-  }, [fontFamily]);
+
+    // Apply font size
+    root.classList.remove("font-small", "font-medium", "font-large");
+    root.classList.add(`font-${fontSize}`);
+  }, [fontFamily, fontSize]);
 
   return (
     <SidebarProvider>
