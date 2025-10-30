@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
-import { Database, Plus, Settings, FileCode2, HelpCircle, History, Network, Shapes } from "lucide-react";
+import {
+  Database,
+  Plus,
+  Settings,
+  FileCode2,
+  HelpCircle,
+  History,
+  Network,
+  Shapes,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
@@ -13,6 +22,7 @@ import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { Toaster } from "@/components/ui/sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
@@ -25,10 +35,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-
-
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const { fontFamily } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
@@ -83,7 +92,7 @@ function App() {
       title: "New Query",
       isPinned: false,
       isDirty: false,
-      queryContent: '',
+      queryContent: "",
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
@@ -103,7 +112,7 @@ function App() {
 
   const openSchemaDesignerTab = () => {
     // Check if schema tab already exists
-    const existingSchemaTab = tabs.find(t => t.type === "schema");
+    const existingSchemaTab = tabs.find((t) => t.type === "schema");
     if (existingSchemaTab) {
       setActiveTabId(existingSchemaTab.id);
       return;
@@ -122,8 +131,8 @@ function App() {
 
   const handleLoadQueryFromHistory = (query: string) => {
     // Find or create a query tab
-    let queryTab = tabs.find(t => t.type === "query");
-    
+    let queryTab = tabs.find((t) => t.type === "query");
+
     if (!queryTab) {
       // Create new query tab with the query
       const newTab: TabType = {
@@ -138,22 +147,24 @@ function App() {
       setActiveTabId(newTab.id);
     } else {
       // Update existing query tab
-      setTabs(tabs.map(t => 
-        t.id === queryTab!.id 
-          ? { ...t, queryContent: query, isDirty: true }
-          : t
-      ));
+      setTabs(
+        tabs.map((t) =>
+          t.id === queryTab!.id
+            ? { ...t, queryContent: query, isDirty: true }
+            : t
+        )
+      );
       setActiveTabId(queryTab.id);
     }
   };
 
   const closeTab = (tabId: string) => {
-    const tab = tabs.find(t => t.id === tabId);
+    const tab = tabs.find((t) => t.id === tabId);
     // Don't close if pinned (unless it's the last tab)
     if (tab?.isPinned && tabs.length > 1) {
       return;
     }
-    
+
     const newTabs = tabs.filter((t) => t.id !== tabId);
     setTabs(newTabs);
     if (activeTabId === tabId) {
@@ -164,15 +175,15 @@ function App() {
   };
 
   const togglePin = (tabId: string) => {
-    setTabs(tabs.map(t => 
-      t.id === tabId ? { ...t, isPinned: !t.isPinned } : t
-    ));
+    setTabs(
+      tabs.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t))
+    );
   };
 
   const duplicateTab = (tabId: string) => {
-    const tab = tabs.find(t => t.id === tabId);
-    if (!tab || tab.type !== 'query') return;
-    
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab || tab.type !== "query") return;
+
     const newTab: TabType = {
       ...tab,
       id: `query-${Date.now()}`,
@@ -185,37 +196,37 @@ function App() {
   };
 
   const closeOtherTabs = (tabId: string) => {
-    const newTabs = tabs.filter(t => t.id === tabId || t.isPinned);
+    const newTabs = tabs.filter((t) => t.id === tabId || t.isPinned);
     setTabs(newTabs);
     setActiveTabId(tabId);
   };
 
   const closeAllTabs = () => {
-    const newTabs = tabs.filter(t => t.isPinned);
+    const newTabs = tabs.filter((t) => t.isPinned);
     setTabs(newTabs);
     setActiveTabId(newTabs.length > 0 ? newTabs[0].id : null);
   };
 
   const closeTabsToRight = (tabId: string) => {
-    const index = tabs.findIndex(t => t.id === tabId);
+    const index = tabs.findIndex((t) => t.id === tabId);
     if (index === -1) return;
-    
-    const newTabs = tabs.slice(0, index + 1).concat(
-      tabs.slice(index + 1).filter(t => t.isPinned)
-    );
+
+    const newTabs = tabs
+      .slice(0, index + 1)
+      .concat(tabs.slice(index + 1).filter((t) => t.isPinned));
     setTabs(newTabs);
   };
 
   const goToNextTab = () => {
     if (tabs.length === 0) return;
-    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
     const nextIndex = (currentIndex + 1) % tabs.length;
     setActiveTabId(tabs[nextIndex].id);
   };
 
   const goToPrevTab = () => {
     if (tabs.length === 0) return;
-    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
     const prevIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1;
     setActiveTabId(tabs[prevIndex].id);
   };
@@ -229,7 +240,7 @@ function App() {
   // Lazy load table columns when tab becomes active
   useEffect(() => {
     const loadColumnsForActiveTab = async () => {
-      if (!activeTab || activeTab.type !== 'table' || !activeTab.table) {
+      if (!activeTab || activeTab.type !== "table" || !activeTab.table) {
         return;
       }
 
@@ -247,19 +258,15 @@ function App() {
         });
 
         // Update the tab with loaded columns
-        setTabs(tabs.map(t =>
-          t.id === activeTab.id
-            ? { ...t, columns }
-            : t
-        ));
+        setTabs(
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns } : t))
+        );
       } catch (error) {
         console.error("Failed to load table columns:", error);
         // Set empty array to prevent infinite retry
-        setTabs(tabs.map(t =>
-          t.id === activeTab.id
-            ? { ...t, columns: [] }
-            : t
-        ));
+        setTabs(
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns: [] } : t))
+        );
       }
     };
 
@@ -280,28 +287,39 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+? or Cmd+? (Shift+/ with Ctrl/Cmd)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '?') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "?") {
         e.preventDefault();
         setShortcutsDialogOpen((prev) => !prev);
       }
       // Also support just ? when no input is focused
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const target = e.target as HTMLElement;
-        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+        if (
+          target.tagName !== "INPUT" &&
+          target.tagName !== "TEXTAREA" &&
+          !target.isContentEditable
+        ) {
           e.preventDefault();
           setShortcutsDialogOpen(true);
         }
       }
       // Ctrl+Shift+E for Schema Designer/ERD Viewer
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
         e.preventDefault();
         openSchemaDesignerTab();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openSchemaDesignerTab]);
+
+  // Apply font family to root element
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove("font-outfit", "font-jetbrains-mono");
+    root.classList.add(`font-${fontFamily.toLowerCase().replace(" ", "-")}`);
+  }, [fontFamily]);
 
   return (
     <SidebarProvider>
@@ -340,7 +358,10 @@ function App() {
 
                 {/* Right Actions */}
 
-                <KeyboardTooltip description="Open Visual Query Builder" keys={['Ctrl', 'B']}>
+                <KeyboardTooltip
+                  description="Open Visual Query Builder"
+                  keys={["Ctrl", "B"]}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
@@ -349,7 +370,10 @@ function App() {
                     <Network className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
-                <KeyboardTooltip description="Open Schema Designer" keys={['Ctrl', 'Shift', 'E']}>
+                <KeyboardTooltip
+                  description="Open Schema Designer"
+                  keys={["Ctrl", "Shift", "E"]}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
@@ -372,12 +396,15 @@ function App() {
                     variant="ghost"
                     size="icon"
                     onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-                    className={showHistoryPanel ? 'bg-muted' : ''}
+                    className={showHistoryPanel ? "bg-muted" : ""}
                   >
                     <History className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
-                <KeyboardTooltip description="Keyboard Shortcuts" keys={['Ctrl', '?']}>
+                <KeyboardTooltip
+                  description="Keyboard Shortcuts"
+                  keys={["Ctrl", "?"]}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
@@ -386,7 +413,7 @@ function App() {
                     <HelpCircle className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
-                <KeyboardTooltip description="Settings" keys={['Ctrl', ',']}>
+                <KeyboardTooltip description="Settings" keys={["Ctrl", ","]}>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -422,26 +449,31 @@ function App() {
                             table={activeTab.table}
                             columns={activeTab.columns}
                             onRefresh={async () => {
-                            // Reload columns
-                            try {
-                              const columns = await invoke<TableColumn[]>(
-                                "get_table_structure",
-                                {
-                                  connectionId: activeConnection.id,
-                                  tableName: activeTab.table!.name,
-                                  dbType: activeConnection.db_type,
-                                }
-                              );
-                              setTabs(
-                                tabs.map((t) =>
-                                  t.id === activeTab.id ? { ...t, columns } : t
-                                )
-                              );
-                            } catch (error) {
-                              console.error("Failed to reload columns:", error);
-                            }
-                          }}
-                        />
+                              // Reload columns
+                              try {
+                                const columns = await invoke<TableColumn[]>(
+                                  "get_table_structure",
+                                  {
+                                    connectionId: activeConnection.id,
+                                    tableName: activeTab.table!.name,
+                                    dbType: activeConnection.db_type,
+                                  }
+                                );
+                                setTabs(
+                                  tabs.map((t) =>
+                                    t.id === activeTab.id
+                                      ? { ...t, columns }
+                                      : t
+                                  )
+                                );
+                              } catch (error) {
+                                console.error(
+                                  "Failed to reload columns:",
+                                  error
+                                );
+                              }
+                            }}
+                          />
                         )
                       ) : activeTab.type === "query-builder" ? (
                         <VisualQueryBuilder connection={activeConnection} />
@@ -450,28 +482,31 @@ function App() {
                       ) : (
                         <QueryEditor connection={activeConnection} />
                       )}
-                  </>
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-                      <h2 className="text-xl font-semibold mb-2">
-                        Welcome to {activeConnection.name}
-                      </h2>
-                      <p className="text-sm text-muted-foreground mb-6">
-                        Select a table from the sidebar or open a new query
-                      </p>
-                      <KeyboardTooltip description="Create New Query Tab" keys={['Ctrl', 'N']}>
-                        <Button onClick={openQueryTab} variant="outline">
-                          <FileCode2 className="h-4 w-4 mr-2" />
-                          New Query
-                        </Button>
-                      </KeyboardTooltip>
+                    </>
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                        <h2 className="text-xl font-semibold mb-2">
+                          Welcome to {activeConnection.name}
+                        </h2>
+                        <p className="text-sm text-muted-foreground mb-6">
+                          Select a table from the sidebar or open a new query
+                        </p>
+                        <KeyboardTooltip
+                          description="Create New Query Tab"
+                          keys={["Ctrl", "N"]}
+                        >
+                          <Button onClick={openQueryTab} variant="outline">
+                            <FileCode2 className="h-4 w-4 mr-2" />
+                            New Query
+                          </Button>
+                        </KeyboardTooltip>
+                      </div>
                     </div>
-                  </div>
                   )}
                 </div>
-                
+
                 {/* Query History Panel */}
                 {showHistoryPanel && (
                   <div className="w-80 shrink-0">
