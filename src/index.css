@@ -2,57 +2,307 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Professional Dark Theme - Main Colors */
-    --background: 0 0% 4%; /* #0a0a0a */
-    --foreground: 0 0% 96%; /* #f5f5f5 */
+/* Font Face Declarations */
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+}
 
-    /* Surface Colors */
-    --card: 0 0% 6%; /* #0f0f0f */
-    --card-foreground: 0 0% 96%;
-    --popover: 0 0% 12%; /* #1f1f1f */
-    --popover-foreground: 0 0% 96%;
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-ExtraLight.ttf") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+}
 
-    /* Accent Colors */
-    --primary: 217 91% 60%; /* #3b82f6 - Professional Blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 10%; /* #1a1a1a */
-    --secondary-foreground: 0 0% 96%;
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+}
 
-    /* Muted Colors */
-    --muted: 0 0% 10%; /* #1a1a1a */
-    --muted-foreground: 0 0% 63%; /* #a1a1a1 */
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
 
-    /* Accent */
-    --accent: 0 0% 12%; /* #1f1f1f */
-    --accent-foreground: 0 0% 96%;
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+}
 
-    /* Status Colors */
-    --destructive: 0 84% 60%; /* #ef4444 */
-    --destructive-foreground: 0 0% 96%;
-    --success: 142 71% 45%; /* #10b981 */
-    --warning: 38 92% 50%; /* #f59e0b */
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+}
 
-    /* Borders & Inputs */
-    --border: 0 0% 20%; /* #333333 */
-    --input: 0 0% 4%; /* #0a0a0a */
-    --ring: 217 91% 60%;
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
 
-    --radius: 0.5rem;
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+}
 
-    /* Sidebar Colors - Professional Dark Theme */
-    --sidebar-background: 0 0% 6%; /* Same as card */
-    --sidebar-foreground: 0 0% 96%; /* Same as foreground */
-    --sidebar-primary: 217 91% 60%; /* Same as primary */
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 12%; /* Same as accent */
-    --sidebar-accent-foreground: 0 0% 96%;
-    --sidebar-border: 0 0% 20%; /* Same as border */
-    --sidebar-ring: 217 91% 60%; /* Same as ring */
-    --font-sans: Outfit, sans-serif;
-    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  }
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit/Outfit-Black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-ThinItalic.ttf")
+    format("truetype");
+  font-weight: 100;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-ExtraLight.ttf")
+    format("truetype");
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-ExtraLightItalic.ttf")
+    format("truetype");
+  font-weight: 200;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-LightItalic.ttf")
+    format("truetype");
+  font-weight: 300;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-MediumItalic.ttf")
+    format("truetype");
+  font-weight: 500;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-SemiBoldItalic.ttf")
+    format("truetype");
+  font-weight: 600;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-BoldItalic.ttf")
+    format("truetype");
+  font-weight: 700;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-ExtraBold.ttf")
+    format("truetype");
+  font-weight: 800;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono/JetBrainsMono-ExtraBoldItalic.ttf")
+    format("truetype");
+  font-weight: 800;
+  font-style: italic;
+}
+
+:root {
+  --background: 0 0% 98.8235%;
+  --foreground: 0 0% 9.0196%;
+  --card: 0 0% 98.8235%;
+  --card-foreground: 0 0% 9.0196%;
+  --popover: 0 0% 98.8235%;
+  --popover-foreground: 0 0% 32.1569%;
+  --primary: 151.3274 66.8639% 66.8627%;
+  --primary-foreground: 153.3333 13.0435% 13.5294%;
+  --secondary: 0 0% 99.2157%;
+  --secondary-foreground: 0 0% 9.0196%;
+  --muted: 0 0% 92.9412%;
+  --muted-foreground: 0 0% 12.549%;
+  --accent: 0 0% 92.9412%;
+  --accent-foreground: 0 0% 12.549%;
+  --destructive: 9.8901 81.982% 43.5294%;
+  --destructive-foreground: 0 100% 99.4118%;
+  --border: 0 0% 87.451%;
+  --input: 0 0% 96.4706%;
+  --ring: 151.3274 66.8639% 66.8627%;
+  --chart-1: 151.3274 66.8639% 66.8627%;
+  --chart-2: 217.2193 91.2195% 59.8039%;
+  --chart-3: 258.3117 89.5349% 66.2745%;
+  --chart-4: 37.6923 92.126% 50.1961%;
+  --chart-5: 160.1183 84.0796% 39.4118%;
+  --sidebar: 0 0% 98.8235%;
+  --sidebar-foreground: 0 0% 43.9216%;
+  --sidebar-primary: 151.3274 66.8639% 66.8627%;
+  --sidebar-primary-foreground: 153.3333 13.0435% 13.5294%;
+  --sidebar-accent: 0 0% 92.9412%;
+  --sidebar-accent-foreground: 0 0% 12.549%;
+  --sidebar-border: 0 0% 87.451%;
+  --sidebar-ring: 151.3274 66.8639% 66.8627%;
+  --font-sans: Outfit, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: monospace;
+  --radius: 0.5rem;
+  --shadow-x: 0px;
+  --shadow-y: 1px;
+  --shadow-blur: 3px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.17;
+  --shadow-color: #000000;
+  --shadow-2xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.09);
+  --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.09);
+  --shadow-sm: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.17);
+  --shadow: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.17);
+  --shadow-md: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 2px 4px -1px hsl(0 0% 0% / 0.17);
+  --shadow-lg: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 4px 6px -1px hsl(0 0% 0% / 0.17);
+  --shadow-xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 8px 10px -1px hsl(0 0% 0% / 0.17);
+  --shadow-2xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.43);
+  --tracking-normal: 0.025em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: 0 0% 7.0588%;
+  --foreground: 214.2857 31.8182% 91.3725%;
+  --card: 0 0% 9.0196%;
+  --card-foreground: 214.2857 31.8182% 91.3725%;
+  --popover: 0 0% 14.1176%;
+  --popover-foreground: 0 0% 66.2745%;
+  --primary: 154.898 100% 19.2157%;
+  --primary-foreground: 152.7273 19.2982% 88.8235%;
+  --secondary: 0 0% 14.1176%;
+  --secondary-foreground: 0 0% 98.0392%;
+  --muted: 0 0% 12.1569%;
+  --muted-foreground: 0 0% 63.5294%;
+  --accent: 0 0% 19.2157%;
+  --accent-foreground: 0 0% 98.0392%;
+  --destructive: 6.6667 60% 20.5882%;
+  --destructive-foreground: 12 12.1951% 91.9608%;
+  --border: 0 0% 16.0784%;
+  --input: 0 0% 14.1176%;
+  --ring: 141.8919 69.1589% 58.0392%;
+  --chart-1: 141.8919 69.1589% 58.0392%;
+  --chart-2: 213.1169 93.9024% 67.8431%;
+  --chart-3: 255.1351 91.7355% 76.2745%;
+  --chart-4: 43.2558 96.4126% 56.2745%;
+  --chart-5: 172.4551 66.0079% 50.3922%;
+  --sidebar: 0 0% 7.0588%;
+  --sidebar-foreground: 0 0% 53.7255%;
+  --sidebar-primary: 154.898 100% 19.2157%;
+  --sidebar-primary-foreground: 152.7273 19.2982% 88.8235%;
+  --sidebar-accent: 0 0% 19.2157%;
+  --sidebar-accent-foreground: 0 0% 98.0392%;
+  --sidebar-border: 0 0% 16.0784%;
+  --sidebar-ring: 141.8919 69.1589% 58.0392%;
+  --font-sans: Outfit, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: monospace;
+  --radius: 0.5rem;
+  --shadow-x: 0px;
+  --shadow-y: 1px;
+  --shadow-blur: 3px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.17;
+  --shadow-color: #000000;
+  --shadow-2xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.09);
+  --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.09);
+  --shadow-sm: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.17);
+  --shadow: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.17);
+  --shadow-md: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 2px 4px -1px hsl(0 0% 0% / 0.17);
+  --shadow-lg: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 4px 6px -1px hsl(0 0% 0% / 0.17);
+  --shadow-xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.17),
+    0px 8px 10px -1px hsl(0 0% 0% / 0.17);
+  --shadow-2xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.43);
 }
 
 @layer base {
@@ -63,8 +313,17 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    letter-spacing: var(--tracking-normal);
+  }
+
+  /* Font family classes */
+  .font-outfit {
     font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      sans-serif;
+      sans-serif !important;
+  }
+
+  .font-jetbrains-mono {
+    font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New", monospace !important;
   }
 
   /* Custom Scrollbar */
