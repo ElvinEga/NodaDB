@@ -41,6 +41,13 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { AddRowDialog } from "@/components/AddRowDialog";
 import { EditCellDialog } from "@/components/EditCellDialog";
 import { DataGeneratorDialog } from "@/components/DataGeneratorDialog";
@@ -48,7 +55,6 @@ import { ExportDataDialog } from "@/components/ExportDataDialog";
 import { BatchOperationsDialog } from "@/components/BatchOperationsDialog";
 import { TransactionHistoryPanel } from "@/components/TransactionHistoryPanel";
 import { ColumnHeaderContextMenu } from "@/components/ColumnHeaderContextMenu";
-import { CellContextMenu } from "@/components/CellContextMenu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
@@ -115,6 +121,11 @@ export function TanStackTableViewer({
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [contextMenuCell, setContextMenuCell] = useState<{
+    row: Record<string, any>;
+    columnName: string;
+    value: any;
+  } | null>(null);
 
   // Undo/Redo store
   const tableKey = `${connection.id}-${table.name}`;
@@ -545,36 +556,29 @@ Sum: ${stats.sum}`
 
           // Display mode with custom renderer
           return (
-            <CellContextMenu
-              row={row.original}
-              columnName={col.name}
-              cellValue={value}
-              tableName={table.name}
-              columnNames={tableColumns.map((c) => c.name)}
-              isPrimaryKey={col.is_primary_key}
-              canEdit={!col.is_primary_key}
-              onEdit={handleEditClick}
-              onSetNull={() => handleSetCellNull(row.original, col.name)}
-              onDuplicateRow={() => handleDuplicateRow(row.original)}
-              onDeleteRow={() => handleDeleteRow(row.original)}
-              onFilterByValue={() => handleFilterByValue(col.name, value)}
+            <div
+              className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-1 px-1 py-0.5 rounded h-full"
+              onDoubleClick={handleEditClick}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenuCell({
+                  row: row.original,
+                  columnName: col.name,
+                  value: value,
+                });
+              }}
             >
-              <div
-                className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-1 px-1 py-0.5 rounded"
-                onDoubleClick={handleEditClick}
-              >
-                <div className="flex-1 min-w-0">
-                  {getCellRenderer(col.data_type, value)}
-                </div>
-                <button
-                  onClick={handleEditClick}
-                  className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
-                  title="Click to edit"
-                >
-                  <Edit2 className="h-3 w-3 ml-1 shrink-0" />
-                </button>
+              <div className="flex-1 min-w-0">
+                {getCellRenderer(col.data_type, value)}
               </div>
-            </CellContextMenu>
+              <button
+                onClick={handleEditClick}
+                className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                title="Click to edit"
+              >
+                <Edit2 className="h-3 w-3 ml-1 shrink-0" />
+              </button>
+            </div>
           );
         },
         size: 270,
@@ -1159,16 +1163,20 @@ Sum: ${stats.sum}`
         </div>
 
         {/* Table with Virtual Scrolling */}
-        <div
-          ref={tableContainerRef}
-          className="flex-1 overflow-auto"
-          style={{ contain: "strict" }}
-        >
-          <div style={{ position: "relative" }}>
-            <table
-              className="w-full text-xs border-t border-l border-r border-border"
-              style={{ display: "grid" }}
+        <ContextMenu onOpenChange={(open) => {
+          if (!open) setContextMenuCell(null);
+        }}>
+          <ContextMenuTrigger asChild>
+            <div
+              ref={tableContainerRef}
+              className="flex-1 overflow-auto"
+              style={{ contain: "strict" }}
             >
+              <div style={{ position: "relative" }}>
+                <table
+                  className="w-full text-xs border-t border-l border-r border-border"
+                  style={{ display: "grid" }}
+                >
               {/* Sticky Header */}
               <thead
                 className="sticky top-0 z-10 bg-muted/30"
@@ -1349,6 +1357,49 @@ Sum: ${stats.sum}`
             </table>
           </div>
         </div>
+      </ContextMenuTrigger>
+      
+      {contextMenuCell && (
+        <ContextMenuContent>
+          <ContextMenuItem
+            onClick={() => {
+              const tableCol = tableColumns.find(c => c.name === contextMenuCell.columnName);
+              if (tableCol) {
+                setEditingCell({
+                  rowId: String(data.indexOf(contextMenuCell.row)),
+                  columnId: contextMenuCell.columnName,
+                  columnName: contextMenuCell.columnName,
+                  columnType: tableCol.data_type,
+                  currentValue: contextMenuCell.value,
+                });
+                setEditDialogOpen(true);
+              }
+            }}
+          >
+            <Edit2 className="h-3.5 w-3.5 mr-2" />
+            Edit Cell
+          </ContextMenuItem>
+          
+          <ContextMenuItem onClick={() => handleSetCellNull(contextMenuCell.row, contextMenuCell.columnName)}>
+            Set NULL
+          </ContextMenuItem>
+          
+          <ContextMenuItem onClick={() => handleFilterByValue(contextMenuCell.columnName, contextMenuCell.value)}>
+            Filter by Value
+          </ContextMenuItem>
+          
+          <ContextMenuSeparator />
+          
+          <ContextMenuItem onClick={() => handleDuplicateRow(contextMenuCell.row)}>
+            Duplicate Row
+          </ContextMenuItem>
+          
+          <ContextMenuItem onClick={() => handleDeleteRow(contextMenuCell.row)} className="text-destructive">
+            Delete Row
+          </ContextMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
 
         {/* Footer / Pagination */}
         <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
