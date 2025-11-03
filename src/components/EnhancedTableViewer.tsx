@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Loader2,
   Database,
@@ -12,9 +12,9 @@ import {
   ArrowDown,
   Edit2,
   Download,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { AddRowDialog } from '@/components/AddRowDialog';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AddRowDialog } from "@/components/AddRowDialog";
 import {
   Table,
   TableBody,
@@ -22,19 +22,27 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { DatabaseTable, QueryResult, TableColumn, ConnectionConfig } from '@/types';
-import { toast } from 'sonner';
-import { useMultiCellSelection } from '@/hooks/useMultiCellSelection';
-import { useCellClipboard } from '@/hooks/useCellClipboard';
+} from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DatabaseTable,
+  QueryResult,
+  TableColumn,
+  ConnectionConfig,
+} from "@/types";
+import { toast } from "sonner";
+import { useMultiCellSelection } from "@/hooks/useMultiCellSelection";
+import { useCellClipboard } from "@/hooks/useCellClipboard";
 
 interface EnhancedTableViewerProps {
   connection: ConnectionConfig;
   table: DatabaseTable;
 }
 
-export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerProps) {
+export function EnhancedTableViewer({
+  connection,
+  table,
+}: EnhancedTableViewerProps) {
   const [columns, setColumns] = useState<TableColumn[]>([]);
   const [data, setData] = useState<QueryResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,7 +66,7 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
 
   const loadTableStructure = async () => {
     try {
-      const result = await invoke<TableColumn[]>('get_table_structure', {
+      const result = await invoke<TableColumn[]>("get_table_structure", {
         connectionId: connection.id,
         tableName: table.name,
         dbType: connection.db_type,
@@ -66,7 +74,7 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
       setColumns(result);
     } catch (error) {
       toast.error(`Failed to load table structure: ${error}`);
-      console.error('Error loading table structure:', error);
+      console.error("Error loading table structure:", error);
     }
   };
 
@@ -76,14 +84,14 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
       const offset = (currentPage - 1) * rowsPerPage;
       const query = `SELECT * FROM ${table.name} LIMIT ${rowsPerPage} OFFSET ${offset}`;
 
-      const result = await invoke<QueryResult>('execute_query', {
+      const result = await invoke<QueryResult>("execute_query", {
         connectionId: connection.id,
         query,
       });
       setData(result);
     } catch (error) {
       toast.error(`Failed to load table data: ${error}`);
-      console.error('Error loading table data:', error);
+      console.error("Error loading table data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -119,16 +127,20 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
 
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) {
-      return 'NULL';
+      return "NULL";
     }
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       return JSON.stringify(value);
     }
     return String(value);
   };
 
   // Handle mouse down on cell - start selection
-  const handleCellMouseDown = (rowIndex: number, columnIndex: number, e: React.MouseEvent) => {
+  const handleCellMouseDown = (
+    rowIndex: number,
+    columnIndex: number,
+    e: React.MouseEvent
+  ) => {
     // Prevent text selection
     e.preventDefault();
 
@@ -156,8 +168,8 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
       }
     };
 
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
   }, [isSelecting, endSelection]);
 
   // Handle copy
@@ -191,7 +203,7 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
   // Handle paste
   const handlePaste = useCallback(async () => {
     if (!selectedRange || !data) {
-      toast.error('Select a cell to paste');
+      toast.error("Select a cell to paste");
       return;
     }
 
@@ -202,20 +214,20 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
     const bounds = getSelectionBounds();
     if (!bounds) return;
 
-    toast.info('Paste functionality requires bulk update - coming soon');
+    toast.info("Paste functionality requires bulk update - coming soon");
     // TODO: Implement bulk paste with validation and update
   }, [selectedRange, data, pasteCells, getSelectionBounds]);
 
   // Handle fill down
   const handleFillDown = useCallback(async () => {
     if (!selectedRange || !data) {
-      toast.error('Select cells to fill down');
+      toast.error("Select cells to fill down");
       return;
     }
 
     const bounds = getSelectionBounds();
     if (!bounds || bounds.rowCount <= 1) {
-      toast.error('Select multiple rows to fill down');
+      toast.error("Select multiple rows to fill down");
       return;
     }
 
@@ -226,14 +238,14 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
       firstRowValues.push(data.rows[bounds.minRow][columnName]);
     }
 
-    toast.info('Fill down functionality requires bulk update - coming soon');
+    toast.info("Fill down functionality requires bulk update - coming soon");
     // TODO: Implement fill down with validation and update
   }, [selectedRange, data, getSelectionBounds]);
 
   // Handle bulk edit
   const handleBulkEdit = useCallback(async () => {
     if (!selectedRange || !data) {
-      toast.error('Select cells to edit');
+      toast.error("Select cells to edit");
       return;
     }
 
@@ -247,7 +259,7 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
   // Handle export selection
   const handleExportSelection = useCallback(() => {
     if (!selectedRange || !data) {
-      toast.error('Select cells to export');
+      toast.error("Select cells to export");
       return;
     }
 
@@ -270,38 +282,42 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
       selectedData.push(rowData);
     }
 
-    exportAsCSV(selectedData, selectedColumnNames, `${table.name}_selection.csv`);
+    exportAsCSV(
+      selectedData,
+      selectedColumnNames,
+      `${table.name}_selection.csv`
+    );
   }, [selectedRange, data, getSelectionBounds, exportAsCSV, table.name]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Copy: Ctrl+C or Cmd+C
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         e.preventDefault();
         handleCopy();
       }
 
       // Paste: Ctrl+V or Cmd+V
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
         handlePaste();
       }
 
       // Clear selection: Escape
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         clearSelection();
       }
 
       // Fill down: Ctrl+D or Cmd+D
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
         e.preventDefault();
         handleFillDown();
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleCopy, handlePaste, handleFillDown, clearSelection]);
 
   const bounds = getSelectionBounds();
@@ -395,7 +411,9 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
             disabled={isLoading}
             className="h-8 w-8 p-0"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+            />
           </Button>
           <Button
             size="sm"
@@ -413,7 +431,9 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
         <div className="flex-1 flex items-center justify-center bg-background">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
-            <p className="text-sm text-muted-foreground">Loading table data...</p>
+            <p className="text-sm text-muted-foreground">
+              Loading table data...
+            </p>
           </div>
         </div>
       ) : !data || data.rows.length === 0 ? (
@@ -421,7 +441,9 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
           <div className="text-center">
             <Database className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
             <p className="text-sm font-medium mb-1">No data in this table</p>
-            <p className="text-xs text-muted-foreground mb-4">Add a row to get started</p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Add a row to get started
+            </p>
             <Button size="sm" onClick={() => setAddRowDialogOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Add Row
@@ -435,14 +457,18 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
               <Table>
                 <TableHeader className="sticky top-0 bg-secondary z-10">
                   <TableRow className="border-border hover:bg-transparent">
-                    <TableHead className="w-16 h-9 text-center text-xs font-normal">#</TableHead>
+                    <TableHead className="w-16 h-9 text-center text-xs font-normal">
+                      #
+                    </TableHead>
                     {data.columns.map((column) => {
                       const columnInfo = columns.find((c) => c.name === column);
 
                       return (
                         <TableHead key={column} className="h-9">
                           <div className="flex flex-col gap-1">
-                            <span className="font-normal text-xs">{column}</span>
+                            <span className="font-normal text-xs">
+                              {column}
+                            </span>
                             {columnInfo && (
                               <span className="text-[10px] text-muted-foreground">
                                 {columnInfo.data_type}
@@ -460,7 +486,7 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
                       key={rowIndex}
                       className={`
                         border-border transition-colors
-                        ${rowIndex % 2 === 0 ? 'bg-background' : 'bg-muted/10'}
+                        ${rowIndex % 2 === 0 ? "bg-background" : "bg-muted/10"}
                       `}
                     >
                       <TableCell className="h-9 text-center text-muted-foreground font-mono text-[11px]">
@@ -469,22 +495,35 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
                       {data.columns.map((column, columnIndex) => {
                         const value = row[column];
                         const isNull = value === null || value === undefined;
-                        const isSelected = isCellSelected(rowIndex, columnIndex);
+                        const isSelected = isCellSelected(
+                          rowIndex,
+                          columnIndex
+                        );
 
                         return (
                           <TableCell
                             key={column}
                             className={`
                               h-9 text-xs cursor-cell select-none
-                              ${isNull ? 'italic text-muted-foreground' : ''}
-                              ${isSelected ? 'bg-primary/20 ring-1 ring-primary ring-inset' : ''}
+                              ${isNull ? "italic text-muted-foreground" : ""}
+                              ${
+                                isSelected
+                                  ? "bg-primary/20 ring-1 ring-primary ring-inset"
+                                  : ""
+                              }
                             `}
-                            onMouseDown={(e) => handleCellMouseDown(rowIndex, columnIndex, e)}
-                            onMouseEnter={() => handleCellMouseEnter(rowIndex, columnIndex)}
+                            onMouseDown={(e) =>
+                              handleCellMouseDown(rowIndex, columnIndex, e)
+                            }
+                            onMouseEnter={() =>
+                              handleCellMouseEnter(rowIndex, columnIndex)
+                            }
                           >
                             <div className="max-w-xs truncate px-1 py-0.5">
                               {isNull ? (
-                                <span className="text-muted-foreground/70">NULL</span>
+                                <span className="text-muted-foreground/70">
+                                  NULL
+                                </span>
                               ) : (
                                 formatValue(value)
                               )}
@@ -502,8 +541,15 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
           {/* Pagination Bar */}
           <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
             <div className="text-xs text-muted-foreground font-mono">
-              Showing <span className="text-foreground font-semibold">{(currentPage - 1) * rowsPerPage + 1}</span> to{' '}
-              <span className="text-foreground font-semibold">{(currentPage - 1) * rowsPerPage + data.rows.length}</span> rows
+              Showing{" "}
+              <span className="text-foreground font-semibold">
+                {(currentPage - 1) * rowsPerPage + 1}
+              </span>{" "}
+              to{" "}
+              <span className="text-foreground font-semibold">
+                {(currentPage - 1) * rowsPerPage + data.rows.length}
+              </span>{" "}
+              rows
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -518,7 +564,9 @@ export function EnhancedTableViewer({ connection, table }: EnhancedTableViewerPr
               </Button>
               <div className="flex items-center gap-1 px-3 py-1 rounded bg-secondary border border-border">
                 <span className="text-xs text-muted-foreground">Page</span>
-                <span className="text-xs font-semibold font-mono">{currentPage}</span>
+                <span className="text-xs font-semibold font-mono">
+                  {currentPage}
+                </span>
               </div>
               <Button
                 variant="outline"
