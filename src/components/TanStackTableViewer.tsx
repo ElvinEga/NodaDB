@@ -128,6 +128,11 @@ export function TanStackTableViewer({
   });
   const [executionTime, setExecutionTime] = useState(0);
   const [rowCount, setRowCount] = useState(0);
+  
+  // Update page size when settings change
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, pageSize: defaultPageSize }));
+  }, [defaultPageSize]);
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
     columnId: string;
