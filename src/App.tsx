@@ -18,7 +18,7 @@ import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { AppSidebar } from "@/components/AppSidebar";
-import { TanStackTableViewer } from "@/components/TanStackTableViewer";
+import { OptimizedTableViewer } from "@/components/OptimizedTableViewer";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
@@ -36,6 +36,7 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { TanStackTableViewer } from "./components/TanStackTableViewer";
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -473,6 +474,10 @@ function App() {
                         activeTab.columns === undefined ? (
                           <TableSkeleton />
                         ) : (
+                          // <OptimizedTableViewer
+                          //   connection={activeConnection}
+                          //   table={activeTab.table}
+                          // />
                           <TanStackTableViewer
                             connection={activeConnection}
                             table={activeTab.table}
@@ -597,7 +602,7 @@ function App() {
                     </div>
                   </button>
                 ))}
-                
+
                 {/* Add New Connection Card */}
                 <button
                   onClick={() => setConnectionDialogOpen(true)}
@@ -608,7 +613,9 @@ function App() {
                       <Plus className="h-6 w-6 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold mb-1">Add New Connection</div>
+                      <div className="font-semibold mb-1">
+                        Add New Connection
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         Connect to a new database
                       </div>
