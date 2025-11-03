@@ -74,7 +74,7 @@ import {
   generateDuplicateSql,
   calculateColumnStats,
 } from "@/lib/tableOperations";
-import { buildSelectQuery } from "@/lib/sqlUtils";
+import { buildSelectQuery, buildCountQuery } from "@/lib/sqlUtils";
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -98,6 +98,7 @@ export function TanStackTableViewer({
   const [globalFilter, setGlobalFilter] = useState("");
   const pageSize = 50;
   const [executionTime, setExecutionTime] = useState(0);
+  const [rowCount, setRowCount] = useState(0);
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
     columnId: string;
@@ -129,26 +130,57 @@ export function TanStackTableViewer({
     return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
   };
 
-  // Load table data
-  const loadData = async () => {
+  // Load table data with server-side operations
+  const loadData = async (pageIndex?: number, pageSizeValue?: number) => {
     setIsLoading(true);
     const startTime = Date.now();
 
     try {
-      // Build proper query with schema qualification and identifier quoting
-      const query = buildSelectQuery(
-        table.name,
-        table.schema,
-        connection.db_type,
-        1000
-      );
+      // Use provided values or get from table state
+      const currentPageIndex = pageIndex !== undefined ? pageIndex : 0;
+      const currentPageSize =
+        pageSizeValue !== undefined ? pageSizeValue : pageSize;
 
-      const result = await invoke<QueryResult>("execute_query", {
-        connectionId: connection.id,
-        query: query,
+      // Build dynamic query with sorting, filtering, and pagination
+      const query = buildSelectQuery({
+        tableName: table.name,
+        schema: table.schema,
+        dbType: connection.db_type,
+        limit: currentPageSize,
+        offset: currentPageIndex * currentPageSize,
+        sorting: sorting,
+        filters: columnFilters,
+        globalFilter: globalFilter,
+        columns: tableColumns.map((col) => col.name),
       });
 
+      // Build count query to get total row count
+      const countQuery = buildCountQuery({
+        tableName: table.name,
+        schema: table.schema,
+        dbType: connection.db_type,
+        filters: columnFilters,
+        globalFilter: globalFilter,
+        columns: tableColumns.map((col) => col.name),
+      });
+
+      // Execute both queries in parallel
+      const [result, countResult] = await Promise.all([
+        invoke<QueryResult>("execute_query", {
+          connectionId: connection.id,
+          query: query,
+        }),
+        invoke<QueryResult>("execute_query", {
+          connectionId: connection.id,
+          query: countQuery,
+        }),
+      ]);
+
       setData(result.rows);
+      // Set total row count for pagination
+      const totalCount = countResult.rows[0]?.count || 0;
+      setRowCount(totalCount);
+
       setExecutionTime(Date.now() - startTime);
     } catch (error) {
       toast.error(`Failed to load data: ${error}`);
@@ -158,6 +190,7 @@ export function TanStackTableViewer({
     }
   };
 
+  // Initial data load
   useEffect(() => {
     loadData();
   }, [connection.id, table.name]);
@@ -566,6 +599,10 @@ Sum: ${stats.sum}`
     onGlobalFilterChange: setGlobalFilter,
     columnResizeMode: "onChange",
     enableColumnResizing: true,
+    // Enable manual modes for server-side operations
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
     state: {
       sorting,
       columnFilters,
@@ -578,7 +615,24 @@ Sum: ${stats.sum}`
         pageSize,
       },
     },
+    // Set row count for pagination
+    rowCount: rowCount,
   });
+
+  // Refetch data when sorting, filtering, or global search changes
+  useEffect(() => {
+    const { pageIndex, pageSize } = tableInstance.getState().pagination;
+    loadData(pageIndex, pageSize);
+  }, [sorting, columnFilters, globalFilter]);
+
+  // Refetch data when page changes
+  useEffect(() => {
+    const { pageIndex, pageSize } = tableInstance.getState().pagination;
+    loadData(pageIndex, pageSize);
+  }, [
+    tableInstance.getState().pagination.pageIndex,
+    tableInstance.getState().pagination.pageSize,
+  ]);
 
   const selectedRows = tableInstance.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
