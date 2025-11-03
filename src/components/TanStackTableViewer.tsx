@@ -189,7 +189,7 @@ export function TanStackTableViewer({
 
       setData(result.rows);
       // Set total row count for pagination
-      const totalCount = countResult.rows[0]?.count || 0;
+      const totalCount = Number(countResult.rows[0]?.count) || 0;
       setRowCount(totalCount);
 
       setExecutionTime(Date.now() - startTime);
@@ -1163,9 +1163,11 @@ Sum: ${stats.sum}`
         </div>
 
         {/* Table with Virtual Scrolling */}
-        <ContextMenu onOpenChange={(open) => {
-          if (!open) setContextMenuCell(null);
-        }}>
+        <ContextMenu
+          onOpenChange={(open) => {
+            if (!open) setContextMenuCell(null);
+          }}
+        >
           <ContextMenuTrigger asChild>
             <div
               ref={tableContainerRef}
@@ -1177,43 +1179,43 @@ Sum: ${stats.sum}`
                   className="w-full text-xs border-t border-l border-r border-border"
                   style={{ display: "grid" }}
                 >
-              {/* Sticky Header */}
-              <thead
-                className="sticky top-0 z-10 bg-muted/30"
-                style={{ display: "grid", position: "sticky", top: 0 }}
-              >
-                {tableInstance.getHeaderGroups().map((headerGroup: any) => (
-                  <tr
-                    key={headerGroup.id}
-                    className="border-b border-border"
-                    style={{ display: "flex", width: "100%" }}
+                  {/* Sticky Header */}
+                  <thead
+                    className="sticky top-0 z-10 bg-muted/30"
+                    style={{ display: "grid", position: "sticky", top: 0 }}
                   >
-                    {headerGroup.headers.map((header: any) => {
-                      return (
-                        <th
-                          key={header.id}
-                          className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
-                          style={{
-                            width: header.getSize(),
-                            display: "flex",
-                            alignItems: "start",
-                          }}
-                        >
-                          <div className="flex-1 pt-0">
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </div>
+                    {tableInstance.getHeaderGroups().map((headerGroup: any) => (
+                      <tr
+                        key={headerGroup.id}
+                        className="border-b border-border"
+                        style={{ display: "flex", width: "100%" }}
+                      >
+                        {headerGroup.headers.map((header: any) => {
+                          return (
+                            <th
+                              key={header.id}
+                              className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
+                              style={{
+                                width: header.getSize(),
+                                display: "flex",
+                                alignItems: "start",
+                              }}
+                            >
+                              <div className="flex-1 pt-0">
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(
+                                      header.column.columnDef.header,
+                                      header.getContext()
+                                    )}
+                              </div>
 
-                          {/* Column Resize Handle */}
-                          {header.column.getCanResize() && (
-                            <div
-                              onMouseDown={header.getResizeHandler()}
-                              onTouchStart={header.getResizeHandler()}
-                              className={`
+                              {/* Column Resize Handle */}
+                              {header.column.getCanResize() && (
+                                <div
+                                  onMouseDown={header.getResizeHandler()}
+                                  onTouchStart={header.getResizeHandler()}
+                                  className={`
                               absolute right-0 top-0 h-full w-1 cursor-col-resize
                               opacity-0 group-hover:opacity-100
                               hover:bg-primary/50
@@ -1223,104 +1225,105 @@ Sum: ${stats.sum}`
                                   : ""
                               }
                             `}
-                            >
-                              <GripVertical className="h-3 w-3 absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                            </div>
-                          )}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </thead>
+                                >
+                                  <GripVertical className="h-3 w-3 absolute right-0 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                </div>
+                              )}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </thead>
 
-              {/* Virtual Body */}
-              <tbody
-                style={{
-                  display: "grid",
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  position: "relative",
-                  willChange: "transform",
-                }}
-              >
-                {isLoading ? (
-                  Array.from({ length: 10 }).map((_, index) => (
-                    <tr
-                      key={`skeleton-${index}`}
-                      style={{
-                        display: "flex",
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${36}px`,
-                        transform: `translateY(${index * 36}px)`,
-                      }}
-                      className="border-b border-r border-l border-border"
-                    >
-                      {tableInstance.getAllColumns().map((column) => (
-                        <td
-                          key={column.id}
-                          style={{
-                            display: "flex",
-                            width: column.getSize(),
-                            padding: "6px 12px",
-                            alignItems: "center",
-                          }}
-                          className="border-r border-border"
-                        >
-                          <Skeleton className="h-4 w-full" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : rows.length === 0 ? (
-                  <tr
-                    className="absolute top-0 left-0 w-full"
+                  {/* Virtual Body */}
+                  <tbody
                     style={{
-                      display: "flex",
-                      minHeight: "400px",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      display: "grid",
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      position: "relative",
+                      willChange: "transform",
                     }}
                   >
-                    <td colSpan={columns.length} className="w-full">
-                      <Empty>
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <Database />
-                          </EmptyMedia>
-                          <EmptyTitle>No data</EmptyTitle>
-                          <EmptyDescription>
-                            This table is empty. Add some data to get started.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <Button onClick={() => setAddRowDialogOpen(true)}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Row
-                          </Button>
-                        </EmptyContent>
-                      </Empty>
-                    </td>
-                  </tr>
-                ) : (
-                  rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    return (
+                    {isLoading ? (
+                      Array.from({ length: 10 }).map((_, index) => (
+                        <tr
+                          key={`skeleton-${index}`}
+                          style={{
+                            display: "flex",
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: `${36}px`,
+                            transform: `translateY(${index * 36}px)`,
+                          }}
+                          className="border-b border-r border-l border-border"
+                        >
+                          {tableInstance.getAllColumns().map((column) => (
+                            <td
+                              key={column.id}
+                              style={{
+                                display: "flex",
+                                width: column.getSize(),
+                                padding: "6px 12px",
+                                alignItems: "center",
+                              }}
+                              className="border-r border-border"
+                            >
+                              <Skeleton className="h-4 w-full" />
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : rows.length === 0 ? (
                       <tr
-                        key={row.id}
-                        data-state={
-                          row.getIsSelected() ? "selected" : undefined
-                        }
+                        className="absolute top-0 left-0 w-full"
                         style={{
                           display: "flex",
-                          position: "absolute",
-                          transform: `translate3d(0, ${virtualRow.start}px, 0)`,
-                          width: "100%",
-                          willChange: "transform",
+                          minHeight: "400px",
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
-                        className={`
+                      >
+                        <td colSpan={columns.length} className="w-full">
+                          <Empty>
+                            <EmptyHeader>
+                              <EmptyMedia variant="icon">
+                                <Database />
+                              </EmptyMedia>
+                              <EmptyTitle>No data</EmptyTitle>
+                              <EmptyDescription>
+                                This table is empty. Add some data to get
+                                started.
+                              </EmptyDescription>
+                            </EmptyHeader>
+                            <EmptyContent>
+                              <Button onClick={() => setAddRowDialogOpen(true)}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Row
+                              </Button>
+                            </EmptyContent>
+                          </Empty>
+                        </td>
+                      </tr>
+                    ) : (
+                      rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = rows[virtualRow.index];
+                        return (
+                          <tr
+                            key={row.id}
+                            data-state={
+                              row.getIsSelected() ? "selected" : undefined
+                            }
+                            style={{
+                              display: "flex",
+                              position: "absolute",
+                              transform: `translate3d(0, ${virtualRow.start}px, 0)`,
+                              width: "100%",
+                              willChange: "transform",
+                            }}
+                            className={`
                         h-9 border-b border-r border-l border-border transition-colors
                         ${
                           virtualRow.index % 2 === 0
@@ -1330,76 +1333,97 @@ Sum: ${stats.sum}`
                         hover:bg-accent/50
                         data-[state=selected]:bg-primary/5 data-[state=selected]:border-l-2 data-[state=selected]:border-l-primary
                       `}
-                      >
-                        {row.getVisibleCells().map((cell: any) => (
-                          <td
-                            key={cell.id}
-                            className="px-3 py-1 flex items-center text-xs border-r border-border"
-                            style={{
-                              width: cell.column.getSize(),
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: cell.column.getSize(),
-                            }}
                           >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </ContextMenuTrigger>
-      
-      {contextMenuCell && (
-        <ContextMenuContent>
-          <ContextMenuItem
-            onClick={() => {
-              const tableCol = tableColumns.find(c => c.name === contextMenuCell.columnName);
-              if (tableCol) {
-                setEditingCell({
-                  rowId: String(data.indexOf(contextMenuCell.row)),
-                  columnId: contextMenuCell.columnName,
-                  columnName: contextMenuCell.columnName,
-                  columnType: tableCol.data_type,
-                  currentValue: contextMenuCell.value,
-                });
-                setEditDialogOpen(true);
-              }
-            }}
-          >
-            <Edit2 className="h-3.5 w-3.5 mr-2" />
-            Edit Cell
-          </ContextMenuItem>
-          
-          <ContextMenuItem onClick={() => handleSetCellNull(contextMenuCell.row, contextMenuCell.columnName)}>
-            Set NULL
-          </ContextMenuItem>
-          
-          <ContextMenuItem onClick={() => handleFilterByValue(contextMenuCell.columnName, contextMenuCell.value)}>
-            Filter by Value
-          </ContextMenuItem>
-          
-          <ContextMenuSeparator />
-          
-          <ContextMenuItem onClick={() => handleDuplicateRow(contextMenuCell.row)}>
-            Duplicate Row
-          </ContextMenuItem>
-          
-          <ContextMenuItem onClick={() => handleDeleteRow(contextMenuCell.row)} className="text-destructive">
-            Delete Row
-          </ContextMenuItem>
-        </ContextMenuContent>
-      )}
-    </ContextMenu>
+                            {row.getVisibleCells().map((cell: any) => (
+                              <td
+                                key={cell.id}
+                                className="px-3 py-1 flex items-center text-xs border-r border-border"
+                                style={{
+                                  width: cell.column.getSize(),
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  maxWidth: cell.column.getSize(),
+                                }}
+                              >
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext()
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </ContextMenuTrigger>
+
+          {contextMenuCell && (
+            <ContextMenuContent>
+              <ContextMenuItem
+                onClick={() => {
+                  const tableCol = tableColumns.find(
+                    (c) => c.name === contextMenuCell.columnName
+                  );
+                  if (tableCol) {
+                    setEditingCell({
+                      rowId: String(data.indexOf(contextMenuCell.row)),
+                      columnId: contextMenuCell.columnName,
+                      columnName: contextMenuCell.columnName,
+                      columnType: tableCol.data_type,
+                      currentValue: contextMenuCell.value,
+                    });
+                    setEditDialogOpen(true);
+                  }
+                }}
+              >
+                <Edit2 className="h-3.5 w-3.5 mr-2" />
+                Edit Cell
+              </ContextMenuItem>
+
+              <ContextMenuItem
+                onClick={() =>
+                  handleSetCellNull(
+                    contextMenuCell.row,
+                    contextMenuCell.columnName
+                  )
+                }
+              >
+                Set NULL
+              </ContextMenuItem>
+
+              <ContextMenuItem
+                onClick={() =>
+                  handleFilterByValue(
+                    contextMenuCell.columnName,
+                    contextMenuCell.value
+                  )
+                }
+              >
+                Filter by Value
+              </ContextMenuItem>
+
+              <ContextMenuSeparator />
+
+              <ContextMenuItem
+                onClick={() => handleDuplicateRow(contextMenuCell.row)}
+              >
+                Duplicate Row
+              </ContextMenuItem>
+
+              <ContextMenuItem
+                onClick={() => handleDeleteRow(contextMenuCell.row)}
+                className="text-destructive"
+              >
+                Delete Row
+              </ContextMenuItem>
+            </ContextMenuContent>
+          )}
+        </ContextMenu>
 
         {/* Footer / Pagination */}
         <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
