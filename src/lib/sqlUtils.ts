@@ -232,7 +232,8 @@ export function buildCountQuery(options: {
     dbType
   );
 
-  return `SELECT COUNT(*) as count FROM ${qualifiedTable}${whereClause}`;
+  // Use COUNT(1) which is more reliable across databases
+  return `SELECT COUNT(1) as count FROM ${qualifiedTable}${whereClause}`;
 }
 
 /**

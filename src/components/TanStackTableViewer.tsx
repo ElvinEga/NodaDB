@@ -10,6 +10,7 @@ import {
   ColumnFiltersState,
   VisibilityState,
   ColumnSizingState,
+  PaginationState,
   flexRender,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -35,6 +36,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -65,6 +82,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { useUndoRedoStore } from "@/stores/undoRedoStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 import {
   ConnectionConfig,
@@ -94,6 +112,8 @@ export function TanStackTableViewer({
   table,
   columns: tableColumns,
 }: TanStackTableViewerProps) {
+  const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
+  
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -102,7 +122,10 @@ export function TanStackTableViewer({
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [rowSelection, setRowSelection] = useState({});
   const [globalFilter, setGlobalFilter] = useState("");
-  const pageSize = 50;
+  const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: defaultPageSize,
+  });
   const [executionTime, setExecutionTime] = useState(0);
   const [rowCount, setRowCount] = useState(0);
   const [editingCell, setEditingCell] = useState<{
@@ -153,11 +176,12 @@ export function TanStackTableViewer({
         pageSizeValue !== undefined ? pageSizeValue : pageSize;
 
       // Build dynamic query with sorting, filtering, and pagination
+      // Fetch one extra row to detect if there are more pages
       const query = buildSelectQuery({
         tableName: table.name,
         schema: table.schema,
         dbType: connection.db_type,
-        limit: currentPageSize,
+        limit: currentPageSize + 1,
         offset: currentPageIndex * currentPageSize,
         sorting: sorting,
         filters: columnFilters,
@@ -165,32 +189,38 @@ export function TanStackTableViewer({
         columns: tableColumns.map((col) => col.name),
       });
 
-      // Build count query to get total row count
-      const countQuery = buildCountQuery({
-        tableName: table.name,
-        schema: table.schema,
-        dbType: connection.db_type,
-        filters: columnFilters,
-        globalFilter: globalFilter,
-        columns: tableColumns.map((col) => col.name),
+      console.log('SQL Query:', query);
+
+      // Execute query
+      const result = await invoke<QueryResult>("execute_query", {
+        connectionId: connection.id,
+        query: query,
       });
 
-      // Execute both queries in parallel
-      const [result, countResult] = await Promise.all([
-        invoke<QueryResult>("execute_query", {
-          connectionId: connection.id,
-          query: query,
-        }),
-        invoke<QueryResult>("execute_query", {
-          connectionId: connection.id,
-          query: countQuery,
-        }),
-      ]);
-
-      setData(result.rows);
-      // Set total row count for pagination
-      const totalCount = Number(countResult.rows[0]?.count) || 0;
-      setRowCount(totalCount);
+      // Check if we got more rows than requested (means there are more pages)
+      const hasNextPage = result.rows.length > currentPageSize;
+      const displayRows = hasNextPage ? result.rows.slice(0, currentPageSize) : result.rows;
+      
+      setData(displayRows);
+      
+      // Estimate total count based on what we know
+      // If we have a next page, we know there are at least (currentPageIndex + 2) * pageSize rows
+      // Otherwise, we know the exact count
+      const estimatedTotal = hasNextPage 
+        ? (currentPageIndex + 2) * currentPageSize  // At least this many
+        : (currentPageIndex * currentPageSize) + displayRows.length;  // Exact count
+      
+      setRowCount(estimatedTotal);
+      
+      console.log('Pagination Debug:', {
+        loadedRows: result.rows.length,
+        displayRows: displayRows.length,
+        hasNextPage,
+        estimatedTotal,
+        pageSize: currentPageSize,
+        pageIndex: currentPageIndex,
+        pageCount: hasNextPage ? currentPageIndex + 2 : currentPageIndex + 1,
+      });
 
       setExecutionTime(Date.now() - startTime);
     } catch (error) {
@@ -201,10 +231,10 @@ export function TanStackTableViewer({
     }
   };
 
-  // Initial data load
+  // Initial data load and reload on pagination/filter/sort changes
   useEffect(() => {
-    loadData();
-  }, [connection.id, table.name]);
+    loadData(pageIndex, pageSize);
+  }, [connection.id, table.name, pageIndex, pageSize, sorting, columnFilters, globalFilter]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -591,8 +621,8 @@ Sum: ${stats.sum}`
   const tableInstance = useReactTable({
     data,
     columns,
+    pageCount: rowCount > 0 ? Math.ceil(rowCount / pageSize) : -1,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
@@ -601,9 +631,9 @@ Sum: ${stats.sum}`
     onColumnSizingChange: setColumnSizing,
     onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     columnResizeMode: "onChange",
     enableColumnResizing: true,
-    // Enable manual modes for server-side operations
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,
@@ -614,29 +644,9 @@ Sum: ${stats.sum}`
       columnSizing,
       rowSelection,
       globalFilter,
-      pagination: {
-        pageIndex: 0,
-        pageSize,
-      },
+      pagination: { pageIndex, pageSize },
     },
-    // Set row count for pagination
-    rowCount: rowCount,
   });
-
-  // Refetch data when sorting, filtering, or global search changes
-  useEffect(() => {
-    const { pageIndex, pageSize } = tableInstance.getState().pagination;
-    loadData(pageIndex, pageSize);
-  }, [sorting, columnFilters, globalFilter]);
-
-  // Refetch data when page changes
-  useEffect(() => {
-    const { pageIndex, pageSize } = tableInstance.getState().pagination;
-    loadData(pageIndex, pageSize);
-  }, [
-    tableInstance.getState().pagination.pageIndex,
-    tableInstance.getState().pagination.pageSize,
-  ]);
 
   const selectedRows = tableInstance.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
@@ -1426,8 +1436,8 @@ Sum: ${stats.sum}`
         </ContextMenu>
 
         {/* Footer / Pagination */}
-        <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
-          <div className="flex items-center gap-4">
+        <div className="h-14 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4">
+          <div className="flex items-center gap-4 flex-shrink-0">
             <Button
               variant="ghost"
               size="sm"
@@ -1446,39 +1456,129 @@ Sum: ${stats.sum}`
               <History className="h-3.5 w-3.5 mr-1.5" />
               History
             </Button>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
               Query Duration:{" "}
               <span className="font-mono">{executionTime}ms</span>
             </span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              Showing {data.length} of {rowCount.toLocaleString()} rows
+              {rowCount > 0 && ` (${Math.ceil(rowCount / pageSize)} pages)`}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => tableInstance.previousPage()}
-                disabled={!tableInstance.getCanPreviousPage()}
-                className="h-8 w-8 p-0"
-              >
-                ←
-              </Button>
-              <span className="text-xs text-muted-foreground font-mono">
-                {pageSize}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => tableInstance.nextPage()}
-                disabled={!tableInstance.getCanNextPage()}
-                className="h-8 w-8 p-0"
-              >
-                →
-              </Button>
-            </div>
-            <span className="text-xs text-muted-foreground font-mono">
-              {tableInstance.getState().pagination.pageIndex}
-            </span>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Select
+              value={`${pageSize}`}
+              onValueChange={(value) => {
+                tableInstance.setPageSize(Number(value));
+              }}
+            >
+              <SelectTrigger className="h-8 w-[100px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {[10, 20, 50, 100].map((size) => (
+                  <SelectItem key={size} value={`${size}`}>
+                    {size} rows
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() => {
+                      if (pageIndex > 0) {
+                        tableInstance.previousPage();
+                      }
+                    }}
+                    className={pageIndex === 0 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+
+                {/* First page */}
+                {pageIndex > 1 && (
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => tableInstance.setPageIndex(0)}
+                      className="cursor-pointer"
+                    >
+                      1
+                    </PaginationLink>
+                  </PaginationItem>
+                )}
+
+                {/* Ellipsis before current */}
+                {pageIndex > 2 && (
+                  <PaginationItem>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                )}
+
+                {/* Previous page */}
+                {pageIndex > 0 && (
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => tableInstance.previousPage()}
+                      className="cursor-pointer"
+                    >
+                      {pageIndex}
+                    </PaginationLink>
+                  </PaginationItem>
+                )}
+
+                {/* Current page */}
+                <PaginationItem>
+                  <PaginationLink isActive className="cursor-default">
+                    {pageIndex + 1}
+                  </PaginationLink>
+                </PaginationItem>
+
+                {/* Next page */}
+                {pageIndex < tableInstance.getPageCount() - 1 && (
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => tableInstance.nextPage()}
+                      className="cursor-pointer"
+                    >
+                      {pageIndex + 2}
+                    </PaginationLink>
+                  </PaginationItem>
+                )}
+
+                {/* Ellipsis after current */}
+                {pageIndex < tableInstance.getPageCount() - 3 && (
+                  <PaginationItem>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                )}
+
+                {/* Last page */}
+                {pageIndex < tableInstance.getPageCount() - 2 && (
+                  <PaginationItem>
+                    <PaginationLink
+                      onClick={() => tableInstance.setPageIndex(tableInstance.getPageCount() - 1)}
+                      className="cursor-pointer"
+                    >
+                      {tableInstance.getPageCount()}
+                    </PaginationLink>
+                  </PaginationItem>
+                )}
+
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() => {
+                      if (pageIndex < Math.ceil(rowCount / pageSize) - 1) {
+                        tableInstance.nextPage();
+                      }
+                    }}
+                    className={pageIndex >= Math.ceil(rowCount / pageSize) - 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </div>
 
