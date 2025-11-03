@@ -7,6 +7,8 @@ export interface TableHeader {
 export interface TableRow {
   raw: Record<string, any>;
   change?: Record<string, any>;
+  isNewRow?: boolean;
+  isRemoved?: boolean;
 }
 
 type ChangeCallback = () => void;
@@ -18,6 +20,7 @@ export class TableState {
   private selection: { y1: number; x1: number; y2: number; x2: number } | null = null;
   private columnWidths: number[];
   private editMode: { y: number; x: number } | null = null;
+  private changedRows: Map<number, TableRow> = new Map();
 
   private changeListeners: Set<ChangeCallback> = new Set();
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -79,11 +82,13 @@ export class TableState {
         delete row.change[headerName];
         if (Object.keys(row.change).length === 0) {
           delete row.change;
+          this.changedRows.delete(y);
         }
       }
     } else {
       if (!row.change) row.change = {};
       row.change[headerName] = newValue;
+      this.changedRows.set(y, row);
     }
 
     this.broadcastChange();
@@ -106,6 +111,67 @@ export class TableState {
     const newX = Math.max(0, Math.min(this.getHeaders().length - 1, this.focus.x + dx));
     
     this.setFocus(newY, newX);
+  };
+
+  insertNewRow = (index: number) => {
+    const newRow: TableRow = {
+      isNewRow: true,
+      raw: {},
+      change: {},
+    };
+    this.data.splice(index, 0, newRow);
+    this.changedRows.set(index, newRow);
+    this.broadcastChange(true);
+  };
+  
+  removeRow = (index: number) => {
+    const row = this.data[index];
+    if (row) {
+      if (row.isNewRow) {
+        this.data.splice(index, 1);
+        this.changedRows.delete(index);
+      } else {
+        row.isRemoved = true;
+        this.changedRows.set(index, row);
+      }
+      this.broadcastChange(true);
+    }
+  };
+
+  getChangedRows = (): { index: number, row: TableRow }[] => {
+    return Array.from(this.changedRows.entries()).map(([index, row]) => ({ index, row }));
+  };
+
+  getChangeCount = (): number => {
+    return this.changedRows.size;
+  };
+
+  applyChanges = (updatedData: { index: number, newRaw: Record<string, any> }[]) => {
+    updatedData.forEach(({ index, newRaw }) => {
+      const row = this.data[index];
+      if (row) {
+        row.raw = newRaw;
+        delete row.change;
+        delete row.isNewRow;
+      }
+    });
+
+    this.data = this.data.filter(row => !row.isRemoved);
+    
+    this.changedRows.clear();
+    this.broadcastChange(true);
+  };
+
+  discardChanges = () => {
+    this.data = this.data.filter(row => !row.isNewRow);
+    
+    this.data.forEach(row => {
+      delete row.change;
+      delete row.isRemoved;
+    });
+
+    this.changedRows.clear();
+    this.broadcastChange(true);
   };
 
   getFocus = () => this.focus;
