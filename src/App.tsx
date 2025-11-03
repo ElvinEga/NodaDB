@@ -560,8 +560,17 @@ function App() {
                 {connections.map((conn) => (
                   <button
                     key={conn.id}
-                    onClick={() => {
-                      setActiveConnection(conn.id);
+                    onClick={async () => {
+                      try {
+                        // Reconnect to the database
+                        await invoke("connect_database", {
+                          config: conn,
+                        });
+                        setActiveConnection(conn.id);
+                      } catch (error) {
+                        console.error("Failed to connect:", error);
+                        alert(`Failed to connect to ${conn.name}: ${error}`);
+                      }
                     }}
                     className="text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
                   >
