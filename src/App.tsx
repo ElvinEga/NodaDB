@@ -8,6 +8,8 @@ import {
   History,
   Network,
   Shapes,
+  LogOut,
+  DatabaseZap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
@@ -308,11 +310,16 @@ function App() {
         e.preventDefault();
         openSchemaDesignerTab();
       }
+      // Ctrl+Shift+C for Switch Connection
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "C") {
+        e.preventDefault();
+        setActiveConnection(null);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSchemaDesignerTab]);
+  }, [openSchemaDesignerTab, setActiveConnection]);
 
   // Apply font family and font size to root element
   useEffect(() => {
@@ -359,7 +366,22 @@ function App() {
                     </span>
                   </div>
                 )}
-
+                {activeConnectionId && activeConnection && (
+                  <div className="flex items-center">
+                    <KeyboardTooltip
+                      description="Switch Connection"
+                      keys={["Ctrl", "Shift", "C"]}
+                    >
+                      <Button
+                        variant="ghost"
+                        onClick={() => setActiveConnection(null)}
+                      >
+                        <DatabaseZap className="h-4 w-4" />
+                        Switch
+                      </Button>
+                    </KeyboardTooltip>
+                  </div>
+                )}
                 <div className="flex-1" />
 
                 {/* Right Actions */}
@@ -388,6 +410,7 @@ function App() {
                     <Shapes className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>
+
                 <KeyboardTooltip description="New Connection">
                   <Button
                     variant="ghost"
