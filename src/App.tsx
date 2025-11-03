@@ -588,6 +588,24 @@ function App() {
                     </div>
                   </button>
                 ))}
+                
+                {/* Add New Connection Card */}
+                <button
+                  onClick={() => setConnectionDialogOpen(true)}
+                  className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Plus className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold mb-1">Add New Connection</div>
+                      <div className="text-sm text-muted-foreground">
+                        Connect to a new database
+                      </div>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           </div>
