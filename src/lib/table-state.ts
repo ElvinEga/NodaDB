@@ -17,6 +17,7 @@ export class TableState {
   private focus: { y: number; x: number } | null = null;
   private selection: { y1: number; x1: number; y2: number; x2: number } | null = null;
   private columnWidths: number[];
+  private editMode: { y: number; x: number } | null = null;
 
   private changeListeners: Set<ChangeCallback> = new Set();
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -46,10 +47,65 @@ export class TableState {
     return row.change?.[headerName] ?? row.raw[headerName];
   };
 
+  isInEditMode = () => !!this.editMode;
+  getEditingCell = () => this.editMode;
+
+  enterEditMode = (y?: number, x?: number) => {
+    const targetY = y ?? this.focus?.y;
+    const targetX = x ?? this.focus?.x;
+
+    if (targetY === undefined || targetX === undefined) return;
+    
+    this.editMode = { y: targetY, x: targetX };
+    this.broadcastChange();
+  };
+
+  exitEditMode = () => {
+    this.editMode = null;
+    this.broadcastChange();
+  };
+  
+  changeValue = (y: number, x: number, newValue: any) => {
+    const headerName = this.headers[x]?.name;
+    if (!headerName) return;
+
+    const row = this.data[y];
+    if (!row) return;
+
+    const oldValue = row.raw[headerName];
+
+    if (newValue === oldValue) {
+      if (row.change && headerName in row.change) {
+        delete row.change[headerName];
+        if (Object.keys(row.change).length === 0) {
+          delete row.change;
+        }
+      }
+    } else {
+      if (!row.change) row.change = {};
+      row.change[headerName] = newValue;
+    }
+
+    this.broadcastChange();
+  };
+
   setFocus = (y: number, x: number) => {
     this.focus = { y, x };
     this.selection = { y1: y, x1: x, y2: y, x2: x };
+    this.exitEditMode();
     this.broadcastChange();
+  };
+  
+  moveFocus = (dy: number, dx: number) => {
+    if (!this.focus) {
+      this.setFocus(0, 0);
+      return;
+    }
+    
+    const newY = Math.max(0, Math.min(this.getRowCount() - 1, this.focus.y + dy));
+    const newX = Math.max(0, Math.min(this.getHeaders().length - 1, this.focus.x + dx));
+    
+    this.setFocus(newY, newX);
   };
 
   getFocus = () => this.focus;
