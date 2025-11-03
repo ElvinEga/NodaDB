@@ -16,6 +16,7 @@ export class TableState {
   private data: TableRow[] = [];
   private focus: { y: number; x: number } | null = null;
   private selection: { y1: number; x1: number; y2: number; x2: number } | null = null;
+  private columnWidths: number[];
 
   private changeListeners: Set<ChangeCallback> = new Set();
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -23,11 +24,21 @@ export class TableState {
   constructor(headers: TableHeader[], data: Record<string, any>[]) {
     this.headers = headers;
     this.data = data.map(row => ({ raw: row }));
+    this.columnWidths = headers.map(() => 150);
   }
 
   getHeaders = () => this.headers;
   getRows = () => this.data;
   getRowCount = () => this.data.length;
+  getColumnWidths = () => this.columnWidths;
+  
+  setHeaderWidth = (index: number, width: number) => {
+    if (this.columnWidths[index] !== width) {
+      this.columnWidths[index] = Math.max(50, width);
+      this.broadcastChange();
+    }
+  };
+  
   getValue = (y: number, x: number) => {
     const headerName = this.headers[x]?.name;
     if (!headerName) return null;
