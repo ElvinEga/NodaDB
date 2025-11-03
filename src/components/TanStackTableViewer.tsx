@@ -113,7 +113,7 @@ export function TanStackTableViewer({
   columns: tableColumns,
 }: TanStackTableViewerProps) {
   const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
-  
+
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -128,10 +128,10 @@ export function TanStackTableViewer({
   });
   const [executionTime, setExecutionTime] = useState(0);
   const [rowCount, setRowCount] = useState(0);
-  
+
   // Update page size when settings change
   useEffect(() => {
-    setPagination(prev => ({ ...prev, pageSize: defaultPageSize }));
+    setPagination((prev) => ({ ...prev, pageSize: defaultPageSize }));
   }, [defaultPageSize]);
   const [editingCell, setEditingCell] = useState<{
     rowId: string;
@@ -194,7 +194,7 @@ export function TanStackTableViewer({
         columns: tableColumns.map((col) => col.name),
       });
 
-      console.log('SQL Query:', query);
+      console.log("SQL Query:", query);
 
       // Execute query
       const result = await invoke<QueryResult>("execute_query", {
@@ -204,20 +204,22 @@ export function TanStackTableViewer({
 
       // Check if we got more rows than requested (means there are more pages)
       const hasNextPage = result.rows.length > currentPageSize;
-      const displayRows = hasNextPage ? result.rows.slice(0, currentPageSize) : result.rows;
-      
+      const displayRows = hasNextPage
+        ? result.rows.slice(0, currentPageSize)
+        : result.rows;
+
       setData(displayRows);
-      
+
       // Estimate total count based on what we know
       // If we have a next page, we know there are at least (currentPageIndex + 2) * pageSize rows
       // Otherwise, we know the exact count
-      const estimatedTotal = hasNextPage 
-        ? (currentPageIndex + 2) * currentPageSize  // At least this many
-        : (currentPageIndex * currentPageSize) + displayRows.length;  // Exact count
-      
+      const estimatedTotal = hasNextPage
+        ? (currentPageIndex + 2) * currentPageSize // At least this many
+        : currentPageIndex * currentPageSize + displayRows.length; // Exact count
+
       setRowCount(estimatedTotal);
-      
-      console.log('Pagination Debug:', {
+
+      console.log("Pagination Debug:", {
         loadedRows: result.rows.length,
         displayRows: displayRows.length,
         hasNextPage,
@@ -239,7 +241,15 @@ export function TanStackTableViewer({
   // Initial data load and reload on pagination/filter/sort changes
   useEffect(() => {
     loadData(pageIndex, pageSize);
-  }, [connection.id, table.name, pageIndex, pageSize, sorting, columnFilters, globalFilter]);
+  }, [
+    connection.id,
+    table.name,
+    pageIndex,
+    pageSize,
+    sorting,
+    columnFilters,
+    globalFilter,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1482,7 +1492,7 @@ Sum: ${stats.sum}`
                 <SelectValue />
               </SelectTrigger>
               <SelectContent side="top">
-                {[10, 20, 50, 100].map((size) => (
+                {[50, 100, 200, 500, 1000].map((size) => (
                   <SelectItem key={size} value={`${size}`}>
                     {size} rows
                   </SelectItem>
@@ -1499,7 +1509,11 @@ Sum: ${stats.sum}`
                         tableInstance.previousPage();
                       }
                     }}
-                    className={pageIndex === 0 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    className={
+                      pageIndex === 0
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
                   />
                 </PaginationItem>
 
@@ -1564,7 +1578,11 @@ Sum: ${stats.sum}`
                 {pageIndex < tableInstance.getPageCount() - 2 && (
                   <PaginationItem>
                     <PaginationLink
-                      onClick={() => tableInstance.setPageIndex(tableInstance.getPageCount() - 1)}
+                      onClick={() =>
+                        tableInstance.setPageIndex(
+                          tableInstance.getPageCount() - 1
+                        )
+                      }
                       className="cursor-pointer"
                     >
                       {tableInstance.getPageCount()}
@@ -1579,7 +1597,11 @@ Sum: ${stats.sum}`
                         tableInstance.nextPage();
                       }
                     }}
-                    className={pageIndex >= Math.ceil(rowCount / pageSize) - 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    className={
+                      pageIndex >= Math.ceil(rowCount / pageSize) - 1
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
                   />
                 </PaginationItem>
               </PaginationContent>

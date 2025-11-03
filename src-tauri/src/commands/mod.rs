@@ -206,13 +206,14 @@ pub async fn execute_transaction(
     queries: Vec<String>,
     manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
-    for query in queries {
+    let count = queries.len();
+    for query in &queries {
         manager
-            .execute_query(&connection_id, &query)
+            .execute_query(&connection_id, query)
             .await
             .map_err(|e| format!("Transaction failed: {}", e))?;
     }
-    Ok(format!("Successfully executed {} queries", queries.len()))
+    Ok(format!("Successfully executed {} queries", count))
 }
 
 #[tauri::command]
