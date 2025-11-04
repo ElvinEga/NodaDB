@@ -36,6 +36,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CreateTableDialog } from "@/components/CreateTableDialog";
 import { ExportTableDialog } from "@/components/ExportTableDialog";
 import { DatabaseTable, ConnectionConfig } from "@/types";
@@ -64,6 +72,9 @@ export function DatabaseExplorer({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "table" | "view">("all");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [tableToRename, setTableToRename] = useState<string>("");
+  const [newTableName, setNewTableName] = useState("");
 
   const loadTables = async () => {
     setIsLoading(true);
@@ -104,18 +115,27 @@ export function DatabaseExplorer({
   };
 
   const handleRenameTable = async (oldName: string) => {
-    const newName = prompt(`Rename table "${oldName}" to:`, oldName);
-    if (!newName || newName === oldName) return;
+    setTableToRename(oldName);
+    setNewTableName(oldName);
+    setRenameDialogOpen(true);
+  };
+
+  const executeRenameTable = async () => {
+    if (!newTableName || newTableName === tableToRename) {
+      setRenameDialogOpen(false);
+      return;
+    }
 
     try {
       const result = await invoke<string>("rename_table", {
         connectionId: connection.id,
-        oldName,
-        newName,
+        oldName: tableToRename,
+        newName: newTableName,
         dbType: connection.db_type,
       });
       toast.success(result);
       loadTables();
+      setRenameDialogOpen(false);
     } catch (error) {
       toast.error(`Failed to rename table: ${error}`);
       console.error("Rename table error:", error);
@@ -380,6 +400,39 @@ export function DatabaseExplorer({
           table={tableToExport}
         />
       )}
+
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Table</DialogTitle>
+            <DialogDescription>
+              Enter a new name for table "{tableToRename}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={newTableName}
+              onChange={(e) => setNewTableName(e.target.value)}
+              placeholder="New table name"
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRenameDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={executeRenameTable}
+              disabled={!newTableName || newTableName === tableToRename}
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
