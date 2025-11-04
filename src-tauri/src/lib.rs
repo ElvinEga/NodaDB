@@ -29,6 +29,7 @@ pub fn run() {
             commands::drop_table,
             commands::alter_table_add_column,
             commands::alter_table_drop_column,
+            commands::execute_transaction,
             commands::rename_table,
             commands::export_table_structure,
         ])

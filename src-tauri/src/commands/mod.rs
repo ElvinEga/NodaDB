@@ -201,6 +201,22 @@ pub async fn alter_table_drop_column(
 }
 
 #[tauri::command]
+pub async fn execute_transaction(
+    connection_id: String,
+    queries: Vec<String>,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    let count = queries.len();
+    for query in &queries {
+        manager
+            .execute_query(&connection_id, query)
+            .await
+            .map_err(|e| format!("Transaction failed: {}", e))?;
+    }
+    Ok(format!("Successfully executed {} queries", count))
+}
+
+#[tauri::command]
 pub async fn rename_table(
     connection_id: String,
     old_name: String,
