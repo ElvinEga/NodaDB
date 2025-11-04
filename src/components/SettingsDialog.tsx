@@ -140,7 +140,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             value="appearance"
             className="flex-1 overflow-y-auto space-y-6 pt-4"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 mx-2">
               <div className="space-y-2">
                 <Label htmlFor="theme">Theme</Label>
                 <Select
@@ -209,7 +209,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             value="editor"
             className="flex-1 overflow-y-auto space-y-6 pt-4"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 mx-2">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Auto Save</Label>
@@ -272,7 +272,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             value="query"
             className="flex-1 overflow-y-auto space-y-6 pt-4"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 mx-2">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Auto Execute on Load</Label>
@@ -321,7 +321,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             value="table"
             className="flex-1 overflow-y-auto space-y-6 pt-4"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 mx-2">
               <div className="space-y-2">
                 <Label>Rows Per Page: {rowsPerPage}</Label>
                 <Select

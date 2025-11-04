@@ -1,4 +1,13 @@
-import { FileCode2, Table2, X, Pin, Copy, XCircle, Network, Shapes } from "lucide-react";
+import {
+  FileCode2,
+  Table2,
+  X,
+  Pin,
+  Copy,
+  XCircle,
+  Network,
+  Shapes,
+} from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -53,12 +62,12 @@ export function TabBar({
             <button
               onClick={() => onTabClick(tab.id)}
               className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-md text-sm whitespace-nowrap
-                transition-colors duration-150 min-w-[120px] max-w-[200px]
+                flex items-center gap-2 px-3 py-1.5 rounded-none text-sm whitespace-nowrap
+                transition-colors duration-150 min-w-[120px] max-w-[200px] border-r-2
                 ${
                   activeTabId === tab.id
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                    ? "bg-secondary text-foreground font-extrabold"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }
               `}
             >
@@ -89,36 +98,38 @@ export function TabBar({
               )}
             </button>
           </ContextMenuTrigger>
-          
+
           <ContextMenuContent>
             <ContextMenuItem onClick={() => onTabClose(tab.id)}>
               <X className="mr-2 h-4 w-4" />
               Close Tab
-              <span className="ml-auto text-xs text-muted-foreground">Ctrl+W</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                Ctrl+W
+              </span>
             </ContextMenuItem>
-            
+
             <ContextMenuItem onClick={() => onCloseOthers(tab.id)}>
               <XCircle className="mr-2 h-4 w-4" />
               Close Other Tabs
             </ContextMenuItem>
-            
+
             <ContextMenuItem onClick={() => onCloseToRight(tab.id)}>
               <XCircle className="mr-2 h-4 w-4" />
               Close Tabs to the Right
             </ContextMenuItem>
-            
+
             <ContextMenuItem onClick={onCloseAll}>
               <XCircle className="mr-2 h-4 w-4" />
               Close All Tabs
             </ContextMenuItem>
-            
+
             <ContextMenuSeparator />
-            
+
             <ContextMenuItem onClick={() => onTabPin(tab.id)}>
               <Pin className="mr-2 h-4 w-4" />
               {tab.isPinned ? "Unpin Tab" : "Pin Tab"}
             </ContextMenuItem>
-            
+
             {tab.type === "query" && (
               <ContextMenuItem onClick={() => onTabDuplicate(tab.id)}>
                 <Copy className="mr-2 h-4 w-4" />
