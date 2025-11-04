@@ -63,7 +63,7 @@ export function TabBar({
               onClick={() => onTabClick(tab.id)}
               className={`
                 flex items-center gap-2 px-3 py-1.5 rounded-none text-sm whitespace-nowrap
-                transition-colors duration-150 min-w-[120px] max-w-[200px] border-r-2
+                transition-colors min-w-[120px] max-w-[200px] border-r-2
                 ${
                   activeTabId === tab.id
                     ? "bg-secondary text-foreground font-extrabold"
