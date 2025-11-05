@@ -31,9 +31,10 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" tooltip="New Query">
               {/* Logo & App Name */}
-              <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                <h1 className="text-lg font-semibold">NodaDB</h1>
+              <div className="flex items-center gap-4">
+                {/* <Database className="h-5 w-5 text-primary" /> */}
+                <img src="/logo.svg" alt="NodaDB Logo" className="h-8 w-8" />
+                <h1 className="text-2xl font-bold text-primary">NodaDB</h1>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

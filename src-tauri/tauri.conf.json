@@ -15,7 +15,8 @@
         "label": "main",
         "title": "NodaDB - Database Management",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "backgroundColor": "#09090b"
       }
     ],
     "security": {
