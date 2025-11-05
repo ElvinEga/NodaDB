@@ -22,6 +22,7 @@ const essentialShortcuts: CheatSheetShortcut[] = [
 
 export function KeyboardCheatSheet() {
   const [isVisible, setIsVisible] = useState(false);
+  const [showToggleButton, setShowToggleButton] = useState(true);
 
   const isMac =
     typeof navigator !== "undefined" &&
@@ -41,6 +42,29 @@ export function KeyboardCheatSheet() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Hide toggle button after a period of time
+  useEffect(() => {
+    const hideTimer = setTimeout(() => {
+      setShowToggleButton(false);
+    }, 10000); // Hide after 10 seconds
+
+    return () => clearTimeout(hideTimer);
+  }, []);
+
+  // Show toggle button when cheat sheet is closed
+  useEffect(() => {
+    if (!isVisible) {
+      setShowToggleButton(true);
+
+      // Hide it again after 10 seconds
+      const hideTimer = setTimeout(() => {
+        setShowToggleButton(false);
+      }, 10000);
+
+      return () => clearTimeout(hideTimer);
+    }
+  }, [isVisible]);
 
   // Listen for Ctrl+? to toggle
   useEffect(() => {
@@ -80,12 +104,12 @@ export function KeyboardCheatSheet() {
   return (
     <>
       {/* Toggle Button */}
-      {!isVisible && (
+      {!isVisible && showToggleButton && (
         <Button
           variant="outline"
           size="sm"
           onClick={handleToggle}
-          className="fixed bottom-20 right-4 z-40 shadow-lg gap-2 group"
+          className="fixed bottom-20 right-4 z-40 shadow-lg gap-2 group animate-in fade-in duration-300"
           title="Show keyboard shortcuts (Ctrl+?)"
         >
           <Command className="h-3.5 w-3.5" />

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-app",
+  "productName": "NodaDB",
   "version": "0.1.0",
-  "identifier": "com.snakeos.tauri-app",
+  "identifier": "com.elvinega.nodadb",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "NodaDB - Database Management",
+        "title": "NodaDB",
         "width": 1200,
         "height": 800,
         "backgroundColor": "#09090b"
@@ -38,5 +38,20 @@
       ]
     },
     "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "category": "Productivity",
+    "shortDescription": "A modern database management desktop application",
+    "longDescription": "A modern, cross-platform database management tool."
   }
 }

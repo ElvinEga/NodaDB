@@ -1,4 +1,4 @@
-import { produce } from 'immer';
+// import { produce } from 'immer';
 
 export interface TableHeader {
   name: string;
@@ -17,7 +17,8 @@ export class TableState {
   private headers: TableHeader[] = [];
   private data: TableRow[] = [];
   private focus: { y: number; x: number } | null = null;
-  private selection: { y1: number; x1: number; y2: number; x2: number } | null = null;
+  private selection: { y1: number; x1: number; y2: number; x2: number } | null =
+    null;
   private columnWidths: number[];
   private editMode: { y: number; x: number } | null = null;
   private changedRows: Map<number, TableRow> = new Map();
@@ -27,7 +28,7 @@ export class TableState {
 
   constructor(headers: TableHeader[], data: Record<string, any>[]) {
     this.headers = headers;
-    this.data = data.map(row => ({ raw: row }));
+    this.data = data.map((row) => ({ raw: row }));
     this.columnWidths = headers.map(() => 150);
   }
 
@@ -35,14 +36,14 @@ export class TableState {
   getRows = () => this.data;
   getRowCount = () => this.data.length;
   getColumnWidths = () => this.columnWidths;
-  
+
   setHeaderWidth = (index: number, width: number) => {
     if (this.columnWidths[index] !== width) {
       this.columnWidths[index] = Math.max(50, width);
       this.broadcastChange();
     }
   };
-  
+
   getValue = (y: number, x: number) => {
     const headerName = this.headers[x]?.name;
     if (!headerName) return null;
@@ -58,7 +59,7 @@ export class TableState {
     const targetX = x ?? this.focus?.x;
 
     if (targetY === undefined || targetX === undefined) return;
-    
+
     this.editMode = { y: targetY, x: targetX };
     this.broadcastChange();
   };
@@ -67,7 +68,7 @@ export class TableState {
     this.editMode = null;
     this.broadcastChange();
   };
-  
+
   changeValue = (y: number, x: number, newValue: any) => {
     const headerName = this.headers[x]?.name;
     if (!headerName) return;
@@ -100,16 +101,22 @@ export class TableState {
     this.exitEditMode();
     this.broadcastChange();
   };
-  
+
   moveFocus = (dy: number, dx: number) => {
     if (!this.focus) {
       this.setFocus(0, 0);
       return;
     }
-    
-    const newY = Math.max(0, Math.min(this.getRowCount() - 1, this.focus.y + dy));
-    const newX = Math.max(0, Math.min(this.getHeaders().length - 1, this.focus.x + dx));
-    
+
+    const newY = Math.max(
+      0,
+      Math.min(this.getRowCount() - 1, this.focus.y + dy)
+    );
+    const newX = Math.max(
+      0,
+      Math.min(this.getHeaders().length - 1, this.focus.x + dx)
+    );
+
     this.setFocus(newY, newX);
   };
 
@@ -123,7 +130,7 @@ export class TableState {
     this.changedRows.set(index, newRow);
     this.broadcastChange(true);
   };
-  
+
   removeRow = (index: number) => {
     const row = this.data[index];
     if (row) {
@@ -138,15 +145,20 @@ export class TableState {
     }
   };
 
-  getChangedRows = (): { index: number, row: TableRow }[] => {
-    return Array.from(this.changedRows.entries()).map(([index, row]) => ({ index, row }));
+  getChangedRows = (): { index: number; row: TableRow }[] => {
+    return Array.from(this.changedRows.entries()).map(([index, row]) => ({
+      index,
+      row,
+    }));
   };
 
   getChangeCount = (): number => {
     return this.changedRows.size;
   };
 
-  applyChanges = (updatedData: { index: number, newRaw: Record<string, any> }[]) => {
+  applyChanges = (
+    updatedData: { index: number; newRaw: Record<string, any> }[]
+  ) => {
     updatedData.forEach(({ index, newRaw }) => {
       const row = this.data[index];
       if (row) {
@@ -156,16 +168,16 @@ export class TableState {
       }
     });
 
-    this.data = this.data.filter(row => !row.isRemoved);
-    
+    this.data = this.data.filter((row) => !row.isRemoved);
+
     this.changedRows.clear();
     this.broadcastChange(true);
   };
 
   discardChanges = () => {
-    this.data = this.data.filter(row => !row.isNewRow);
-    
-    this.data.forEach(row => {
+    this.data = this.data.filter((row) => !row.isNewRow);
+
+    this.data.forEach((row) => {
       delete row.change;
       delete row.isRemoved;
     });
@@ -186,20 +198,24 @@ export class TableState {
     };
     this.broadcastChange(false);
   };
-  
+
   getSelection = () => this.selection;
-  
+
   isCellSelected = (y: number, x: number): boolean => {
     if (!this.selection) return false;
     const { y1, x1, y2, x2 } = this.selection;
-    return y >= Math.min(y1, y2) && y <= Math.max(y1, y2) &&
-           x >= Math.min(x1, x2) && x <= Math.max(x1, x2);
+    return (
+      y >= Math.min(y1, y2) &&
+      y <= Math.max(y1, y2) &&
+      x >= Math.min(x1, x2) &&
+      x <= Math.max(x1, x2)
+    );
   };
 
   addChangeListener = (callback: ChangeCallback) => {
     this.changeListeners.add(callback);
   };
-  
+
   removeChangeListener = (callback: ChangeCallback) => {
     this.changeListeners.delete(callback);
   };
@@ -211,7 +227,7 @@ export class TableState {
     }
 
     const fire = () => {
-      this.changeListeners.forEach(cb => cb());
+      this.changeListeners.forEach((cb) => cb());
     };
 
     if (instant) {
