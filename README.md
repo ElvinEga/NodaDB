@@ -2,6 +2,12 @@
 
 A modern, cross-platform database management tool built with Tauri 2, React, and Rust.
 
+## Screenshots
+
+![NodaDB Screenshot](screenshots/screenshot.png)
+
+![NodaDB Dark Mode](screenshots/screenshot_dark.png)
+
 ## Features
 
 - **Multi-Database Support** - Connect to SQLite, PostgreSQL, and MySQL
