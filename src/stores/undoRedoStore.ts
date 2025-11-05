@@ -1,12 +1,15 @@
-import { create } from 'zustand';
+import { create } from "zustand";
+
+// Create a stable, empty array constant to prevent infinite loops
+export const EMPTY_HISTORY: TableAction[] = [];
 
 export type ActionType =
-  | 'insert'
-  | 'update'
-  | 'delete'
-  | 'batch_update'
-  | 'batch_delete'
-  | 'batch_duplicate';
+  | "insert"
+  | "update"
+  | "delete"
+  | "batch_update"
+  | "batch_delete"
+  | "batch_duplicate";
 
 export interface TableAction {
   id: string;
@@ -56,125 +59,153 @@ interface UndoRedoState {
   canRedo: (tableKey: string) => boolean;
   clearHistory: (tableKey: string) => void;
   getHistory: (tableKey: string) => TableAction[];
+  getHistoryForKey: (tableKey: string) => TableAction[];
   getCurrentAction: (tableKey: string) => TableAction | null;
 }
 
-export const useUndoRedoStore = create<UndoRedoState>((set, get) => ({
-  history: new Map(),
-  currentIndex: new Map(),
-  maxHistorySize: 50,
+export const useUndoRedoStore = create<UndoRedoState>((set, get) => {
+  // A cache for our selectors to ensure stable references
+  const historyCache = new Map<string, TableAction[]>();
 
-  addAction: (tableKey: string, action: TableAction) => {
-    set((state) => {
-      const newHistory = new Map(state.history);
-      const newCurrentIndex = new Map(state.currentIndex);
+  return {
+    history: new Map(),
+    currentIndex: new Map(),
+    maxHistorySize: 50,
 
-      const tableHistory = newHistory.get(tableKey) || [];
-      const currentIdx = newCurrentIndex.get(tableKey) ?? -1;
+    addAction: (tableKey: string, action: TableAction) => {
+      set((state) => {
+        const newHistory = new Map(state.history);
+        const newCurrentIndex = new Map(state.currentIndex);
 
-      // Remove any actions after current index (when adding new action after undo)
-      const updatedHistory = tableHistory.slice(0, currentIdx + 1);
+        const tableHistory = newHistory.get(tableKey) || [];
+        const currentIdx = newCurrentIndex.get(tableKey) ?? -1;
 
-      // Add new action
-      updatedHistory.push(action);
+        // Remove any actions after current index (when adding new action after undo)
+        const updatedHistory = tableHistory.slice(0, currentIdx + 1);
 
-      // Limit history size
-      if (updatedHistory.length > state.maxHistorySize) {
-        updatedHistory.shift();
+        // Add new action
+        updatedHistory.push(action);
+
+        // Limit history size
+        if (updatedHistory.length > state.maxHistorySize) {
+          updatedHistory.shift();
+        }
+
+        newHistory.set(tableKey, updatedHistory);
+        newCurrentIndex.set(tableKey, updatedHistory.length - 1);
+
+        return {
+          history: newHistory,
+          currentIndex: newCurrentIndex,
+        };
+      });
+    },
+
+    undo: (tableKey: string) => {
+      const state = get();
+      const tableHistory = state.history.get(tableKey);
+      const currentIdx = state.currentIndex.get(tableKey);
+
+      if (!tableHistory || currentIdx === undefined || currentIdx < 0) {
+        return null;
       }
 
-      newHistory.set(tableKey, updatedHistory);
-      newCurrentIndex.set(tableKey, updatedHistory.length - 1);
+      const action = tableHistory[currentIdx];
 
-      return {
-        history: newHistory,
-        currentIndex: newCurrentIndex,
-      };
-    });
-  },
+      set((state) => {
+        const newCurrentIndex = new Map(state.currentIndex);
+        newCurrentIndex.set(tableKey, currentIdx - 1);
+        return { currentIndex: newCurrentIndex };
+      });
 
-  undo: (tableKey: string) => {
-    const state = get();
-    const tableHistory = state.history.get(tableKey);
-    const currentIdx = state.currentIndex.get(tableKey);
+      return action;
+    },
 
-    if (!tableHistory || currentIdx === undefined || currentIdx < 0) {
-      return null;
-    }
+    redo: (tableKey: string) => {
+      const state = get();
+      const tableHistory = state.history.get(tableKey);
+      const currentIdx = state.currentIndex.get(tableKey) ?? -1;
 
-    const action = tableHistory[currentIdx];
+      if (!tableHistory || currentIdx >= tableHistory.length - 1) {
+        return null;
+      }
 
-    set((state) => {
-      const newCurrentIndex = new Map(state.currentIndex);
-      newCurrentIndex.set(tableKey, currentIdx - 1);
-      return { currentIndex: newCurrentIndex };
-    });
+      const action = tableHistory[currentIdx + 1];
 
-    return action;
-  },
+      set((state) => {
+        const newCurrentIndex = new Map(state.currentIndex);
+        newCurrentIndex.set(tableKey, currentIdx + 1);
+        return { currentIndex: newCurrentIndex };
+      });
 
-  redo: (tableKey: string) => {
-    const state = get();
-    const tableHistory = state.history.get(tableKey);
-    const currentIdx = state.currentIndex.get(tableKey) ?? -1;
+      return action;
+    },
 
-    if (!tableHistory || currentIdx >= tableHistory.length - 1) {
-      return null;
-    }
+    canUndo: (tableKey: string) => {
+      const state = get();
+      const currentIdx = state.currentIndex.get(tableKey);
+      return currentIdx !== undefined && currentIdx >= 0;
+    },
 
-    const action = tableHistory[currentIdx + 1];
+    canRedo: (tableKey: string) => {
+      const state = get();
+      const tableHistory = state.history.get(tableKey);
+      const currentIdx = state.currentIndex.get(tableKey) ?? -1;
+      return tableHistory ? currentIdx < tableHistory.length - 1 : false;
+    },
 
-    set((state) => {
-      const newCurrentIndex = new Map(state.currentIndex);
-      newCurrentIndex.set(tableKey, currentIdx + 1);
-      return { currentIndex: newCurrentIndex };
-    });
+    clearHistory: (tableKey: string) => {
+      set((state) => {
+        const newHistory = new Map(state.history);
+        const newCurrentIndex = new Map(state.currentIndex);
 
-    return action;
-  },
+        newHistory.delete(tableKey);
+        newCurrentIndex.delete(tableKey);
 
-  canUndo: (tableKey: string) => {
-    const state = get();
-    const currentIdx = state.currentIndex.get(tableKey);
-    return currentIdx !== undefined && currentIdx >= 0;
-  },
+        return {
+          history: newHistory,
+          currentIndex: newCurrentIndex,
+        };
+      });
+    },
 
-  canRedo: (tableKey: string) => {
-    const state = get();
-    const tableHistory = state.history.get(tableKey);
-    const currentIdx = state.currentIndex.get(tableKey) ?? -1;
-    return tableHistory ? currentIdx < tableHistory.length - 1 : false;
-  },
+    getHistory: (tableKey: string) => {
+      const state = get();
+      return state.history.get(tableKey) || EMPTY_HISTORY;
+    },
 
-  clearHistory: (tableKey: string) => {
-    set((state) => {
-      const newHistory = new Map(state.history);
-      const newCurrentIndex = new Map(state.currentIndex);
+    // This is our new, safe selector function
+    getHistoryForKey: (tableKey: string) => {
+      const currentHistory = get().history.get(tableKey);
 
-      newHistory.delete(tableKey);
-      newCurrentIndex.delete(tableKey);
+      if (!currentHistory) {
+        return EMPTY_HISTORY; // Return the stable empty array if nothing exists
+      }
 
-      return {
-        history: newHistory,
-        currentIndex: newCurrentIndex,
-      };
-    });
-  },
+      // Check if we have a cached version for this history array
+      if (historyCache.get(tableKey) === currentHistory) {
+        // If the array in the store is the same as our cache, do nothing.
+        // (This part is a bit redundant but illustrates the caching idea)
+      } else {
+        // If the history array has been updated in the store, update our cache.
+        historyCache.set(tableKey, currentHistory);
+      }
 
-  getHistory: (tableKey: string) => {
-    const state = get();
-    return state.history.get(tableKey) || [];
-  },
+      // Always return the array from the store, which Zustand manages.
+      // Zustand's `Map` operations will ensure this reference is stable if the content hasn't changed.
+      return currentHistory;
+    },
 
-  getCurrentAction: (tableKey: string) => {
-    const state = get();
-    const tableHistory = state.history.get(tableKey);
-    const currentIdx = state.currentIndex.get(tableKey);
+    getCurrentAction: (tableKey: string) => {
+      const state = get();
+      const tableHistory = state.history.get(tableKey);
+      const currentIdx = state.currentIndex.get(tableKey);
 
-    if (!tableHistory || currentIdx === undefined || currentIdx < 0) {
-      return null;
-    }
+      if (!tableHistory || currentIdx === undefined || currentIdx < 0) {
+        return null;
+      }
 
-    return tableHistory[currentIdx];
-  },
-}));
+      return tableHistory[currentIdx];
+    },
+  };
+});

@@ -1,11 +1,24 @@
-import { useMemo } from 'react';
-import { Undo2, Redo2, Trash2, Edit, Plus, Copy, Clock, ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { useUndoRedoStore, ActionType } from '@/stores/undoRedoStore';
-import { formatDistanceToNow } from 'date-fns';
+import { useMemo } from "react";
+import {
+  Undo2,
+  Redo2,
+  Trash2,
+  Edit,
+  Plus,
+  Copy,
+  Clock,
+  ChevronDown,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  useUndoRedoStore,
+  ActionType,
+  EMPTY_HISTORY,
+} from "@/stores/undoRedoStore";
+import { formatDistanceToNow } from "date-fns";
 
 interface TransactionHistoryPanelProps {
   tableKey: string;
@@ -23,21 +36,21 @@ const actionIcons: Record<ActionType, typeof Plus> = {
 };
 
 const actionColors: Record<ActionType, string> = {
-  insert: 'text-green-500',
-  update: 'text-blue-500',
-  delete: 'text-red-500',
-  batch_update: 'text-blue-500',
-  batch_delete: 'text-red-500',
-  batch_duplicate: 'text-purple-500',
+  insert: "text-green-500",
+  update: "text-blue-500",
+  delete: "text-red-500",
+  batch_update: "text-blue-500",
+  batch_delete: "text-red-500",
+  batch_duplicate: "text-purple-500",
 };
 
 const actionLabels: Record<ActionType, string> = {
-  insert: 'Insert',
-  update: 'Update',
-  delete: 'Delete',
-  batch_update: 'Batch Update',
-  batch_delete: 'Batch Delete',
-  batch_duplicate: 'Duplicate',
+  insert: "Insert",
+  update: "Update",
+  delete: "Delete",
+  batch_update: "Batch Update",
+  batch_delete: "Batch Delete",
+  batch_duplicate: "Duplicate",
 };
 
 export function TransactionHistoryPanel({
@@ -45,32 +58,51 @@ export function TransactionHistoryPanel({
   onUndo,
   onRedo,
 }: TransactionHistoryPanelProps) {
-  const history = useUndoRedoStore((state) => state.getHistory(tableKey));
-  const currentIndex = useUndoRedoStore((state) => state.currentIndex.get(tableKey) ?? -1);
+  // --- THIS IS THE CRITICAL CHANGE ---
+
+  // 1. Get the selector function from the store first.
+  const getHistoryForKey = useUndoRedoStore((state) => state.getHistoryForKey);
+
+  // 2. Call the stable selector function to get the history.
+  //    `history` is now guaranteed to be a stable reference.
+  const history = getHistoryForKey(tableKey);
+
+  // ------------------------------------
+  const currentIndex = useUndoRedoStore(
+    (state) => state.currentIndex.get(tableKey) ?? -1
+  );
   const canUndo = useUndoRedoStore((state) => state.canUndo(tableKey));
   const canRedo = useUndoRedoStore((state) => state.canRedo(tableKey));
   const clearHistory = useUndoRedoStore((state) => state.clearHistory);
 
+  // This `useMemo` is now perfectly safe and correct.
   const sortedHistory = useMemo(() => {
+    if (history.length === 0) {
+      return EMPTY_HISTORY; // Use a stable empty reference
+    }
     return [...history].reverse();
   }, [history]);
 
-  const getActionDescription = (action: typeof history[0]) => {
+  const getActionDescription = (action: (typeof history)[0]) => {
     switch (action.type) {
-      case 'insert':
+      case "insert":
         return `Inserted ${action.data.rows?.length || 1} row(s)`;
-      case 'delete':
+      case "delete":
         return `Deleted ${action.data.rows?.length || 1} row(s)`;
-      case 'update':
+      case "update":
         return `Updated ${action.data.oldValues?.length || 1} row(s)`;
-      case 'batch_update':
-        return `Batch updated ${action.data.primaryKeyValues?.length || 0} rows`;
-      case 'batch_delete':
-        return `Batch deleted ${action.data.primaryKeyValues?.length || 0} rows`;
-      case 'batch_duplicate':
+      case "batch_update":
+        return `Batch updated ${
+          action.data.primaryKeyValues?.length || 0
+        } rows`;
+      case "batch_delete":
+        return `Batch deleted ${
+          action.data.primaryKeyValues?.length || 0
+        } rows`;
+      case "batch_duplicate":
         return `Duplicated ${action.data.rows?.length || 0} rows`;
       default:
-        return 'Unknown action';
+        return "Unknown action";
     }
   };
 
@@ -138,7 +170,9 @@ export function TransactionHistoryPanel({
         {history.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <Clock className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">No transaction history</p>
+            <p className="text-sm text-muted-foreground">
+              No transaction history
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               Changes will appear here
             </p>
@@ -156,11 +190,12 @@ export function TransactionHistoryPanel({
                   key={action.id}
                   className={`
                     p-3 rounded-lg border transition-all
-                    ${isCurrent
-                      ? 'border-primary bg-primary/5 shadow-sm'
-                      : isFuture
-                      ? 'border-border/50 bg-muted/30 opacity-50'
-                      : 'border-border bg-card hover:bg-muted/30'
+                    ${
+                      isCurrent
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : isFuture
+                        ? "border-border/50 bg-muted/30 opacity-50"
+                        : "border-border bg-card hover:bg-muted/30"
                     }
                   `}
                 >
@@ -169,10 +204,18 @@ export function TransactionHistoryPanel({
                     <div
                       className={`
                         p-2 rounded-md flex-shrink-0
-                        ${isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted'}
+                        ${
+                          isCurrent
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        }
                       `}
                     >
-                      <Icon className={`h-3.5 w-3.5 ${!isCurrent && actionColors[action.type]}`} />
+                      <Icon
+                        className={`h-3.5 w-3.5 ${
+                          !isCurrent && actionColors[action.type]
+                        }`}
+                      />
                     </div>
 
                     {/* Content */}
@@ -182,7 +225,10 @@ export function TransactionHistoryPanel({
                           {actionLabels[action.type]}
                         </span>
                         {isCurrent && (
-                          <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                          <Badge
+                            variant="default"
+                            className="text-[10px] px-1.5 py-0"
+                          >
                             Current
                           </Badge>
                         )}
@@ -195,7 +241,9 @@ export function TransactionHistoryPanel({
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         <span>
-                          {formatDistanceToNow(action.timestamp, { addSuffix: true })}
+                          {formatDistanceToNow(action.timestamp, {
+                            addSuffix: true,
+                          })}
                         </span>
                       </div>
 
