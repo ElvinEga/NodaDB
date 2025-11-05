@@ -1492,7 +1492,7 @@ Sum: ${stats.sum}`
                 <SelectValue />
               </SelectTrigger>
               <SelectContent side="top">
-                {[50, 100, 200, 500, 1000].map((size) => (
+                {[10, 30, 50, 70, 100].map((size) => (
                   <SelectItem key={size} value={`${size}`}>
                     {size} rows
                   </SelectItem>
