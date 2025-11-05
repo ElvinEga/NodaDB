@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, RefObject } from 'react';
+import { useState, useEffect, useCallback, RefObject } from "react";
 
 interface VirtualizationOptions {
-  containerRef: RefObject<HTMLElement>;
+  containerRef: RefObject<HTMLElement | null>;
   totalRows: number;
   totalColumns: number;
   rowHeight: number;
@@ -36,9 +36,15 @@ export const useTableVirtualization = ({
     if (!container) return;
 
     const { scrollTop, clientHeight } = container;
-    const rowStartIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+    const rowStartIndex = Math.max(
+      0,
+      Math.floor(scrollTop / rowHeight) - overscan
+    );
     const visibleRowCount = Math.ceil(clientHeight / rowHeight);
-    const rowEndIndex = Math.min(totalRows - 1, rowStartIndex + visibleRowCount + (overscan * 2));
+    const rowEndIndex = Math.min(
+      totalRows - 1,
+      rowStartIndex + visibleRowCount + overscan * 2
+    );
 
     const { scrollLeft, clientWidth } = container;
     let colStartIndex = -1;
@@ -51,22 +57,28 @@ export const useTableVirtualization = ({
       if (accumulatedWidth + colWidth > scrollLeft && colStartIndex === -1) {
         colStartIndex = Math.max(0, i - overscan);
       }
-      
+
       if (accumulatedWidth > scrollLeft + clientWidth && colEndIndex === -1) {
         colEndIndex = Math.min(totalColumns - 1, i + overscan);
         break;
       }
-      
+
       accumulatedWidth += colWidth;
     }
-    
+
     if (colEndIndex === -1) {
       colEndIndex = totalColumns - 1;
     }
 
     setRange({ rowStartIndex, rowEndIndex, colStartIndex, colEndIndex });
-
-  }, [containerRef, totalRows, totalColumns, rowHeight, columnWidths, overscan]);
+  }, [
+    containerRef,
+    totalRows,
+    totalColumns,
+    rowHeight,
+    columnWidths,
+    overscan,
+  ]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -76,13 +88,13 @@ export const useTableVirtualization = ({
 
     const handleScroll = () => requestAnimationFrame(calculateRange);
 
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener("scroll", handleScroll);
 
     const resizeObserver = new ResizeObserver(calculateRange);
     resizeObserver.observe(container);
-    
+
     return () => {
-      container.removeEventListener('scroll', handleScroll);
+      container.removeEventListener("scroll", handleScroll);
       resizeObserver.unobserve(container);
     };
   }, [calculateRange]);
