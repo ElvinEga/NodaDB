@@ -11,8 +11,16 @@ import {
   LogOut,
   DatabaseZap,
   Trash2,
+  MoreVertical,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
@@ -52,6 +61,8 @@ import { TanStackTableViewer } from "./components/TanStackTableViewer";
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(null);
+  const [renameConnectionId, setRenameConnectionId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -70,6 +81,9 @@ function App() {
   );
   const removeConnection = useConnectionStore(
     (state) => state.removeConnection
+  );
+  const updateConnection = useConnectionStore(
+    (state) => state.updateConnection
   );
 
   const activeConnection = getActiveConnection();
@@ -620,17 +634,40 @@ function App() {
                         </div>
                       </div>
                     </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConnectionId(conn.id);
-                      }}
-                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenameConnectionId(conn.id);
+                            setRenameValue(conn.name);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConnectionId(conn.id);
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 ))}
 
@@ -696,6 +733,43 @@ function App() {
         )}
 
         <Toaster />
+        <AlertDialog open={renameConnectionId !== null} onOpenChange={(open) => !open && setRenameConnectionId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rename Connection</AlertDialogTitle>
+              <AlertDialogDescription>
+                Enter a new name for this connection.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Connection name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renameValue.trim()) {
+                  if (renameConnectionId) {
+                    updateConnection(renameConnectionId, { name: renameValue.trim() });
+                    setRenameConnectionId(null);
+                  }
+                }
+              }}
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (renameConnectionId && renameValue.trim()) {
+                    updateConnection(renameConnectionId, { name: renameValue.trim() });
+                    setRenameConnectionId(null);
+                  }
+                }}
+                disabled={!renameValue.trim()}
+              >
+                Rename
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog open={deleteConnectionId !== null} onOpenChange={(open) => !open && setDeleteConnectionId(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
