@@ -13,6 +13,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
@@ -41,6 +51,7 @@ import { TanStackTableViewer } from "./components/TanStackTableViewer";
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(null);
   const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -590,7 +601,9 @@ function App() {
                           <Database className="h-6 w-6 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <div className="font-semibold mb-1">{conn.name}</div>
+                          <div className="font-semibold mb-1 text-left">
+                            {conn.name}
+                          </div>
                           <div className="text-sm text-muted-foreground flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
                               {conn.db_type.toUpperCase()}
@@ -612,7 +625,7 @@ function App() {
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation();
-                        removeConnection(conn.id);
+                        setDeleteConnectionId(conn.id);
                       }}
                       className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
@@ -683,6 +696,30 @@ function App() {
         )}
 
         <Toaster />
+        <AlertDialog open={deleteConnectionId !== null} onOpenChange={(open) => !open && setDeleteConnectionId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Connection</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove this connection? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteConnectionId) {
+                    removeConnection(deleteConnectionId);
+                    setDeleteConnectionId(null);
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <ConnectionDialog
           open={connectionDialogOpen}
           onOpenChange={setConnectionDialogOpen}

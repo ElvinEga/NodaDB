@@ -24,15 +24,10 @@ export const useConnectionStore = create<ConnectionStore>()(
         })),
       
       removeConnection: (id) =>
-        set((state) => {
-          if (!confirm('Are you sure you want to remove this connection?')) {
-            return state;
-          }
-          return {
-            connections: state.connections.filter((c) => c.id !== id),
-            activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
-          };
-        }),
+        set((state) => ({
+          connections: state.connections.filter((c) => c.id !== id),
+          activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
+        })),
       
       updateConnection: (id, updates) =>
         set((state) => ({
