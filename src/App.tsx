@@ -10,6 +10,7 @@ import {
   Shapes,
   LogOut,
   DatabaseZap,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
@@ -55,6 +56,9 @@ function App() {
   );
   const getActiveConnection = useConnectionStore(
     (state) => state.getActiveConnection
+  );
+  const removeConnection = useConnectionStore(
+    (state) => state.removeConnection
   );
 
   const activeConnection = getActiveConnection();
@@ -563,44 +567,58 @@ function App() {
               </p>
               <div className="grid gap-3">
                 {connections.map((conn) => (
-                  <button
+                  <div
                     key={conn.id}
-                    onClick={async () => {
-                      try {
-                        // Reconnect to the database
-                        await invoke("connect_database", {
-                          config: conn,
-                        });
-                        setActiveConnection(conn.id);
-                      } catch (error) {
-                        console.error("Failed to connect:", error);
-                        alert(`Failed to connect to ${conn.name}: ${error}`);
-                      }
-                    }}
-                    className="text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
+                    className="relative group text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Database className="h-6 w-6 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold mb-1">{conn.name}</div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
-                            {conn.db_type.toUpperCase()}
-                          </span>
-                          {conn.file_path && (
-                            <span className="truncate">{conn.file_path}</span>
-                          )}
-                          {conn.host && (
-                            <span>
-                              {conn.host}:{conn.port}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await invoke("connect_database", {
+                            config: conn,
+                          });
+                          setActiveConnection(conn.id);
+                        } catch (error) {
+                          console.error("Failed to connect:", error);
+                          alert(`Failed to connect to ${conn.name}: ${error}`);
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Database className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold mb-1">{conn.name}</div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
+                              {conn.db_type.toUpperCase()}
                             </span>
-                          )}
+                            {conn.file_path && (
+                              <span className="truncate">{conn.file_path}</span>
+                            )}
+                            {conn.host && (
+                              <span>
+                                {conn.host}:{conn.port}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeConnection(conn.id);
+                      }}
+                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ))}
 
                 {/* Add New Connection Card */}
