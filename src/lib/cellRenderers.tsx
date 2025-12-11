@@ -76,10 +76,21 @@ export function formatNumber(value: any, dataType: string): string {
  * Render a boolean value as a visual indicator
  */
 export const BooleanCell = memo(({ value }: { value: any }) => {
+  const normalizedValue =
+    typeof value === "string" ? value.trim().toLowerCase() : value;
+
   const isTrue =
-    value === true || value === 1 || value === "true" || value === "t";
+    value === true ||
+    value === 1 ||
+    normalizedValue === "1" ||
+    normalizedValue === "true" ||
+    normalizedValue === "t";
   const isFalse =
-    value === false || value === 0 || value === "false" || value === "f";
+    value === false ||
+    value === 0 ||
+    normalizedValue === "0" ||
+    normalizedValue === "false" ||
+    normalizedValue === "f";
 
   if (!isTrue && !isFalse) {
     return <span className="text-muted-foreground italic">NULL</span>;
