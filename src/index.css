@@ -184,4 +184,35 @@
   [role="button"] {
     @apply transition-colors duration-150;
   }
+
+  /* React Flow Controls Dark Mode */
+  .react-flow__controls {
+    background-color: hsl(var(--background)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+  }
+
+  .react-flow__controls-button {
+    background-color: hsl(var(--background)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .react-flow__controls-button svg {
+    fill: hsl(var(--foreground)) !important;
+    stroke: hsl(var(--foreground)) !important;
+  }
+
+  .react-flow__controls-button:hover {
+    background-color: hsl(var(--accent)) !important;
+  }
+
+  .react-flow__controls-button:hover svg {
+    fill: hsl(var(--foreground)) !important;
+    stroke: hsl(var(--foreground)) !important;
+  }
+
+  /* React Flow MiniMap Dark Mode */
+  .react-flow__minimap {
+    background-color: hsl(var(--background)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
 }
