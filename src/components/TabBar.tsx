@@ -55,7 +55,7 @@ export function TabBar({
   if (tabs.length === 0) return null;
 
   return (
-    <div className="h-10 border-b border-border bg-card flex items-center px-2 gap-1 overflow-x-auto scrollbar-thin">
+    <div className="h-10 border-b border-border bg-card flex items-center gap-0 overflow-x-auto scrollbar-thin">
       {tabs.map((tab) => (
         <ContextMenu key={tab.id}>
           <ContextMenuTrigger>
