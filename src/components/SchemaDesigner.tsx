@@ -84,27 +84,27 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
         if (hasFK) hasForeignKey.add(node.id);
       });
 
-      // Position nodes: parent tables on left, child tables on right
-      let parentY = 50;
-      let childY = 50;
+      // Position nodes: parent tables on top, child tables on bottom (horizontal layout)
+      let parentX = 50;
+      let childX = 50;
 
       newNodes.forEach((node, index) => {
         if (hasPrimaryKey.has(node.id)) {
-          // Parent table - position on left
+          // Parent table - position on top row
           node.position = {
-            x: 50,
-            y: parentY,
+            x: parentX,
+            y: 50,
           };
-          parentY += nodeHeight + verticalSpacing;
+          parentX += nodeWidth + horizontalSpacing;
         } else if (hasForeignKey.has(node.id)) {
-          // Child table - position on right
+          // Child table - position on bottom row
           node.position = {
-            x: nodeWidth + horizontalSpacing + 50,
-            y: childY,
+            x: childX,
+            y: nodeHeight + verticalSpacing + 50,
           };
-          childY += nodeHeight + verticalSpacing;
+          childX += nodeWidth + horizontalSpacing;
         } else {
-          // Other tables - position in middle or use grid
+          // Other tables - use horizontal grid layout
           const nodesPerRow = Math.ceil(Math.sqrt(tables.length));
           const row = Math.floor(index / nodesPerRow);
           const col = index % nodesPerRow;
