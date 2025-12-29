@@ -215,4 +215,13 @@
     background-color: hsl(var(--background)) !important;
     border-color: hsl(var(--border)) !important;
   }
+
+  /* React Flow Edge Label - position above the stroke */
+  .react-flow__edge-label {
+    transform: translateY(-12px);
+  }
+
+  .react-flow__edge-labelbg {
+    transform: translateY(-12px);
+  }
 }

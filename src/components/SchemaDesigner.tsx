@@ -229,15 +229,15 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
                     },
                     label: sourceCol.name,
                     labelStyle: {
-                      fontSize: 11,
-                      fill: "#f97316",
+                      fontSize: 12,
+                      fill: "#ffffff",
                       fontWeight: 600,
                     },
                     labelBgStyle: {
-                      fill: "#fff",
-                      fillOpacity: 0.9,
+                      fill: "#f97316",
+                      fillOpacity: 0.95,
                     },
-                    labelBgPadding: [4, 6] as [number, number],
+                    labelBgPadding: [6, 8] as [number, number],
                     labelBgBorderRadius: 4,
                   };
                   detectedEdges.push(edge);
