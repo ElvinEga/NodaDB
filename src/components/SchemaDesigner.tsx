@@ -339,11 +339,11 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
         <Controls className="react-flow__controls" />
         <MiniMap
           nodeColor={(node) => {
-            return node.selected ? "#6366f1" : "#64748b";
+            return node.selected ? "hsl(var(--primary))" : "hsl(var(--accent))";
           }}
-          maskColor="rgba(15, 23, 42, 0.6)"
+          maskColor="hsl(0 0% 0% / 0.17)"
           style={{
-            backgroundColor: "hsl(var(--background))",
+            backgroundColor: "hsl(var(--card))",
             border: "1px solid hsl(var(--border))",
           }}
         />
