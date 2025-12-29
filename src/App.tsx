@@ -13,6 +13,7 @@ import {
   Trash2,
   MoreVertical,
   Pencil,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,8 +61,12 @@ import { TanStackTableViewer } from "./components/TanStackTableViewer";
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
-  const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(null);
-  const [renameConnectionId, setRenameConnectionId] = useState<string | null>(null);
+  const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(
+    null
+  );
+  const [renameConnectionId, setRenameConnectionId] = useState<string | null>(
+    null
+  );
   const [renameValue, setRenameValue] = useState("");
   const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
@@ -584,112 +589,133 @@ function App() {
           </>
         ) : connections.length > 0 ? (
           /* Connection List when no active connection */
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="max-w-2xl w-full">
-              <h2 className="text-2xl font-bold mb-2">Your Connections</h2>
-              <p className="text-muted-foreground mb-6">
-                Select a connection to start exploring your database
-              </p>
-              <div className="grid gap-3">
-                {connections.map((conn) => (
-                  <div
-                    key={conn.id}
-                    className="relative group text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
-                  >
-                    <button
-                      onClick={async () => {
-                        try {
-                          await invoke("connect_database", {
-                            config: conn,
-                          });
-                          setActiveConnection(conn.id);
-                        } catch (error) {
-                          console.error("Failed to connect:", error);
-                          alert(`Failed to connect to ${conn.name}: ${error}`);
-                        }
-                      }}
-                      className="w-full"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Database className="h-6 w-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-semibold mb-1 text-left">
-                            {conn.name}
-                          </div>
-                          <div className="text-sm text-muted-foreground flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
-                              {conn.db_type.toUpperCase()}
-                            </span>
-                            {conn.file_path && (
-                              <span className="truncate">{conn.file_path}</span>
-                            )}
-                            {conn.host && (
-                              <span>
-                                {conn.host}:{conn.port}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRenameConnectionId(conn.id);
-                            setRenameValue(conn.name);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConnectionId(conn.id);
-                          }}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                ))}
-
-                {/* Add New Connection Card */}
-                <button
-                  onClick={() => setConnectionDialogOpen(true)}
-                  className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
+          <div className="flex-1 flex flex-col p-6">
+            {/* Back button when switching connections */}
+            {activeConnectionId && (
+              <div className="flex items-center mb-6">
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveConnection(activeConnectionId)}
+                  className="gap-2"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Plus className="h-6 w-6 text-primary" />
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to{" "}
+                  {connections.find((c) => c.id === activeConnectionId)?.name ||
+                    "Connection"}
+                </Button>
+              </div>
+            )}
+            <div className="flex-1 flex items-center justify-center">
+              <div className="max-w-2xl w-full">
+                <h2 className="text-2xl font-bold mb-2">Your Connections</h2>
+                <p className="text-muted-foreground mb-6">
+                  Select a connection to start exploring your database
+                </p>
+                <div className="grid gap-3">
+                  {connections.map((conn) => (
+                    <div
+                      key={conn.id}
+                      className="relative group text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
+                    >
+                      <button
+                        onClick={async () => {
+                          try {
+                            await invoke("connect_database", {
+                              config: conn,
+                            });
+                            setActiveConnection(conn.id);
+                          } catch (error) {
+                            console.error("Failed to connect:", error);
+                            alert(
+                              `Failed to connect to ${conn.name}: ${error}`
+                            );
+                          }
+                        }}
+                        className="w-full"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Database className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-semibold mb-1 text-left">
+                              {conn.name}
+                            </div>
+                            <div className="text-sm text-muted-foreground flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
+                                {conn.db_type.toUpperCase()}
+                              </span>
+                              {conn.file_path && (
+                                <span className="truncate">
+                                  {conn.file_path}
+                                </span>
+                              )}
+                              {conn.host && (
+                                <span>
+                                  {conn.host}:{conn.port}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenameConnectionId(conn.id);
+                              setRenameValue(conn.name);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConnectionId(conn.id);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <div className="flex-1">
-                      <div className="font-semibold mb-1">
-                        Add New Connection
+                  ))}
+
+                  {/* Add New Connection Card */}
+                  <button
+                    onClick={() => setConnectionDialogOpen(true)}
+                    className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Plus className="h-6 w-6 text-primary" />
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Connect to a new database
+                      <div className="flex-1">
+                        <div className="font-semibold mb-1">
+                          Add New Connection
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Connect to a new database
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -733,7 +759,10 @@ function App() {
         )}
 
         <Toaster />
-        <AlertDialog open={renameConnectionId !== null} onOpenChange={(open) => !open && setRenameConnectionId(null)}>
+        <AlertDialog
+          open={renameConnectionId !== null}
+          onOpenChange={(open) => !open && setRenameConnectionId(null)}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Rename Connection</AlertDialogTitle>
@@ -748,7 +777,9 @@ function App() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && renameValue.trim()) {
                   if (renameConnectionId) {
-                    updateConnection(renameConnectionId, { name: renameValue.trim() });
+                    updateConnection(renameConnectionId, {
+                      name: renameValue.trim(),
+                    });
                     setRenameConnectionId(null);
                   }
                 }
@@ -759,7 +790,9 @@ function App() {
               <AlertDialogAction
                 onClick={() => {
                   if (renameConnectionId && renameValue.trim()) {
-                    updateConnection(renameConnectionId, { name: renameValue.trim() });
+                    updateConnection(renameConnectionId, {
+                      name: renameValue.trim(),
+                    });
                     setRenameConnectionId(null);
                   }
                 }}
@@ -770,12 +803,16 @@ function App() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <AlertDialog open={deleteConnectionId !== null} onOpenChange={(open) => !open && setDeleteConnectionId(null)}>
+        <AlertDialog
+          open={deleteConnectionId !== null}
+          onOpenChange={(open) => !open && setDeleteConnectionId(null)}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Connection</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to remove this connection? This action cannot be undone.
+                Are you sure you want to remove this connection? This action
+                cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
