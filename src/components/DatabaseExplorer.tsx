@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Table,
@@ -12,6 +12,9 @@ import {
   FileCode,
   Search,
   Filter,
+  Tag as TagIcon,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,9 +49,42 @@ import {
 } from "@/components/ui/dialog";
 import { CreateTableDialog } from "@/components/CreateTableDialog";
 import { ExportTableDialog } from "@/components/ExportTableDialog";
-import { DatabaseTable, ConnectionConfig } from "@/types";
+import { TagManager } from "@/components/TagManager";
+import { TagSelectDialog } from "@/components/TagSelectDialog";
+import { TableRow } from "@/components/TableRow";
+import { DatabaseTable, ConnectionConfig, TableTag, TagColor } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getTags,
+  getTagForTable,
+  getTablesForTag,
+} from "@/lib/tagStorage";
+
+const colorClasses: Record<TagColor, string> = {
+  red: "bg-red-500",
+  orange: "bg-orange-500",
+  amber: "bg-amber-500",
+  yellow: "bg-yellow-500",
+  lime: "bg-lime-500",
+  green: "bg-green-500",
+  emerald: "bg-emerald-500",
+  teal: "bg-teal-500",
+  cyan: "bg-cyan-500",
+  sky: "bg-sky-500",
+  blue: "bg-blue-500",
+  indigo: "bg-indigo-500",
+  violet: "bg-violet-500",
+  purple: "bg-purple-500",
+  fuchsia: "bg-fuchsia-500",
+  pink: "bg-pink-500",
+  rose: "bg-rose-500",
+  slate: "bg-slate-500",
+  gray: "bg-gray-500",
+  zinc: "bg-zinc-500",
+  neutral: "bg-neutral-500",
+  stone: "bg-stone-500",
+};
 
 interface DatabaseExplorerProps {
   connection: ConnectionConfig;
@@ -75,6 +111,19 @@ export function DatabaseExplorer({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [tableToRename, setTableToRename] = useState<string>("");
   const [newTableName, setNewTableName] = useState("");
+
+  // Tag-related state
+  const [tags, setTags] = useState<TableTag[]>([]);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [tagSelectOpen, setTagSelectOpen] = useState(false);
+  const [tableForTag, setTableForTag] = useState<string>("");
+  const [collapsedTags, setCollapsedTags] = useState<Set<string>>(new Set());
+  const [untaggedCollapsed, setUntaggedCollapsed] = useState(false);
+
+  // Refresh tags when dialog closes
+  const refreshTags = useCallback(() => {
+    setTags(getTags());
+  }, []);
 
   const loadTables = async () => {
     setIsLoading(true);
@@ -144,7 +193,8 @@ export function DatabaseExplorer({
 
   useEffect(() => {
     loadTables();
-  }, [connection.id]);
+    refreshTags();
+  }, [connection.id, refreshTags]);
 
   // Filtered tables based on search and filter
   const filteredTables = useMemo(() => {
@@ -203,6 +253,14 @@ export function DatabaseExplorer({
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setTagManagerOpen(true)}
+            >
+              <TagIcon className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
@@ -276,111 +334,118 @@ export function DatabaseExplorer({
                 : "No tables match your search"}
             </div>
           ) : (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-2 py-1">
-                <div className="text-xs font-semibold text-muted-foreground">
-                  TABLES ({filteredTables.length}
-                  {filteredTables.length !== tables.length
-                    ? ` of ${tables.length}`
-                    : ""}
-                  )
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 w-6 p-0"
-                  onClick={() => setCreateTableDialogOpen(true)}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-              <TooltipProvider delayDuration={300}>
-                {filteredTables.map((table) => (
-                  <div
-                    key={table.name}
-                    className="flex items-center gap-1 group"
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => onTableSelect(table)}
-                          className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-                            selectedTable?.name === table.name
-                              ? "bg-primary text-primary-foreground font-extrabold"
-                              : "hover:bg-muted"
-                          }`}
-                        >
-                          <Table className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{table.name}</span>
-                          {table.table_type === "VIEW" && (
-                            <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground">
-                              VIEW
-                            </span>
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs">
-                        <div className="space-y-1">
-                          <div className="font-semibold">{table.name}</div>
-                          <div className="text-muted-foreground">
-                            Type: {table.table_type || "TABLE"}
-                          </div>
-                          <div className="text-muted-foreground">
-                            Rows: {formatRowCount(table.row_count)}
-                          </div>
-                          {table.size_kb !== undefined && (
-                            <div className="text-muted-foreground">
-                              Size: {formatSize(table.size_kb)}
-                            </div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
-                        >
-                          <MoreVertical className="h-3 w-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onTableSelect(table)}>
-                          <Table className="h-4 w-4 mr-2" />
-                          View Data
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setTableToExport(table);
-                            setExportDialogOpen(true);
-                          }}
-                        >
-                          <FileCode className="h-4 w-4 mr-2" />
-                          Export Structure
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleRenameTable(table.name)}
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleDropTable(table.name)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Drop Table
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+            <TooltipProvider delayDuration={300}>
+              {/* Tag Groups */}
+              {tags.map((tag) => {
+                const tagTables = filteredTables.filter((table) => {
+                  const tableTag = getTagForTable(table.name, connection.id);
+                  return tableTag?.id === tag.id;
+                });
+
+                if (tagTables.length === 0) return null;
+
+                const isCollapsed = collapsedTags.has(tag.id);
+
+                return (
+                  <div key={tag.id} className="mb-3">
+                    <button
+                      onClick={() => {
+                        setCollapsedTags((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(tag.id)) {
+                            next.delete(tag.id);
+                          } else {
+                            next.add(tag.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-muted/50 rounded-md transition-colors"
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <div className={`w-2.5 h-2.5 rounded-full ${colorClasses[tag.color]}`} />
+                      <span className="text-xs font-semibold text-muted-foreground flex-1 text-left">
+                        {tag.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {tagTables.length}
+                      </span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="ml-4 mt-1 space-y-0.5">
+                        {tagTables.map((table) => (
+                          <TableRow
+                            key={table.name}
+                            table={table}
+                            selectedTable={selectedTable}
+                            onTableSelect={onTableSelect}
+                            setTableToExport={setTableToExport}
+                            setExportDialogOpen={setExportDialogOpen}
+                            handleRenameTable={handleRenameTable}
+                            setTableForTag={setTableForTag}
+                            setTagSelectOpen={setTagSelectOpen}
+                            handleDropTable={handleDropTable}
+                            formatRowCount={formatRowCount}
+                            formatSize={formatSize}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </TooltipProvider>
-            </div>
+                );
+              })}
+
+              {/* Untagged Tables */}
+              <div>
+                <button
+                  onClick={() => setUntaggedCollapsed(!untaggedCollapsed)}
+                  className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-muted/50 rounded-md transition-colors"
+                >
+                  {untaggedCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                  <div className="w-2.5 h-2.5 rounded-full bg-muted border border-border" />
+                  <span className="text-xs font-semibold text-muted-foreground flex-1 text-left">
+                    Untagged
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {
+                      filteredTables.filter(
+                        (table) => !getTagForTable(table.name, connection.id)
+                      ).length
+                    }
+                  </span>
+                </button>
+                {!untaggedCollapsed && (
+                  <div className="ml-4 mt-1 space-y-0.5">
+                    {filteredTables
+                      .filter((table) => !getTagForTable(table.name, connection.id))
+                      .map((table) => (
+                        <TableRow
+                          key={table.name}
+                          table={table}
+                          selectedTable={selectedTable}
+                          onTableSelect={onTableSelect}
+                          setTableToExport={setTableToExport}
+                          setExportDialogOpen={setExportDialogOpen}
+                          handleRenameTable={handleRenameTable}
+                          setTableForTag={setTableForTag}
+                          setTagSelectOpen={setTagSelectOpen}
+                          handleDropTable={handleDropTable}
+                          formatRowCount={formatRowCount}
+                          formatSize={formatSize}
+                        />
+                      ))}
+                  </div>
+                )}
+              </div>
+            </TooltipProvider>
           )}
         </div>
       </ScrollArea>
@@ -433,6 +498,21 @@ export function DatabaseExplorer({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TagManager
+        open={tagManagerOpen}
+        onOpenChange={setTagManagerOpen}
+        onTagsChange={refreshTags}
+      />
+
+      <TagSelectDialog
+        open={tagSelectOpen}
+        onOpenChange={setTagSelectOpen}
+        tableName={tableForTag}
+        connectionId={connection.id}
+        onTagChange={refreshTags}
+        onOpenTagManager={() => setTagManagerOpen(true)}
+      />
     </div>
   );
 }
