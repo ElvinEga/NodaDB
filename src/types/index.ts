@@ -159,3 +159,41 @@ export interface QueryHistoryItem {
   connectionId: string;
   connectionName: string;
 }
+
+// Tag Types
+export type TagColor =
+  | 'red'
+  | 'orange'
+  | 'amber'
+  | 'yellow'
+  | 'lime'
+  | 'green'
+  | 'emerald'
+  | 'teal'
+  | 'cyan'
+  | 'sky'
+  | 'blue'
+  | 'indigo'
+  | 'violet'
+  | 'purple'
+  | 'fuchsia'
+  | 'pink'
+  | 'rose'
+  | 'slate'
+  | 'gray'
+  | 'zinc'
+  | 'neutral'
+  | 'stone';
+
+export interface TableTag {
+  id: string;
+  name: string;
+  color: TagColor;
+  createdAt: number;
+}
+
+export interface TableTagAssignment {
+  tableName: string;
+  tagId: string;
+  connectionId: string;
+}

@@ -99,6 +99,7 @@ import {
   calculateColumnStats,
 } from "@/lib/tableOperations";
 import { buildSelectQuery, buildCountQuery } from "@/lib/sqlUtils";
+import { KeyboardTooltip } from "./ui/keyboard-tooltip";
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -1067,17 +1068,19 @@ Sum: ${stats.sum}`
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="h-8"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
-              />
-            </Button>
+            <KeyboardTooltip description="Refresh" keys={["Ctrl", "R"]}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="h-8"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </KeyboardTooltip>
             <Button
               variant="ghost"
               size="sm"
@@ -1105,28 +1108,32 @@ Sum: ${stats.sum}`
               className="h-8"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add row
+              Insert
             </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDeleteRows}
-              disabled={selectedCount === 0}
-              className="h-8"
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete row
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDataGeneratorDialogOpen(true)}
-              className="h-8"
-            >
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              Generate data
-            </Button>
+            {selectedCount === 1 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteRows}
+                className="h-8"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                Delete
+              </Button>
+            )}
+          </div>
 
+          <div className="flex items-center gap-2">
+            <KeyboardTooltip description="Generate Data">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDataGeneratorDialogOpen(true)}
+                className="h-8"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </Button>
+            </KeyboardTooltip>
             {selectedCount > 0 && (
               <>
                 <Button
@@ -1136,16 +1143,13 @@ Sum: ${stats.sum}`
                   className="h-8"
                 >
                   <Workflow className="h-3.5 w-3.5 mr-1.5" />
-                  Batch ops
+                  Batch ops{" "}
+                  <span className="text-xs text-muted-foreground">
+                    {selectedCount}
+                  </span>
                 </Button>
-                <span className="text-xs text-muted-foreground ml-2">
-                  {selectedCount} selected
-                </span>
               </>
             )}
-          </div>
-
-          <div className="flex items-center gap-2">
             {/* Column visibility dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -10,6 +10,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface EditCellDialogProps {
   open: boolean;
@@ -31,13 +38,25 @@ export function EditCellDialog({
   const [value, setValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isBoolean = columnType.toUpperCase().includes('BOOL') || columnType.toUpperCase() === 'BIT';
+
   useEffect(() => {
     if (open) {
-      // Initialize value when dialog opens
-      const displayValue = currentValue === null || currentValue === undefined ? '' : String(currentValue);
-      setValue(displayValue);
+      if (isBoolean) {
+        // Normalize boolean values to '1' or '0'
+        if (currentValue === true || currentValue === 1 || currentValue === '1' || currentValue === 'true' || currentValue === 't') {
+          setValue('1');
+        } else if (currentValue === false || currentValue === 0 || currentValue === '0' || currentValue === 'false' || currentValue === 'f') {
+          setValue('0');
+        } else {
+          setValue(''); // Default/Null
+        }
+      } else {
+        const displayValue = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+        setValue(displayValue);
+      }
     }
-  }, [open, currentValue]);
+  }, [open, currentValue, isBoolean]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,15 +115,27 @@ export function EditCellDialog({
               <label htmlFor="cell-value" className="text-sm font-medium">
                 New Value
               </label>
-              <Input
-                id="cell-value"
-                type={getInputType()}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder={getPlaceholder()}
-                autoFocus
-                className="h-9"
-              />
+              {isBoolean ? (
+                <Select value={value} onValueChange={setValue}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select boolean value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">True</SelectItem>
+                    <SelectItem value="0">False</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="cell-value"
+                  type={getInputType()}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={getPlaceholder()}
+                  autoFocus
+                  className="h-9"
+                />
+              )}
               <p className="text-xs text-muted-foreground">
                 Leave empty to set as NULL
               </p>
