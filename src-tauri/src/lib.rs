@@ -32,6 +32,8 @@ pub fn run() {
             commands::execute_transaction,
             commands::rename_table,
             commands::export_table_structure,
+            commands::create_new_window,
+            commands::create_window_from_label,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
