@@ -46,7 +46,7 @@ import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { Toaster } from "@/components/ui/sonner";
+import { toast, Toaster } from "sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
 import { KeyboardTooltip } from "@/components/ui/keyboard-tooltip";
