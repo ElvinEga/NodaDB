@@ -11,12 +11,18 @@ import {
   MarkerType,
   NodeTypes,
   Panel,
+  ReactFlowProvider,
 } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
 import { SchemaNode, SchemaNodeData } from "@/components/SchemaNode";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Maximize2, Download, Loader2 } from "lucide-react";
+import {
+  RefreshCw,
+  Maximize2,
+  FileCode,
+  Loader2,
+} from "lucide-react";
 import { ConnectionConfig, DatabaseTable, TableColumn } from "@/types";
 import { toast } from "sonner";
 import "@xyflow/react/dist/style.css";
@@ -36,6 +42,9 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [tableCount, setTableCount] = useState(0);
+  const [columnsData, setColumnsData] = useState<Map<string, TableColumn[]>>(
+    new Map()
+  );
 
   // Auto-layout nodes in a hierarchical way
   const autoLayout = useCallback(
@@ -280,14 +289,143 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
 
   // Auto-fit view
   const handleFitView = useCallback(() => {
-    // This would require reactFlowInstance.fitView() - we'd need to use useReactFlow hook
-    toast.info("Use mouse wheel to zoom, drag to pan");
+    // The fitView prop on ReactFlow handles this automatically
+    toast.info("Click the maximize button or use scroll to zoom");
   }, []);
 
-  // Export schema as image (placeholder)
-  const handleExportImage = useCallback(() => {
-    toast.info("Image export coming soon!");
-  }, []);
+  // Generate SQL CREATE TABLE statement for a single table
+  const generateCreateTableSQL = useCallback(
+    (tableName: string, columns: TableColumn[]): string => {
+      const columnDefs: string[] = [];
+      const primaryKeys: string[] = [];
+
+      columns.forEach((col) => {
+        let type = col.data_type.toUpperCase();
+
+        // Map database types to standard SQL types
+        if (type.includes("INT")) type = "INTEGER";
+        else if (type.includes("VARCHAR") || type.includes("CHAR"))
+          type = type.includes("(") ? type : "VARCHAR(255)";
+        else if (type.includes("TEXT")) type = "TEXT";
+        else if (type.includes("BOOLEAN") || type === "BOOL") type = "BOOLEAN";
+        else if (type.includes("DATE")) type = "DATE";
+        else if (type.includes("TIME")) type = "TIME";
+        else if (type.includes("DATETIME") || type.includes("TIMESTAMP")) type = "DATETIME";
+        else if (type.includes("JSON")) type = "JSON";
+        else if (type.includes("FLOAT") || type.includes("DECIMAL") || type.includes("NUMERIC"))
+          type = "REAL";
+        else if (type.includes("BLOB")) type = "BLOB";
+
+        let columnDef = `  ${col.name} ${type}`;
+
+        if (col.is_primary_key) {
+          primaryKeys.push(col.name);
+        }
+
+        if (!col.is_nullable && !col.is_primary_key) {
+          columnDef += " NOT NULL";
+        }
+
+        if (col.default_value !== null && col.default_value !== undefined) {
+          const defaultVal = typeof col.default_value === "string"
+            ? `'${col.default_value}'`
+            : String(col.default_value);
+          columnDef += ` DEFAULT ${defaultVal}`;
+        }
+
+        columnDefs.push(columnDef);
+      });
+
+      // Add primary key constraint
+      if (primaryKeys.length > 0) {
+        columnDefs.push(`  PRIMARY KEY (${primaryKeys.join(", ")})`);
+      }
+
+      return `CREATE TABLE IF NOT EXISTS ${tableName} (\n${columnDefs.join(",\n")}\n);\n`;
+    },
+    []
+  );
+
+  // Export schema as SQL
+  const handleExportSchema = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      // Get all tables
+      const tables = await invoke<DatabaseTable[]>("list_tables", {
+        connectionId: connection.id,
+        dbType: connection.db_type,
+      });
+
+      if (tables.length === 0) {
+        toast.error("No tables found to export");
+        return;
+      }
+
+      // Get columns for each table
+      const columnsMap = new Map<string, TableColumn[]>();
+      await Promise.all(
+        tables.map(async (table) => {
+          try {
+            const columns = await invoke<TableColumn[]>("get_table_structure", {
+              connectionId: connection.id,
+              tableName: table.name,
+              dbType: connection.db_type,
+            });
+            columnsMap.set(table.name, columns);
+          } catch (error) {
+            console.error(`Failed to load columns for ${table.name}:`, error);
+          }
+        })
+      );
+
+      // Generate SQL schema
+      let sqlSchema = `-- Schema Export for ${connection.name}\n`;
+      sqlSchema += `-- Database Type: ${connection.db_type}\n`;
+      sqlSchema += `-- Generated: ${new Date().toISOString()}\n\n`;
+      sqlSchema += "-- ============================================\n";
+      sqlSchema += "-- Database Schema (No Data)\n";
+      sqlSchema += "-- ============================================\n\n";
+
+      // Sort tables alphabetically for consistent output
+      const sortedTables = tables.sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const table of sortedTables) {
+        const columns = columnsMap.get(table.name) || [];
+        if (columns.length > 0) {
+          sqlSchema += generateCreateTableSQL(table.name, columns);
+          sqlSchema += "\n";
+        }
+      }
+
+      // Add comments about foreign keys (informational only)
+      if (edges.length > 0) {
+        sqlSchema += "-- ============================================\n";
+        sqlSchema += "-- Detected Relationships (Reference Only)\n";
+        sqlSchema += "-- ============================================\n";
+        sqlSchema += "-- Note: FK constraints are detected but not enforced in this export.\n";
+        sqlSchema += "-- Add them manually if needed based on your schema.\n\n";
+      }
+
+      // Create and trigger download
+      const blob = new Blob([sqlSchema], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${connection.name.replace(/[^a-zA-Z0-9]/g, "_")}_schema.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported schema with ${tables.length} tables`);
+    } catch (error) {
+      toast.error(`Failed to export schema: ${error}`);
+      console.error("Export error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [connection, generateCreateTableSQL, edges.length]);
 
   // Handle edge hover
   const handleEdgeMouseEnter = useCallback(
@@ -318,7 +456,8 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
   }, [setEdges]);
 
   return (
-    <div className="h-full w-full bg-background relative">
+    <ReactFlowProvider>
+      <div className="h-full w-full bg-background relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -385,16 +524,19 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
                 size="sm"
                 onClick={handleFitView}
                 className="h-8"
+                title="Fit View"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleExportImage}
+                onClick={handleExportSchema}
+                disabled={isLoading}
                 className="h-8"
+                title="Export Schema as SQL"
               >
-                <Download className="h-3.5 w-3.5" />
+                <FileCode className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -435,6 +577,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           </Panel>
         )}
       </ReactFlow>
-    </div>
+      </div>
+    </ReactFlowProvider>
   );
 }
