@@ -10,18 +10,20 @@ export async function setupNativeMenu(): Promise<void> {
   const app = await import("@tauri-apps/api/app");
 
   // About submenu for macOS
-  // const aboutSubmenu = await Submenu.new({
-  //   text: "About",
-  //   items: [
-  //     await MenuItem.new({
-  //       id: "about",
-  //       text: "About NodaDB",
-  //       action: async () => {
-  //         alert("NodaDB v0.1.2\n\nA modern database management tool built with Tauri 2, React, and Rust.");
-  //       },
-  //     }),
-  //   ],
-  // });
+  const aboutSubmenu = await Submenu.new({
+    text: "About",
+    items: [
+      await MenuItem.new({
+        id: "about",
+        text: "About NodaDB",
+        action: async () => {
+          alert(
+            "NodaDB v0.1.2\n\nA modern database management tool built with Tauri 2, React, and Rust."
+          );
+        },
+      }),
+    ],
+  });
 
   // File menu
   const fileSubmenu = await Submenu.new({
@@ -230,7 +232,7 @@ export async function setupNativeMenu(): Promise<void> {
 
   const menu = await Menu.new({
     items: [
-      // aboutSubmenu,
+      aboutSubmenu,
       fileSubmenu,
       editSubmenu,
       selectionSubmenu,

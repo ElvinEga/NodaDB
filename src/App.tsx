@@ -38,6 +38,7 @@ import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
+import { MenuBar } from "@/components/MenuBar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { OptimizedTableViewer } from "@/components/OptimizedTableViewer";
 import { TableSkeleton } from "@/components/TableSkeleton";
@@ -382,6 +383,12 @@ function App() {
             />
 
             <SidebarInset className="flex flex-col flex-1">
+              {/* MenuBar for Linux/Windows (macOS uses native menu) */}
+              {!navigator.userAgent.includes("Mac") && (
+                <header className="bg-background sticky top-0 z-50 w-full">
+                  <MenuBar />
+                </header>
+              )}
               {/* Top Navigation Bar */}
               <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
                 {/* Logo & App Name */}
