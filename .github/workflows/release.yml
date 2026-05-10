@@ -3,8 +3,13 @@ name: Release NodaDB
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -39,6 +44,7 @@ jobs:
             wget \
             file \
             libssl-dev \
+            pkg-config \
             libxdo-dev
 
       - name: Setup Rust
@@ -52,11 +58,33 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
-      - name: Build Tauri app
+      - name: Build Tauri app for branch/manual runs
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: bun tauri build
+
+      - name: Upload branch/manual build artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodadb-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+
+      - name: Build and upload tagged Tauri release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: NodaDB-${{ github.ref_name }}
+          tagName: ${{ github.ref_name }}
           releaseName: "NodaDB ${{ github.ref_name }}"
+          releaseBody: "NodaDB desktop release."
+          releaseDraft: true
+          prerelease: false
           args: ${{ matrix.args }}
