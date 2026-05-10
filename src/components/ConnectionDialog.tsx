@@ -458,10 +458,10 @@ export function ConnectionDialog({
                 >
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="connectionString" className="!text-xs">
-                      Connection String
+                      String
                     </TabsTrigger>
                     <TabsTrigger value="direct" className="!text-xs">
-                      Direct Connection
+                      Direct
                     </TabsTrigger>
                     <TabsTrigger value="ssh" className="!text-xs">
                       SSH Tunnel
