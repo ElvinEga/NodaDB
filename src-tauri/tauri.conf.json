@@ -50,6 +50,11 @@
       "icons/icon.ico",
       "icons/Assets.car"
     ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
     "resources": [],
     "category": "Productivity",
     "shortDescription": "A modern database management desktop application",
