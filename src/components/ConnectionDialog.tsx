@@ -52,7 +52,7 @@ export function ConnectionDialog({
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
-    null
+    null,
   );
 
   // Connection string state
@@ -71,7 +71,7 @@ export function ConnectionDialog({
 
   const addConnection = useConnectionStore((state) => state.addConnection);
   const setActiveConnection = useConnectionStore(
-    (state) => state.setActiveConnection
+    (state) => state.setActiveConnection,
   );
 
   const handleParseConnectionString = () => {
@@ -192,7 +192,7 @@ export function ConnectionDialog({
 
       if (result.success) {
         toast.success(
-          `Connection successful! ${result.db_version} (${result.latency_ms}ms)`
+          `Connection successful! ${result.db_version} (${result.latency_ms}ms)`,
         );
       } else {
         toast.error(`Connection failed: ${result.error}`);
@@ -352,7 +352,7 @@ export function ConnectionDialog({
             <div className="grid gap-2">
               <label
                 htmlFor="name"
-                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
               >
                 Connection Name <span className="text-destructive">*</span>
               </label>
@@ -368,7 +368,7 @@ export function ConnectionDialog({
             <div className="grid gap-2">
               <label
                 htmlFor="dbType"
-                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
               >
                 Database Type <span className="text-destructive">*</span>
               </label>
@@ -421,7 +421,7 @@ export function ConnectionDialog({
               <div className="grid gap-2">
                 <label
                   htmlFor="filePath"
-                  className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                  className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                 >
                   Database File <span className="text-destructive">*</span>
                 </label>
@@ -452,16 +452,20 @@ export function ConnectionDialog({
                   value={connectionType}
                   onValueChange={(v) =>
                     setConnectionType(
-                      v as "direct" | "ssh" | "connectionString"
+                      v as "direct" | "ssh" | "connectionString",
                     )
                   }
                 >
                   <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="connectionString">
+                    <TabsTrigger value="connectionString" className="!text-xs">
                       Connection String
                     </TabsTrigger>
-                    <TabsTrigger value="direct">Direct Connection</TabsTrigger>
-                    <TabsTrigger value="ssh">SSH Tunnel</TabsTrigger>
+                    <TabsTrigger value="direct" className="!text-xs">
+                      Direct Connection
+                    </TabsTrigger>
+                    <TabsTrigger value="ssh" className="!text-xs">
+                      SSH Tunnel
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent
@@ -476,7 +480,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="connectionString"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Connection String{" "}
                             <span className="text-destructive">*</span>
@@ -510,7 +514,7 @@ export function ConnectionDialog({
                     {/* Show parsed values if available */}
                     {host && username && database && connectionString && (
                       <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                        <p className="text-xs font-medium mb-2">
+                        <p className="!text-sm font-medium mb-2">
                           Parsed Connection Details:
                         </p>
                         <div className="grid gap-1 text-xs text-muted-foreground font-mono">
@@ -545,7 +549,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="host"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               Host <span className="text-destructive">*</span>
                             </label>
@@ -560,7 +564,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="port"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               Port <span className="text-destructive">*</span>
                             </label>
@@ -579,7 +583,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="database"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Database <span className="text-destructive">*</span>
                           </label>
@@ -602,7 +606,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="username"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Username <span className="text-destructive">*</span>
                           </label>
@@ -618,7 +622,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="password"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Password <span className="text-destructive">*</span>
                           </label>
@@ -645,7 +649,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="sshHost"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               SSH Host{" "}
                               <span className="text-destructive">*</span>
@@ -661,7 +665,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="sshPort"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               SSH Port{" "}
                               <span className="text-destructive">*</span>
@@ -679,7 +683,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="sshUsername"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             SSH Username{" "}
                             <span className="text-destructive">*</span>
@@ -696,7 +700,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="sshAuthMethod"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Authentication Method{" "}
                             <span className="text-destructive">*</span>
@@ -723,7 +727,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="sshPassword"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               SSH Password{" "}
                               <span className="text-destructive">*</span>
@@ -741,7 +745,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="sshPrivateKeyPath"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               Private Key Path{" "}
                               <span className="text-destructive">*</span>
@@ -779,7 +783,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="dbHost"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               DB Host{" "}
                               <span className="text-destructive">*</span>
@@ -798,7 +802,7 @@ export function ConnectionDialog({
                           <div className="grid gap-2">
                             <label
                               htmlFor="dbPort"
-                              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                             >
                               DB Port{" "}
                               <span className="text-destructive">*</span>
@@ -818,7 +822,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="sshDatabase"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             Database <span className="text-destructive">*</span>
                           </label>
@@ -841,7 +845,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="sshDbUsername"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             DB Username{" "}
                             <span className="text-destructive">*</span>
@@ -858,7 +862,7 @@ export function ConnectionDialog({
                         <div className="grid gap-2">
                           <label
                             htmlFor="sshDbPassword"
-                            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                            className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
                           >
                             DB Password{" "}
                             <span className="text-destructive">*</span>
