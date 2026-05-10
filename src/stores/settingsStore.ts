@@ -44,7 +44,7 @@ interface SettingsStore {
 
 const defaultSettings = {
   theme: "system" as Theme,
-  fontSize: "medium" as FontSize,
+  fontSize: "small" as FontSize,
   fontFamily: "Outfit" as FontFamily,
   autoSave: true,
   autoSaveDelay: 5,
@@ -79,6 +79,6 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "app-settings-storage",
-    }
-  )
+    },
+  ),
 );
