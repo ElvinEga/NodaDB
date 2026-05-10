@@ -47,7 +47,7 @@ import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { toast, Toaster } from "sonner";
+import { Toaster } from "sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
 import { KeyboardTooltip } from "@/components/ui/keyboard-tooltip";
@@ -765,7 +765,7 @@ function App() {
           </div>
         )}
 
-        <Toaster />
+        <Toaster richColors position="top-right" />
         <AlertDialog
           open={renameConnectionId !== null}
           onOpenChange={(open) => !open && setRenameConnectionId(null)}
