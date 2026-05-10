@@ -52,6 +52,73 @@ bun run tauri dev
 bun run tauri build
 ```
 
+### macOS Icon Setup (Liquid Glass)
+
+For macOS 26+ Liquid Glass icon support, you need to manually generate an `Assets.car` file:
+
+1. **Verify actool is available:**
+   ```bash
+   xcrun actool --version
+   ```
+
+2. **Check your `.icon` file:**
+   ```bash
+   find src-tauri/icons/AppIcon.icon -maxdepth 3 -type f -print
+   ```
+
+3. **Generate Assets.car manually:**
+   ```bash
+   rm -rf /tmp/nodadb-icon-out
+   mkdir -p /tmp/nodadb-icon-out
+
+   xcrun actool \
+     src-tauri/icons/AppIcon.icon \
+     --compile /tmp/nodadb-icon-out \
+     --output-format human-readable-text \
+     --notices \
+     --warnings \
+     --errors \
+     --output-partial-info-plist /tmp/nodadb-icon-out/assetcatalog_generated_info.plist \
+     --app-icon AppIcon \
+     --include-all-app-icons \
+     --enable-on-demand-resources NO \
+     --development-region en \
+     --target-device mac \
+     --minimum-deployment-target 26.0 \
+     --platform macosx
+   ```
+
+4. **Copy generated Assets.car to icons folder:**
+   ```bash
+   cp /tmp/nodadb-icon-out/Assets.car src-tauri/icons/Assets.car
+   ```
+
+5. **Update `tauri.conf.json`:**
+   ```json
+   {
+     "bundle": {
+       "icon": [
+         "icons/32x32.png",
+         "icons/128x128.png",
+         "icons/128x128@2x.png",
+         "icons/icon.icns",
+         "icons/icon.ico",
+         "icons/Assets.car"
+       ]
+     }
+   }
+   ```
+
+   **Important:** Remove `icons/AppIcon.icon` from the bundle config if you encounter actool errors.
+
+6. **Rebuild:**
+   ```bash
+   rm -rf src-tauri/target
+   bun run tauri build
+   ```
+
+The built app bundle should now contain both `Assets.car` (for Liquid Glass) and `icon.icns` (fallback).
+
 ## Usage
 
 ### Connect to Database
