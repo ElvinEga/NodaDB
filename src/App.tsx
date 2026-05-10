@@ -63,10 +63,10 @@ import { TanStackTableViewer } from "./components/TanStackTableViewer";
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(
-    null
+    null,
   );
   const [renameConnectionId, setRenameConnectionId] = useState<string | null>(
-    null
+    null,
   );
   const [renameValue, setRenameValue] = useState("");
   const { fontFamily, fontSize } = useSettingsStore();
@@ -77,19 +77,19 @@ function App() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const connections = useConnectionStore((state) => state.connections);
   const activeConnectionId = useConnectionStore(
-    (state) => state.activeConnectionId
+    (state) => state.activeConnectionId,
   );
   const setActiveConnection = useConnectionStore(
-    (state) => state.setActiveConnection
+    (state) => state.setActiveConnection,
   );
   const getActiveConnection = useConnectionStore(
-    (state) => state.getActiveConnection
+    (state) => state.getActiveConnection,
   );
   const removeConnection = useConnectionStore(
-    (state) => state.removeConnection
+    (state) => state.removeConnection,
   );
   const updateConnection = useConnectionStore(
-    (state) => state.updateConnection
+    (state) => state.updateConnection,
   );
 
   const activeConnection = getActiveConnection();
@@ -103,7 +103,7 @@ function App() {
 
   const handleTableSelect = async (table: DatabaseTable) => {
     const existingTab = tabs.find(
-      (t) => t.type === "table" && t.table?.name === table.name
+      (t) => t.type === "table" && t.table?.name === table.name,
     );
     if (existingTab) {
       setActiveTabId(existingTab.id);
@@ -189,8 +189,8 @@ function App() {
         tabs.map((t) =>
           t.id === queryTab!.id
             ? { ...t, queryContent: query, isDirty: true }
-            : t
-        )
+            : t,
+        ),
       );
       setActiveTabId(queryTab.id);
     }
@@ -207,14 +207,14 @@ function App() {
     setTabs(newTabs);
     if (activeTabId === tabId) {
       setActiveTabId(
-        newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null
+        newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null,
       );
     }
   };
 
   const togglePin = (tabId: string) => {
     setTabs(
-      tabs.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t))
+      tabs.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t)),
     );
   };
 
@@ -297,13 +297,13 @@ function App() {
 
         // Update the tab with loaded columns
         setTabs(
-          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns } : t))
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns } : t)),
         );
       } catch (error) {
         console.error("Failed to load table columns:", error);
         // Set empty array to prevent infinite retry
         setTabs(
-          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns: [] } : t))
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns: [] } : t)),
         );
       }
     };
@@ -532,19 +532,19 @@ function App() {
                                     connectionId: activeConnection.id,
                                     tableName: activeTab.table!.name,
                                     dbType: activeConnection.db_type,
-                                  }
+                                  },
                                 );
                                 setTabs(
                                   tabs.map((t) =>
                                     t.id === activeTab.id
                                       ? { ...t, columns }
-                                      : t
-                                  )
+                                      : t,
+                                  ),
                                 );
                               } catch (error) {
                                 console.error(
                                   "Failed to reload columns:",
-                                  error
+                                  error,
                                 );
                               }
                             }}
@@ -634,7 +634,7 @@ function App() {
                           } catch (error) {
                             console.error("Failed to connect:", error);
                             alert(
-                              `Failed to connect to ${conn.name}: ${error}`
+                              `Failed to connect to ${conn.name}: ${error}`,
                             );
                           }
                         }}
@@ -731,9 +731,9 @@ function App() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <div className="h-20 w-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Database className="h-10 w-10 text-primary" />
+                <img src="/logo.png" alt="NodaDB Logo" className="h-10w-10" />
               </div>
-              <h2 className="text-3xl font-bold mb-3">Welcome to NodaDB</h2>
+              <h2 className="text-3xl font-bold mb-3">NodaDB</h2>
               <p className="text-muted-foreground mb-8 text-lg">
                 A modern, professional database management tool built with Tauri
               </p>

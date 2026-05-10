@@ -33,7 +33,7 @@ export function AppSidebar({
               {/* Logo & App Name */}
               <div className="flex items-center gap-4">
                 {/* <Database className="h-5 w-5 text-primary" /> */}
-                <img src="/logo.svg" alt="NodaDB Logo" className="h-5 w-5" />
+                <img src="/logo.png" alt="NodaDB Logo" className="h-5 w-5" />
                 <h1 className="text-lg font-bold text-primary">NodaDB</h1>
               </div>
             </SidebarMenuButton>
