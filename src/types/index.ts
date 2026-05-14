@@ -46,6 +46,7 @@ export interface ConnectionConfig {
 export interface DatabaseTable {
   name: string;
   schema?: string;
+  full_name?: string;
   row_count?: number;
   size_kb?: number;
   table_type?: string; // "TABLE" or "VIEW"
