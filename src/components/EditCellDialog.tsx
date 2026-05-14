@@ -43,6 +43,7 @@ export function EditCellDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isBoolean = column.type_family === 'boolean';
+  const isReadOnlyGenerated = (column.generated_kind ?? '') !== '';
 
   useEffect(() => {
     if (open) {
@@ -63,6 +64,9 @@ export function EditCellDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnlyGenerated) {
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -123,7 +127,14 @@ export function EditCellDialog({
               <label htmlFor="cell-value" className="text-sm font-medium">
                 New Value
               </label>
-              {isBoolean ? (
+              {isReadOnlyGenerated ? (
+                <Input
+                  id="cell-value"
+                  value={value}
+                  disabled
+                  className="h-9"
+                />
+              ) : isBoolean ? (
                 <Select value={value} onValueChange={setValue}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select boolean value" />
@@ -131,6 +142,19 @@ export function EditCellDialog({
                   <SelectContent>
                     <SelectItem value="true">True</SelectItem>
                     <SelectItem value="false">False</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : column.type_family === 'enum' && (column.enum_values?.length ?? 0) > 0 ? (
+                <Select value={value} onValueChange={setValue}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select enum value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {column.enum_values?.map((enumValue) => (
+                      <SelectItem key={enumValue} value={enumValue}>
+                        {enumValue}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               ) : column.type_family === 'json' ? (
@@ -154,7 +178,9 @@ export function EditCellDialog({
                 />
               )}
               <p className="text-xs text-muted-foreground">
-                Leave empty to set as NULL
+                {isReadOnlyGenerated
+                  ? 'Generated columns are read-only'
+                  : 'Leave empty to set as NULL'}
               </p>
             </div>
           </div>
@@ -168,7 +194,7 @@ export function EditCellDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || isReadOnlyGenerated}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
