@@ -117,7 +117,7 @@ export function ImportCSVDialog({
       
       const result = await invoke<string>('bulk_insert_rows', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         rows,
         dbType: connection.db_type,
       });
