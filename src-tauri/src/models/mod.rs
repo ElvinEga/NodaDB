@@ -8,6 +8,26 @@ pub enum DatabaseType {
     MySQL,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ColumnTypeFamily {
+    Boolean,
+    Integer,
+    Float,
+    Decimal,
+    Text,
+    DateTime,
+    Date,
+    Time,
+    Json,
+    Uuid,
+    Binary,
+    Enum,
+    Array,
+    Network,
+    Unknown,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SSHAuthMethod {
@@ -50,13 +70,20 @@ pub struct DatabaseTable {
     pub table_type: Option<String>, // "TABLE" or "VIEW"
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TableColumn {
     pub name: String,
     pub data_type: String,
+    pub raw_type: Option<String>,
+    pub normalized_type: String,
+    pub type_family: ColumnTypeFamily,
+    pub db_type: DatabaseType,
     pub is_nullable: bool,
     pub default_value: Option<String>,
     pub is_primary_key: bool,
+    pub is_boolean_like: bool,
+    pub is_array: bool,
+    pub enum_values: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
