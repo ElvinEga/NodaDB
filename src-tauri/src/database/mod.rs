@@ -1,5 +1,8 @@
-use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
+pub mod types;
+
+use crate::models::{ColumnTypeFamily, ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
 use crate::ssh_tunnel::SshTunnel;
+use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
 use base64::Engine;
 use sqlx::{Row, TypeInfo, Column};
@@ -178,13 +181,13 @@ macro_rules! process_rows {
 macro_rules! execute_query {
     ($pool:expr, $query:expr) => {{
         let rows_affected = match $pool {
-            &DatabasePool::Sqlite(ref pool) => {
+            DatabasePool::Sqlite(pool) => {
                 sqlx::query($query).execute(pool).await?.rows_affected()
             }
-            &DatabasePool::Postgres(ref pool) => {
+            DatabasePool::Postgres(pool) => {
                 sqlx::query($query).execute(pool).await?.rows_affected()
             }
-            &DatabasePool::MySql(ref pool) => {
+            DatabasePool::MySql(pool) => {
                 sqlx::query($query).execute(pool).await?.rows_affected()
             }
         };
@@ -467,7 +470,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let tables = match pool {
-            &DatabasePool::Sqlite(ref pool) => {
+            DatabasePool::Sqlite(pool) => {
                 // SQLite: Get table name and type from sqlite_master
                 let query = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name";
                 let rows = sqlx::query(query).fetch_all(pool).await?;
@@ -499,7 +502,7 @@ impl ConnectionManager {
                 }
                 tables
             }
-            &DatabasePool::Postgres(ref pool) => {
+            DatabasePool::Postgres(pool) => {
                 // PostgreSQL: Get statistics from pg_stat_user_tables and pg_class
                 let query = r#"
                     SELECT 
@@ -530,7 +533,7 @@ impl ConnectionManager {
                     })
                     .collect()
             }
-            &DatabasePool::MySql(ref pool) => {
+            DatabasePool::MySql(pool) => {
                 // MySQL: Get statistics from information_schema
                 let query = r#"
                     SELECT 
@@ -582,20 +585,43 @@ impl ConnectionManager {
             }
             DatabaseType::PostgreSQL => {
                 format!(
-                    "SELECT c.column_name, c.data_type, c.is_nullable, c.column_default, \
-                     CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key \
-                     FROM information_schema.columns c \
-                     LEFT JOIN ( \
-                         SELECT ku.column_name \
-                         FROM information_schema.table_constraints tc \
-                         JOIN information_schema.key_column_usage ku \
-                             ON tc.constraint_name = ku.constraint_name \
-                             AND tc.table_schema = ku.table_schema \
-                         WHERE tc.constraint_type = 'PRIMARY KEY' \
-                             AND tc.table_name = '{}' \
-                     ) pk ON c.column_name = pk.column_name \
-                     WHERE c.table_name = '{}' \
-                     ORDER BY c.ordinal_position",
+                    r#"
+                    SELECT
+                      att.attname AS column_name,
+                      pg_catalog.format_type(att.atttypid, att.atttypmod) AS formatted_type,
+                      typ.typname AS raw_type_name,
+                      typ.typtype AS type_kind,
+                      typ.typcategory AS type_category,
+                      att.attnotnull AS not_null,
+                      pg_get_expr(def.adbin, def.adrelid) AS default_value,
+                      CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_primary_key,
+                      CASE WHEN att.attndims > 0 OR typ.typcategory = 'A' THEN true ELSE false END AS is_array,
+                      (
+                        SELECT array_agg(enumlabel ORDER BY enumsortorder)
+                        FROM pg_enum
+                        WHERE enumtypid = typ.oid
+                      ) AS enum_values
+                    FROM pg_attribute att
+                    JOIN pg_class cls ON cls.oid = att.attrelid
+                    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+                    JOIN pg_type typ ON typ.oid = att.atttypid
+                    LEFT JOIN pg_attrdef def
+                      ON def.adrelid = att.attrelid
+                     AND def.adnum = att.attnum
+                    LEFT JOIN (
+                      SELECT a.attname
+                      FROM pg_index i
+                      JOIN pg_attribute a
+                        ON a.attrelid = i.indrelid
+                       AND a.attnum = ANY(i.indkey)
+                      WHERE i.indrelid = '{}'::regclass
+                        AND i.indisprimary
+                    ) pk ON pk.attname = att.attname
+                    WHERE cls.oid = '{}'::regclass
+                      AND att.attnum > 0
+                      AND NOT att.attisdropped
+                    ORDER BY att.attnum
+                    "#,
                     table_name, table_name
                 )
             }
@@ -612,7 +638,7 @@ impl ConnectionManager {
         };
 
         let columns = match pool {
-            &DatabasePool::Sqlite(ref pool) => {
+            DatabasePool::Sqlite(pool) => {
                 let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
@@ -621,38 +647,59 @@ impl ConnectionManager {
                         let not_null: i64 = row.try_get(3).unwrap_or(0);
                         let default_value: Option<String> = row.try_get(4).ok();
                         let is_pk: i64 = row.try_get(5).unwrap_or(0);
+                        let family = classify_sqlite_type(&data_type);
 
                         TableColumn {
                             name,
-                            data_type,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type.clone()),
+                            normalized_type: normalize_type_name(&data_type),
+                            type_family: family.clone(),
+                            db_type: DatabaseType::SQLite,
                             is_nullable: not_null == 0,
                             default_value,
                             is_primary_key: is_pk > 0,
+                            is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
+                            is_array: false,
+                            enum_values: None,
                         }
                     })
                     .collect()
             }
-            &DatabasePool::Postgres(ref pool) => {
+            DatabasePool::Postgres(pool) => {
                 let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(0).unwrap_or_default();
                         let data_type: String = row.try_get(1).unwrap_or_default();
-                        let is_nullable: String = row.try_get(2).unwrap_or_default();
-                        let default_value: Option<String> = row.try_get(3).ok();
-                        let is_primary_key: bool = row.try_get(4).unwrap_or(false);
+                        let raw_type: String = row.try_get(2).unwrap_or_default();
+                        let type_kind: String = row.try_get(3).unwrap_or_default();
+                        let _type_category: String = row.try_get(4).unwrap_or_default();
+                        let not_null: bool = row.try_get(5).unwrap_or(false);
+                        let default_value: Option<String> = row.try_get(6).ok();
+                        let is_primary_key: bool = row.try_get(7).unwrap_or(false);
+                        let is_array: bool = row.try_get(8).unwrap_or(false);
+                        let enum_values: Option<Vec<String>> = row.try_get(9).ok().flatten();
+                        let family = classify_postgres_type(&data_type, &raw_type, &type_kind, is_array);
 
                         TableColumn {
                             name,
-                            data_type,
-                            is_nullable: is_nullable.to_uppercase() == "YES",
+                            data_type: data_type.clone(),
+                            raw_type: Some(raw_type),
+                            normalized_type: normalize_type_name(&data_type),
+                            type_family: family.clone(),
+                            db_type: DatabaseType::PostgreSQL,
+                            is_nullable: !not_null,
                             default_value,
                             is_primary_key,
+                            is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
+                            is_array,
+                            enum_values,
                         }
                     })
                     .collect()
             }
-            &DatabasePool::MySql(ref pool) => {
+            DatabasePool::MySql(pool) => {
                 let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
@@ -661,13 +708,21 @@ impl ConnectionManager {
                         let is_nullable: String = row.try_get(2).unwrap_or_default();
                         let default_value: Option<String> = row.try_get(3).ok();
                         let is_primary_key: i32 = row.try_get(4).unwrap_or(0);
+                        let family = classify_mysql_type(&data_type);
 
                         TableColumn {
                             name,
-                            data_type,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type.clone()),
+                            normalized_type: normalize_type_name(&data_type),
+                            type_family: family.clone(),
+                            db_type: DatabaseType::MySQL,
                             is_nullable: is_nullable.to_uppercase() == "YES",
                             default_value,
                             is_primary_key: is_primary_key > 0,
+                            is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
+                            is_array: false,
+                            enum_values: None,
                         }
                     })
                     .collect()
@@ -688,15 +743,15 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         match pool {
-            &DatabasePool::Sqlite(ref pool) => {
+            DatabasePool::Sqlite(pool) => {
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 Ok(process_rows!(rows))
             }
-            &DatabasePool::Postgres(ref pool) => {
+            DatabasePool::Postgres(pool) => {
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 Ok(process_rows!(rows))
             }
-            &DatabasePool::MySql(ref pool) => {
+            DatabasePool::MySql(pool) => {
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 Ok(process_rows!(rows))
             }
@@ -718,7 +773,7 @@ impl ConnectionManager {
         let start_time = std::time::Instant::now();
         
         let (plan_steps, total_cost) = match (pool, db_type) {
-            (&DatabasePool::Postgres(ref pool), DatabaseType::PostgreSQL) => {
+            (DatabasePool::Postgres(pool), DatabaseType::PostgreSQL) => {
                 let explain_query = if analyze {
                     format!("EXPLAIN (FORMAT JSON, ANALYZE true, BUFFERS true) {}", query)
                 } else {
@@ -737,7 +792,7 @@ impl ConnectionManager {
                 let plan_array = parsed.as_array()
                     .ok_or_else(|| anyhow!("Invalid plan format"))?;
                 
-                if let Some(first_plan) = plan_array.get(0) {
+                if let Some(first_plan) = plan_array.first() {
                     let plan_obj = first_plan.get("Plan")
                         .ok_or_else(|| anyhow!("No Plan field found"))?;
                     
@@ -750,7 +805,7 @@ impl ConnectionManager {
                     (vec![], None)
                 }
             }
-            (&DatabasePool::MySql(ref pool), DatabaseType::MySQL) => {
+            (DatabasePool::MySql(pool), DatabaseType::MySQL) => {
                 let explain_query = format!("EXPLAIN FORMAT=JSON {}", query);
                 let rows = sqlx::query(&explain_query).fetch_all(pool).await?;
                 
@@ -764,7 +819,7 @@ impl ConnectionManager {
                 let steps = self.parse_mysql_plan(&parsed)?;
                 (steps, None)
             }
-            (&DatabasePool::Sqlite(ref pool), DatabaseType::SQLite) => {
+            (DatabasePool::Sqlite(pool), DatabaseType::SQLite) => {
                 let explain_query = format!("EXPLAIN QUERY PLAN {}", query);
                 let rows = sqlx::query(&explain_query).fetch_all(pool).await?;
                 
@@ -793,7 +848,7 @@ impl ConnectionManager {
             None
         };
 
-        let recommendations = self.generate_recommendations(&plan_steps, db_type);
+        let recommendations = self.generate_recommendations(&plan_steps);
 
         Ok(ExecutionPlan {
             query: query.to_string(),
@@ -886,7 +941,7 @@ impl ConnectionManager {
         Ok(steps)
     }
 
-    fn generate_recommendations(&self, plan_steps: &[PlanStep], db_type: &DatabaseType) -> Vec<String> {
+    fn generate_recommendations(&self, plan_steps: &[PlanStep]) -> Vec<String> {
         let mut recommendations = Vec::new();
         
         for step in plan_steps {
@@ -921,7 +976,7 @@ impl ConnectionManager {
             }
             
             // Check children recursively
-            for rec in self.generate_recommendations(&step.children, db_type) {
+            for rec in self.generate_recommendations(&step.children) {
                 if !recommendations.contains(&rec) {
                     recommendations.push(rec);
                 }
@@ -1449,7 +1504,7 @@ impl ConnectionManager {
                     let column_name: String = row.try_get(1).unwrap_or_default();
                     
                     index_map.entry(index_name)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(column_name);
                 }
                 
