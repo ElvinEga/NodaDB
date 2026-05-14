@@ -133,7 +133,7 @@ export function BulkEditDialog({
 
           await invoke<string>('update_row', {
             connectionId: connection.id,
-            tableName: table.name,
+            tableName: table.full_name ?? table.name,
             data: updateData,
             whereClause,
             dbType: connection.db_type,
