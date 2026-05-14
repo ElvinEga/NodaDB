@@ -62,6 +62,15 @@ export function qualifyTableName(
   dbType?: DatabaseType
 ): string {
   const type = dbType || "sqlite";
+  const hasQualifier = tableName.includes(".");
+
+  if (type === "postgresql" && hasQualifier) {
+    const [existingSchema, existingTable] = tableName.split(".", 2);
+    return `${quoteIdentifier(
+      existingSchema.replace(/^"|"$/g, ""),
+      type
+    )}.${quoteIdentifier(existingTable.replace(/^"|"$/g, ""), type)}`;
+  }
 
   if (schema && type === "postgresql") {
     // For PostgreSQL, use schema.table format
