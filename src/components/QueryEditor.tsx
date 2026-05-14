@@ -353,6 +353,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleLoadPostgresInfo}
+                  title="Load PostgreSQL server info, current backend PID, and installed extensions"
                 >
                   <Info className="h-4 w-4 mr-2" />
                   PG Info
@@ -361,6 +362,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleCancelBackend}
+                  title="Send pg_cancel_backend() to the loaded backend PID"
                 >
                   <Ban className="h-4 w-4 mr-2" />
                   Cancel PID
@@ -469,6 +471,9 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             <div className="text-muted-foreground truncate">search_path: {pgInfo.search_path}</div>
             <div className="text-muted-foreground truncate">
               extensions: {pgExtensions.map((ext) => `${ext.extname}@${ext.extversion}`).join(', ') || 'none'}
+            </div>
+            <div className="text-muted-foreground">
+              Tip: run a long query, then use <span className="font-mono">Cancel PID</span> to request cancellation.
             </div>
           </div>
         )}
