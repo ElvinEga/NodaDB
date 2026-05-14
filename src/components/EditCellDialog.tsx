@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { TableColumn } from '@/types';
+import { resolveColumnInputType } from '@/lib/db-types';
 import {
   Select,
   SelectContent,
@@ -23,6 +25,7 @@ interface EditCellDialogProps {
   onOpenChange: (open: boolean) => void;
   columnName: string;
   columnType: string;
+  column: TableColumn;
   currentValue: any;
   onSave: (newValue: string) => Promise<void>;
 }
@@ -32,22 +35,22 @@ export function EditCellDialog({
   onOpenChange,
   columnName,
   columnType,
+  column,
   currentValue,
   onSave,
 }: EditCellDialogProps) {
   const [value, setValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isBoolean = columnType.toUpperCase().includes('BOOL') || columnType.toUpperCase() === 'BIT';
+  const isBoolean = column.type_family === 'boolean';
 
   useEffect(() => {
     if (open) {
       if (isBoolean) {
-        // Normalize boolean values to '1' or '0'
         if (currentValue === true || currentValue === 1 || currentValue === '1' || currentValue === 'true' || currentValue === 't') {
-          setValue('1');
+          setValue('true');
         } else if (currentValue === false || currentValue === 0 || currentValue === '0' || currentValue === 'false' || currentValue === 'f') {
-          setValue('0');
+          setValue('false');
         } else {
           setValue(''); // Default/Null
         }
@@ -74,24 +77,29 @@ export function EditCellDialog({
   };
 
   const getInputType = (): string => {
-    const type = columnType.toUpperCase();
-    if (type.includes('INT') || type.includes('SERIAL')) return 'number';
-    if (type.includes('FLOAT') || type.includes('REAL') || type.includes('DOUBLE') || type.includes('NUMERIC')) return 'number';
-    if (type.includes('BOOL')) return 'text';
-    if (type.includes('DATE') && !type.includes('TIME')) return 'date';
-    if (type.includes('DATETIME') || type.includes('TIMESTAMP')) return 'datetime-local';
-    if (type.includes('TIME') && !type.includes('DATE')) return 'time';
-    return 'text';
+    return resolveColumnInputType(column);
   };
 
   const getPlaceholder = (): string => {
-    const type = columnType.toUpperCase();
-    if (type.includes('INT')) return 'Enter integer value';
-    if (type.includes('FLOAT') || type.includes('REAL') || type.includes('DOUBLE') || type.includes('NUMERIC')) return 'Enter decimal number';
-    if (type.includes('BOOL')) return 'true/false or 1/0';
-    if (type.includes('DATE')) return 'Select date';
-    if (type.includes('TIME')) return 'Select time';
-    return 'Enter value or leave empty for NULL';
+    switch (column.type_family) {
+      case 'integer':
+        return 'Enter integer value';
+      case 'float':
+      case 'decimal':
+        return 'Enter decimal number';
+      case 'boolean':
+        return 'true/false';
+      case 'date':
+        return 'Select date';
+      case 'date_time':
+        return 'Select date and time';
+      case 'time':
+        return 'Select time';
+      case 'json':
+        return '{"key":"value"}';
+      default:
+        return 'Enter value or leave empty for NULL';
+    }
   };
 
   return (
@@ -121,10 +129,19 @@ export function EditCellDialog({
                     <SelectValue placeholder="Select boolean value" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">True</SelectItem>
-                    <SelectItem value="0">False</SelectItem>
+                    <SelectItem value="true">True</SelectItem>
+                    <SelectItem value="false">False</SelectItem>
                   </SelectContent>
                 </Select>
+              ) : column.type_family === 'json' ? (
+                <textarea
+                  id="cell-value"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={getPlaceholder()}
+                  autoFocus
+                  className="min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                />
               ) : (
                 <Input
                   id="cell-value"
