@@ -32,6 +32,7 @@
           "windows": ["main"],
           "permissions": [
             "core:default",
+            "core:window:allow-set-background-color",
             "dialog:allow-open",
             "dialog:allow-save",
             "dialog:allow-message",
