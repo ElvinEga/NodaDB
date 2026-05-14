@@ -1,5 +1,5 @@
 use crate::database::ConnectionManager;
-use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, ConnectionTestResult};
+use crate::models::{ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, QueryResult, TableColumn, TableConstraint, TableIndex};
 use tauri::State;
 use chrono::Utc;
 
@@ -243,6 +243,32 @@ pub async fn export_table_structure(
         .export_table_structure(&connection_id, &table_name, &db_type)
         .await
         .map_err(|e| format!("Failed to export table structure: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_table_constraints(
+    connection_id: String,
+    table_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<TableConstraint>, String> {
+    manager
+        .get_table_constraints(&connection_id, &table_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to get table constraints: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_table_indexes(
+    connection_id: String,
+    table_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<TableIndex>, String> {
+    manager
+        .get_table_indexes(&connection_id, &table_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to get table indexes: {}", e))
 }
 
 #[tauri::command]
