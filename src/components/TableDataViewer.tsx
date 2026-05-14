@@ -18,6 +18,7 @@ import { DatabaseTable, QueryResult, TableColumn, ConnectionConfig } from '@/typ
 import { TableFilter } from '@/types/filter';
 import { toast } from 'sonner';
 import { validateCellValue, getPlaceholderForType } from '@/lib/validation';
+import { qualifyTableName } from '@/lib/sqlUtils';
 
 interface TableDataViewerProps {
   connection: ConnectionConfig;
@@ -27,6 +28,8 @@ interface TableDataViewerProps {
 type SortDirection = 'ASC' | 'DESC' | null;
 
 export function TableDataViewer({ connection, table }: TableDataViewerProps) {
+  const tableRef = table.full_name ?? table.name;
+  const qualifiedTable = qualifyTableName(table.name, table.schema, connection.db_type);
   const [columns, setColumns] = useState<TableColumn[]>([]);
   const [data, setData] = useState<QueryResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +50,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     try {
       const result = await invoke<TableColumn[]>('get_table_structure', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         dbType: connection.db_type,
       });
       setColumns(result);
@@ -61,7 +64,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     setIsLoading(true);
     try {
       const offset = (currentPage - 1) * rowsPerPage;
-      let query = `SELECT * FROM ${table.name}`;
+      let query = `SELECT * FROM ${qualifiedTable}`;
       
       if (activeWhereClause) {
         query += ` WHERE ${activeWhereClause}`;
@@ -140,7 +143,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     setSortDirection(null);
     loadTableStructure();
     loadTableData();
-  }, [table.name, connection.id]);
+  }, [tableRef, connection.id]);
 
   useEffect(() => {
     loadTableData();
@@ -197,7 +200,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
 
       const result = await invoke<string>('delete_rows', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         whereClause,
       });
 
@@ -253,7 +256,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     try {
       const result = await invoke<string>('update_row', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         data: updateData,
         whereClause,
         dbType: connection.db_type,
