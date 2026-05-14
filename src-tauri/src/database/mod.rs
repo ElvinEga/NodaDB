@@ -1,6 +1,6 @@
 pub mod types;
 
-use crate::models::{ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PlanStep, QueryResult, TableColumn, TableConstraint, TableIndex};
+use crate::models::{ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
 use crate::ssh_tunnel::SshTunnel;
 use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
@@ -238,15 +238,7 @@ impl ConnectionManager {
             sqlx::Error::Database(db_err) => {
                 let message = db_err.message();
                 let code = db_err.code().map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string());
-                let details = db_err.details().unwrap_or_default();
-                let hint = db_err.hint().unwrap_or_default();
-                anyhow!(
-                    "SQLSTATE {}: {}{}{}",
-                    code,
-                    message,
-                    if details.is_empty() { "".to_string() } else { format!(" | detail: {}", details) },
-                    if hint.is_empty() { "".to_string() } else { format!(" | hint: {}", hint) }
-                )
+                anyhow!("SQLSTATE {}: {}", code, message)
             }
             other => anyhow!(other),
         }
@@ -1156,7 +1148,7 @@ impl ConnectionManager {
             value_list
         );
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully inserted 1 row into {}", table_name))
     }
@@ -1218,7 +1210,7 @@ impl ConnectionManager {
             value_lists.join(", ")
         );
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully inserted {} rows into {}", rows.len(), table_name))
     }
@@ -1241,7 +1233,11 @@ impl ConnectionManager {
 
         let set_clauses: Vec<String> = obj.iter()
             .map(|(k, v)| {
-                if v.is_null() {
+                if v.as_str() == Some("__NODADB_USE_DEFAULT__") {
+                    format!("{} = DEFAULT", k)
+                } else if v.as_str() == Some("__NODADB_EMPTY_STRING__") {
+                    format!("{} = ''", k)
+                } else if v.is_null() {
                     format!("{} = NULL", k)
                 } else if v.is_string() {
                     format!("{} = '{}'", k, v.as_str().unwrap().replace("'", "''"))
@@ -1264,7 +1260,7 @@ impl ConnectionManager {
             where_clause
         );
 
-        let rows_affected = execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        let rows_affected = execute_query!(pool, &query)?;
 
         Ok(format!("Successfully updated {} row(s)", rows_affected))
     }
@@ -1290,7 +1286,7 @@ impl ConnectionManager {
             where_clause
         );
 
-        let rows_affected = execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        let rows_affected = execute_query!(pool, &query)?;
 
         Ok(format!("Successfully deleted {} row(s)", rows_affected))
     }
@@ -1338,7 +1334,7 @@ impl ConnectionManager {
             column_defs.join(", ")
         );
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully created table {}", table_name))
     }
@@ -1362,7 +1358,7 @@ impl ConnectionManager {
             }
         );
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully dropped table {}", table_name))
     }
@@ -1404,7 +1400,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully added column {} to {}", column_name, table_name))
     }
@@ -1441,7 +1437,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully dropped column {} from {}", column_name, table_name))
     }
@@ -1468,7 +1464,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
+        execute_query!(pool, &query)?;
 
         Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
     }
@@ -1660,6 +1656,136 @@ impl ConnectionManager {
         };
 
         Ok(indexes)
+    }
+
+    pub async fn get_postgres_connection_info(
+        &self,
+        connection_id: &str,
+    ) -> Result<PostgresConnectionInfo> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let info = match pool {
+            DatabasePool::Postgres(pool) => {
+                let row = sqlx::query(
+                    r#"
+                    SELECT
+                      version()::text AS version,
+                      current_setting('server_version')::text AS server_version,
+                      current_database()::text AS current_database,
+                      current_user::text AS current_user,
+                      current_setting('search_path')::text AS search_path,
+                      current_setting('TimeZone')::text AS timezone,
+                      pg_backend_pid()::int4 AS backend_pid
+                    "#,
+                )
+                .fetch_one(pool)
+                .await?;
+
+                PostgresConnectionInfo {
+                    version: row.try_get(0).unwrap_or_default(),
+                    server_version: row.try_get(1).unwrap_or_default(),
+                    current_database: row.try_get(2).unwrap_or_default(),
+                    current_user: row.try_get(3).unwrap_or_default(),
+                    search_path: row.try_get(4).unwrap_or_default(),
+                    timezone: row.try_get(5).unwrap_or_default(),
+                    backend_pid: row.try_get(6).unwrap_or_default(),
+                }
+            }
+            _ => return Err(anyhow!("Connection is not PostgreSQL")),
+        };
+
+        Ok(info)
+    }
+
+    pub async fn cancel_postgres_backend_query(
+        &self,
+        connection_id: &str,
+        backend_pid: i32,
+    ) -> Result<bool> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        match pool {
+            DatabasePool::Postgres(pool) => {
+                let row = sqlx::query("SELECT pg_cancel_backend($1)")
+                    .bind(backend_pid)
+                    .fetch_one(pool)
+                    .await?;
+                let cancelled: bool = row.try_get(0).unwrap_or(false);
+                Ok(cancelled)
+            }
+            _ => Err(anyhow!("Connection is not PostgreSQL")),
+        }
+    }
+
+    pub async fn get_postgres_extensions(&self, connection_id: &str) -> Result<Vec<PostgresExtension>> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        match pool {
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query("SELECT extname, extversion FROM pg_extension ORDER BY extname")
+                    .fetch_all(pool)
+                    .await?;
+                Ok(rows
+                    .into_iter()
+                    .map(|row| PostgresExtension {
+                        extname: row.try_get(0).unwrap_or_default(),
+                        extversion: row.try_get(1).unwrap_or_default(),
+                    })
+                    .collect())
+            }
+            _ => Err(anyhow!("Connection is not PostgreSQL")),
+        }
+    }
+
+    pub async fn get_postgres_table_privileges(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+    ) -> Result<PostgresTablePrivileges> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        match pool {
+            DatabasePool::Postgres(pool) => {
+                let row = sqlx::query(
+                    r#"
+                    SELECT
+                      has_table_privilege(current_user, to_regclass($1), 'SELECT'),
+                      has_table_privilege(current_user, to_regclass($1), 'INSERT'),
+                      has_table_privilege(current_user, to_regclass($1), 'UPDATE'),
+                      has_table_privilege(current_user, to_regclass($1), 'DELETE'),
+                      has_table_privilege(current_user, to_regclass($1), 'TRUNCATE'),
+                      has_table_privilege(current_user, to_regclass($1), 'REFERENCES'),
+                      has_table_privilege(current_user, to_regclass($1), 'TRIGGER')
+                    "#,
+                )
+                .bind(table_name)
+                .fetch_one(pool)
+                .await?;
+
+                Ok(PostgresTablePrivileges {
+                    can_select: row.try_get(0).unwrap_or(false),
+                    can_insert: row.try_get(1).unwrap_or(false),
+                    can_update: row.try_get(2).unwrap_or(false),
+                    can_delete: row.try_get(3).unwrap_or(false),
+                    can_truncate: row.try_get(4).unwrap_or(false),
+                    can_references: row.try_get(5).unwrap_or(false),
+                    can_trigger: row.try_get(6).unwrap_or(false),
+                })
+            }
+            _ => Err(anyhow!("Connection is not PostgreSQL")),
+        }
     }
 
     pub async fn export_table_structure(
