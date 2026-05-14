@@ -1,6 +1,7 @@
 use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
 use crate::ssh_tunnel::SshTunnel;
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use sqlx::{Row, TypeInfo, Column};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,57 +35,131 @@ macro_rules! process_rows {
             .map(|row| {
                 let mut map = serde_json::Map::new();
                 for (idx, col) in row.columns().iter().enumerate() {
-                    let value = match col.type_info().name() {
-                        "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" => {
-                            row.try_get::<String, _>(idx)
-                                .map(|v| serde_json::Value::String(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "INTEGER" | "INT" | "BIGINT" | "INT2" | "INT4" | "INT8" => {
-                            row.try_get::<i64, _>(idx)
-                                .map(|v| serde_json::Value::Number(v.into()))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "REAL" | "FLOAT" | "DOUBLE" | "FLOAT4" | "FLOAT8" => {
-                            row.try_get::<f64, _>(idx)
-                                .map(|v| serde_json::json!(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "BOOLEAN" | "BOOL" => {
-                            row.try_get::<bool, _>(idx)
-                                .map(|v| serde_json::Value::Bool(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "DATETIME" | "TIMESTAMP" => {
-                            row.try_get::<NaiveDateTime, _>(idx)
-                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S").to_string()))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "TIMESTAMPTZ" => {
-                            row.try_get::<DateTime<Utc>, _>(idx)
-                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S %Z").to_string()))
-                                .or_else(|_| {
-                                    row.try_get::<NaiveDateTime, _>(idx)
-                                        .map(|v| serde_json::Value::String(v.format("%Y-%m-%d %H:%M:%S").to_string()))
+                    let type_name = col.type_info().name().to_ascii_uppercase();
+                    let value = match type_name.as_str() {
+                        "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" | "NAME" | "XML" => row
+                            .try_get::<Option<String>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        "UUID" => row
+                            .try_get::<Option<uuid::Uuid>, _>(idx)
+                            .map(|v| v.map(|uuid| serde_json::Value::String(uuid.to_string())).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        "SMALLINT" | "INTEGER" | "INT" | "BIGINT" | "INT2" | "INT4" | "INT8" => row
+                            .try_get::<Option<i64>, _>(idx)
+                            .map(|v| v.map(|n| serde_json::Value::Number(n.into())).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        "REAL" | "FLOAT" | "DOUBLE" | "FLOAT4" | "FLOAT8" => row
+                            .try_get::<Option<f64>, _>(idx)
+                            .map(|v| v.map(|n| serde_json::json!(n)).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        "NUMERIC" | "DECIMAL" | "MONEY" => row
+                            .try_get::<Option<String>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+                            .or_else(|_| {
+                                row.try_get::<Option<f64>, _>(idx).map(|v| {
+                                    v.map(|n| serde_json::json!(n))
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "BOOLEAN" | "BOOL" => row
+                            .try_get::<Option<bool>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::Bool).unwrap_or(serde_json::Value::Null))
+                            .or_else(|_| {
+                                row.try_get::<Option<i64>, _>(idx).map(|v| {
+                                    v.map(|n| serde_json::Value::Bool(n != 0))
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "DATETIME" | "TIMESTAMP" => row
+                            .try_get::<Option<NaiveDateTime>, _>(idx)
+                            .map(|v| {
+                                v.map(|dt| serde_json::Value::String(dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                                    .unwrap_or(serde_json::Value::Null)
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "TIMESTAMPTZ" | "TIMESTAMP WITH TIME ZONE" => row
+                            .try_get::<Option<DateTime<Utc>>, _>(idx)
+                            .map(|v| {
+                                v.map(|dt| serde_json::Value::String(dt.to_rfc3339()))
+                                    .unwrap_or(serde_json::Value::Null)
+                            })
+                            .or_else(|_| {
+                                row.try_get::<Option<NaiveDateTime>, _>(idx).map(|v| {
+                                    v.map(|dt| serde_json::Value::String(dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "DATE" => row
+                            .try_get::<Option<NaiveDate>, _>(idx)
+                            .map(|v| {
+                                v.map(|d| serde_json::Value::String(d.format("%Y-%m-%d").to_string()))
+                                    .unwrap_or(serde_json::Value::Null)
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "TIME" | "TIMETZ" | "TIME WITH TIME ZONE" => row
+                            .try_get::<Option<NaiveTime>, _>(idx)
+                            .map(|v| {
+                                v.map(|t| serde_json::Value::String(t.format("%H:%M:%S").to_string()))
+                                    .unwrap_or(serde_json::Value::Null)
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "JSON" | "JSONB" => row
+                            .try_get::<Option<serde_json::Value>, _>(idx)
+                            .map(|v| v.unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        "BYTEA" | "BLOB" | "VARBINARY" | "BINARY" => row
+                            .try_get::<Option<Vec<u8>>, _>(idx)
+                            .map(|v| {
+                                v.map(|bytes| {
+                                    serde_json::Value::String(
+                                        base64::engine::general_purpose::STANDARD.encode(bytes),
+                                    )
                                 })
                                 .unwrap_or(serde_json::Value::Null)
-                        }
-                        "DATE" => {
-                            row.try_get::<NaiveDate, _>(idx)
-                                .map(|v| serde_json::Value::String(v.format("%Y-%m-%d").to_string()))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        "TIME" => {
-                            row.try_get::<NaiveTime, _>(idx)
-                                .map(|v| serde_json::Value::String(v.format("%H:%M:%S").to_string()))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
-                        _ => {
-                            // Fallback: try to get as string
-                            row.try_get::<String, _>(idx)
-                                .map(|v| serde_json::Value::String(v))
-                                .unwrap_or(serde_json::Value::Null)
-                        }
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        // PostgreSQL array and special types. We serialize as strings.
+                        "INET" | "CIDR" | "MACADDR" | "MACADDR8" | "TSVECTOR" | "TSQUERY"
+                        | "INT4RANGE" | "INT8RANGE" | "NUMRANGE" | "TSRANGE" | "TSTZRANGE"
+                        | "DATERANGE" | "BOX" | "CIRCLE" | "LINE" | "LSEG" | "PATH" | "POINT"
+                        | "POLYGON" | "PG_LSN" => row
+                            .try_get::<Option<String>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        _ if type_name.starts_with('_') || type_name.ends_with("[]") => row
+                            .try_get::<Option<String>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+                            .unwrap_or(serde_json::Value::Null),
+                        _ => row
+                            .try_get::<Option<String>, _>(idx)
+                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+                            .or_else(|_| {
+                                row.try_get::<Option<i64>, _>(idx).map(|v| {
+                                    v.map(|n| serde_json::Value::Number(n.into()))
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .or_else(|_| {
+                                row.try_get::<Option<f64>, _>(idx).map(|v| {
+                                    v.map(|n| serde_json::json!(n))
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .or_else(|_| {
+                                row.try_get::<Option<bool>, _>(idx).map(|v| {
+                                    v.map(serde_json::Value::Bool)
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                            })
+                            .or_else(|_| {
+                                row.try_get::<Option<serde_json::Value>, _>(idx)
+                                    .map(|v| v.unwrap_or(serde_json::Value::Null))
+                            })
+                            .unwrap_or(serde_json::Value::Null),
                     };
                     map.insert(col.name().to_string(), value);
                 }
