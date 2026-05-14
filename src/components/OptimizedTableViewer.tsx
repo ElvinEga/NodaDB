@@ -31,7 +31,7 @@ export function OptimizedTableViewer({ connection, table }: OptimizedTableViewer
     try {
       const result = await invoke<TableColumn[]>('get_table_structure', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         dbType: connection.db_type,
       });
       setColumns(result);
@@ -73,7 +73,7 @@ export function OptimizedTableViewer({ connection, table }: OptimizedTableViewer
     try {
       const plan = generateCommitSQL({
         changedRows: state.getChangedRows(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         tableColumns: columns,
         dbType: connection.db_type,
       });
