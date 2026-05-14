@@ -163,7 +163,7 @@ export function MenuBar() {
   }, []);
 
   return (
-    <Menubar className="rounded-none border-0 border-b bg-card px-0 h-9 font-normal">
+    <Menubar className="h-9 rounded-none border-0 bg-transparent px-0 font-normal text-foreground">
       <MenubarMenu>
         <MenubarTrigger className="font-normal">File</MenubarTrigger>
         <MenubarContent className="font-normal">

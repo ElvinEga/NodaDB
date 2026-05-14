@@ -385,12 +385,12 @@ function App() {
             <SidebarInset className="flex flex-col flex-1">
               {/* MenuBar for Linux/Windows (macOS uses native menu) */}
               {!navigator.userAgent.includes("Mac") && (
-                <header className="bg-background sticky top-0 z-50 w-full">
+                <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
                   <MenuBar />
                 </header>
               )}
               {/* Top Navigation Bar */}
-              <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
+              <header className="h-14 border-b border-border bg-background text-foreground flex items-center px-4 gap-4">
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
                   <div className="flex items-center gap-2">
