@@ -2308,6 +2308,7 @@ name = "nodadb"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "serde",
  "serde_json",
@@ -2318,6 +2319,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3759,6 +3761,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "uuid",
  "webpki-roots",
 ]
 
@@ -3841,6 +3844,7 @@ dependencies = [
  "stringprep",
  "thiserror 1.0.69",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -3880,6 +3884,7 @@ dependencies = [
  "stringprep",
  "thiserror 1.0.69",
  "tracing",
+ "uuid",
  "whoami",
 ]
 
@@ -3905,6 +3910,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uuid",
 ]
 
 [[package]]
