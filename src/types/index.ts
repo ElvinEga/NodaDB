@@ -15,6 +15,11 @@ export type ColumnTypeFamily =
   | 'enum'
   | 'array'
   | 'network'
+  | 'range'
+  | 'full_text'
+  | 'extension'
+  | 'domain'
+  | 'custom'
   | 'unknown';
 
 export type SSHAuthMethod = 'password' | 'privateKey';
@@ -65,12 +70,48 @@ export interface TableColumn {
   is_boolean_like: boolean;
   is_array: boolean;
   enum_values?: string[] | null;
+  identity_kind?: string | null;
+  generated_kind?: string | null;
+  generation_expression?: string | null;
+  column_comment?: string | null;
+  collation_name?: string | null;
+  domain_name?: string | null;
+  domain_schema?: string | null;
+  domain_base_type?: string | null;
+  array_dimensions?: number | null;
+  element_raw_type?: string | null;
 }
 
 export interface QueryResult {
   columns: string[];
   rows: Record<string, unknown>[];
   rows_affected: number;
+}
+
+export interface TableConstraint {
+  constraint_name: string;
+  constraint_type: string;
+  table_schema?: string | null;
+  table_name: string;
+  column_names: string[];
+  foreign_table_schema?: string | null;
+  foreign_table_name?: string | null;
+  foreign_column_names?: string[] | null;
+  check_expression?: string | null;
+  is_deferrable?: boolean | null;
+  initially_deferred?: boolean | null;
+}
+
+export interface TableIndex {
+  index_name: string;
+  method?: string | null;
+  is_unique: boolean;
+  is_primary: boolean;
+  is_valid?: boolean | null;
+  columns: string[];
+  expression?: string | null;
+  predicate?: string | null;
+  definition?: string | null;
 }
 
 export interface ExecutionPlan {
