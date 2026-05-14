@@ -65,6 +65,7 @@ pub struct ConnectionConfig {
 pub struct DatabaseTable {
     pub name: String,
     pub schema: Option<String>,
+    pub full_name: Option<String>,
     pub row_count: Option<i64>,
     pub size_kb: Option<i64>,
     pub table_type: Option<String>, // "TABLE" or "VIEW"
