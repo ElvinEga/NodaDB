@@ -92,6 +92,7 @@ import {
 } from "@/types";
 import { toast } from "sonner";
 import { getCellRenderer } from "@/lib/cellRenderers";
+import { parseInputValue } from "@/lib/db-types";
 import {
   generateSetNullSql,
   generateDeleteSql,
@@ -139,6 +140,7 @@ export function TanStackTableViewer({
     columnId: string;
     columnName: string;
     columnType: string;
+    column: TableColumn;
     currentValue: any;
   } | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -595,6 +597,7 @@ Sum: ${stats.sum}`
               columnId: col.name,
               columnName: col.name,
               columnType: col.data_type,
+              column: col,
               currentValue: value,
             });
             setEditDialogOpen(true);
@@ -615,7 +618,7 @@ Sum: ${stats.sum}`
               }}
             >
               <div className="flex-1 min-w-0">
-                {getCellRenderer(col.data_type, value)}
+                {getCellRenderer(col, value)}
               </div>
               <button
                 onClick={handleEditClick}
@@ -697,10 +700,12 @@ Sum: ${stats.sum}`
       const primaryKeyValue = row[primaryKeyColumn.name];
       const oldValue = editingCell.currentValue;
       const columnName = editingCell.columnId;
+      const parsedValue =
+        newValue === "" ? null : parseInputValue(editingCell.column, newValue);
 
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
-        [columnName]: newValue === "" ? null : newValue,
+        [columnName]: parsedValue,
       };
 
       // Build WHERE clause for the primary key
@@ -718,7 +723,7 @@ Sum: ${stats.sum}`
       };
 
       const updateSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
-        newValue === "" ? null : newValue
+        parsedValue
       )} WHERE ${whereClause}`;
       const undoSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
         oldValue
@@ -1404,6 +1409,7 @@ Sum: ${stats.sum}`
                       columnId: contextMenuCell.columnName,
                       columnName: contextMenuCell.columnName,
                       columnType: tableCol.data_type,
+                      column: tableCol,
                       currentValue: contextMenuCell.value,
                     });
                     setEditDialogOpen(true);
@@ -1657,6 +1663,7 @@ Sum: ${stats.sum}`
             onOpenChange={setEditDialogOpen}
             columnName={editingCell.columnName}
             columnType={editingCell.columnType}
+            column={editingCell.column}
             currentValue={editingCell.currentValue}
             onSave={handleSaveEdit}
           />
