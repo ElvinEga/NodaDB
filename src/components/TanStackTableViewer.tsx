@@ -701,7 +701,13 @@ Sum: ${stats.sum}`
       const oldValue = editingCell.currentValue;
       const columnName = editingCell.columnId;
       const parsedValue =
-        newValue === "" ? null : parseInputValue(editingCell.column, newValue);
+        newValue === "__NODADB_USE_DEFAULT__"
+          ? "__NODADB_USE_DEFAULT__"
+          : newValue === "__NODADB_EMPTY_STRING__"
+            ? "__NODADB_EMPTY_STRING__"
+            : newValue === ""
+              ? null
+              : parseInputValue(editingCell.column, newValue);
 
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
