@@ -208,6 +208,31 @@ impl ConnectionManager {
         }
     }
 
+    fn quote_pg_ident(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+
+    fn split_pg_table_name(table_name: &str) -> (String, String) {
+        let parts: Vec<&str> = table_name.split('.').collect();
+        if parts.len() == 2 {
+            (
+                parts[0].trim_matches('"').to_string(),
+                parts[1].trim_matches('"').to_string(),
+            )
+        } else {
+            ("public".to_string(), table_name.trim_matches('"').to_string())
+        }
+    }
+
+    fn quote_pg_table(table_name: &str) -> String {
+        let (schema, table) = Self::split_pg_table_name(table_name);
+        format!(
+            "{}.{}",
+            Self::quote_pg_ident(&schema),
+            Self::quote_pg_ident(&table)
+        )
+    }
+
 
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
@@ -495,6 +520,7 @@ impl ConnectionManager {
                     tables.push(DatabaseTable {
                         name,
                         schema: None,
+                        full_name: None,
                         row_count,
                         size_kb: None, // SQLite doesn't easily provide per-table size
                         table_type: Some(table_type.to_uppercase()),
@@ -503,29 +529,42 @@ impl ConnectionManager {
                 tables
             }
             DatabasePool::Postgres(pool) => {
-                // PostgreSQL: Get statistics from pg_stat_user_tables and pg_class
+                // PostgreSQL: include user schemas (not only public)
                 let query = r#"
                     SELECT 
-                        t.table_name,
-                        t.table_type,
-                        pg_stat.n_live_tup as row_count,
-                        pg_total_relation_size(quote_ident(t.table_schema)||'.'||quote_ident(t.table_name))::bigint / 1024 as size_kb
-                    FROM information_schema.tables t
-                    LEFT JOIN pg_stat_user_tables pg_stat ON pg_stat.relname = t.table_name
-                    WHERE t.table_schema = 'public'
-                    ORDER BY t.table_name
+                        n.nspname AS schema_name,
+                        c.relname AS table_name,
+                        CASE c.relkind
+                            WHEN 'r' THEN 'BASE TABLE'
+                            WHEN 'p' THEN 'PARTITIONED TABLE'
+                            WHEN 'v' THEN 'VIEW'
+                            WHEN 'm' THEN 'MATERIALIZED VIEW'
+                            WHEN 'f' THEN 'FOREIGN TABLE'
+                            ELSE c.relkind::text
+                        END AS table_type,
+                        s.n_live_tup::bigint AS row_count,
+                        pg_total_relation_size(c.oid)::bigint / 1024 AS size_kb
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+                    WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND n.nspname NOT LIKE 'pg_toast%'
+                    ORDER BY n.nspname, c.relname
                 "#;
                 let rows = sqlx::query(query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
-                        let name: String = row.try_get(0).unwrap_or_default();
-                        let table_type: String = row.try_get(1).unwrap_or_default();
-                        let row_count: Option<i64> = row.try_get(2).ok();
-                        let size_kb: Option<i64> = row.try_get(3).ok();
+                        let schema_name: String = row.try_get(0).unwrap_or_else(|_| "public".to_string());
+                        let name: String = row.try_get(1).unwrap_or_default();
+                        let table_type: String = row.try_get(2).unwrap_or_default();
+                        let row_count: Option<i64> = row.try_get(3).ok();
+                        let size_kb: Option<i64> = row.try_get(4).ok();
                         
                         DatabaseTable {
+                            full_name: Some(format!("{}.{}", schema_name, name)),
                             name,
-                            schema: Some("public".to_string()),
+                            schema: Some(schema_name),
                             row_count,
                             size_kb,
                             table_type: Some(table_type.to_uppercase()),
@@ -556,6 +595,7 @@ impl ConnectionManager {
                         DatabaseTable {
                             name,
                             schema: None,
+                            full_name: None,
                             row_count,
                             size_kb,
                             table_type: Some(table_type),
@@ -583,48 +623,7 @@ impl ConnectionManager {
             DatabaseType::SQLite => {
                 format!("PRAGMA table_info({})", table_name)
             }
-            DatabaseType::PostgreSQL => {
-                format!(
-                    r#"
-                    SELECT
-                      att.attname AS column_name,
-                      pg_catalog.format_type(att.atttypid, att.atttypmod) AS formatted_type,
-                      typ.typname AS raw_type_name,
-                      typ.typtype AS type_kind,
-                      typ.typcategory AS type_category,
-                      att.attnotnull AS not_null,
-                      pg_get_expr(def.adbin, def.adrelid) AS default_value,
-                      CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_primary_key,
-                      CASE WHEN att.attndims > 0 OR typ.typcategory = 'A' THEN true ELSE false END AS is_array,
-                      (
-                        SELECT array_agg(enumlabel ORDER BY enumsortorder)
-                        FROM pg_enum
-                        WHERE enumtypid = typ.oid
-                      ) AS enum_values
-                    FROM pg_attribute att
-                    JOIN pg_class cls ON cls.oid = att.attrelid
-                    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
-                    JOIN pg_type typ ON typ.oid = att.atttypid
-                    LEFT JOIN pg_attrdef def
-                      ON def.adrelid = att.attrelid
-                     AND def.adnum = att.attnum
-                    LEFT JOIN (
-                      SELECT a.attname
-                      FROM pg_index i
-                      JOIN pg_attribute a
-                        ON a.attrelid = i.indrelid
-                       AND a.attnum = ANY(i.indkey)
-                      WHERE i.indrelid = '{}'::regclass
-                        AND i.indisprimary
-                    ) pk ON pk.attname = att.attname
-                    WHERE cls.oid = '{}'::regclass
-                      AND att.attnum > 0
-                      AND NOT att.attisdropped
-                    ORDER BY att.attnum
-                    "#,
-                    table_name, table_name
-                )
-            }
+            DatabaseType::PostgreSQL => String::new(),
             DatabaseType::MySQL => {
                 format!(
                     "SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT, \
@@ -667,7 +666,48 @@ impl ConnectionManager {
                     .collect()
             }
             DatabasePool::Postgres(pool) => {
-                let rows = sqlx::query(&query).fetch_all(pool).await?;
+                let rows = sqlx::query(
+                    r#"
+                    SELECT
+                      att.attname AS column_name,
+                      pg_catalog.format_type(att.atttypid, att.atttypmod) AS formatted_type,
+                      typ.typname AS raw_type_name,
+                      typ.typtype AS type_kind,
+                      typ.typcategory AS type_category,
+                      att.attnotnull AS not_null,
+                      pg_get_expr(def.adbin, def.adrelid) AS default_value,
+                      CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_primary_key,
+                      CASE WHEN att.attndims > 0 OR typ.typcategory = 'A' THEN true ELSE false END AS is_array,
+                      (
+                        SELECT array_agg(enumlabel ORDER BY enumsortorder)
+                        FROM pg_enum
+                        WHERE enumtypid = typ.oid
+                      ) AS enum_values
+                    FROM pg_attribute att
+                    JOIN pg_class cls ON cls.oid = att.attrelid
+                    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+                    JOIN pg_type typ ON typ.oid = att.atttypid
+                    LEFT JOIN pg_attrdef def
+                      ON def.adrelid = att.attrelid
+                     AND def.adnum = att.attnum
+                    LEFT JOIN (
+                      SELECT a.attname
+                      FROM pg_index i
+                      JOIN pg_attribute a
+                        ON a.attrelid = i.indrelid
+                       AND a.attnum = ANY(i.indkey)
+                      WHERE i.indrelid = to_regclass($1)
+                        AND i.indisprimary
+                    ) pk ON pk.attname = att.attname
+                    WHERE cls.oid = to_regclass($1)
+                      AND att.attnum > 0
+                      AND NOT att.attisdropped
+                    ORDER BY att.attnum
+                    "#,
+                )
+                .bind(table_name)
+                .fetch_all(pool)
+                .await?;
                 rows.into_iter()
                     .map(|row| {
                         let name: String = row.try_get(0).unwrap_or_default();
@@ -1023,7 +1063,13 @@ impl ConnectionManager {
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({})",
-            table_name, column_list, value_list
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            },
+            column_list,
+            value_list
         );
 
         execute_query!(pool, &query)?;
@@ -1079,7 +1125,11 @@ impl ConnectionManager {
         // Insert all rows in a single query for better performance
         let query = format!(
             "INSERT INTO {} ({}) VALUES {}",
-            table_name,
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            },
             column_list,
             value_lists.join(", ")
         );
@@ -1121,7 +1171,13 @@ impl ConnectionManager {
 
         let query = format!(
             "UPDATE {} SET {} WHERE {}",
-            table_name, set_clause, where_clause
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            },
+            set_clause,
+            where_clause
         );
 
         let rows_affected = execute_query!(pool, &query)?;
@@ -1142,7 +1198,12 @@ impl ConnectionManager {
 
         let query = format!(
             "DELETE FROM {} WHERE {}",
-            table_name, where_clause
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            },
+            where_clause
         );
 
         let rows_affected = execute_query!(pool, &query)?;
@@ -1185,7 +1246,11 @@ impl ConnectionManager {
 
         let query = format!(
             "CREATE TABLE {} ({})",
-            table_name,
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            },
             column_defs.join(", ")
         );
 
@@ -1204,7 +1269,14 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
-        let query = format!("DROP TABLE {}", table_name);
+        let query = format!(
+            "DROP TABLE {}",
+            if matches!(pool, DatabasePool::Postgres(_)) {
+                Self::quote_pg_table(table_name)
+            } else {
+                table_name.to_string()
+            }
+        );
 
         execute_query!(pool, &query)?;
 
@@ -1233,8 +1305,18 @@ impl ConnectionManager {
                 format!("ALTER TABLE {} ADD COLUMN {} {}", table_name, column_name, data_type)
             }
             _ => {
+                let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
+                    Self::quote_pg_table(table_name)
+                } else {
+                    table_name.to_string()
+                };
+                let target_column = if matches!(pool, DatabasePool::Postgres(_)) {
+                    Self::quote_pg_ident(column_name)
+                } else {
+                    column_name.to_string()
+                };
                 format!("ALTER TABLE {} ADD COLUMN {} {}{}", 
-                    table_name, column_name, data_type, nullable_clause)
+                    target_table, target_column, data_type, nullable_clause)
             }
         };
 
@@ -1261,7 +1343,17 @@ impl ConnectionManager {
                 return Err(anyhow!("SQLite does not support dropping columns directly. Please recreate the table."));
             }
             _ => {
-                format!("ALTER TABLE {} DROP COLUMN {}", table_name, column_name)
+                let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
+                    Self::quote_pg_table(table_name)
+                } else {
+                    table_name.to_string()
+                };
+                let target_column = if matches!(pool, DatabasePool::Postgres(_)) {
+                    Self::quote_pg_ident(column_name)
+                } else {
+                    column_name.to_string()
+                };
+                format!("ALTER TABLE {} DROP COLUMN {}", target_table, target_column)
             }
         };
 
@@ -1285,12 +1377,55 @@ impl ConnectionManager {
         let query = match db_type {
             DatabaseType::SQLite => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
             DatabaseType::MySQL => format!("RENAME TABLE {} TO {}", old_name, new_name),
-            DatabaseType::PostgreSQL => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
+            DatabaseType::PostgreSQL => {
+                let quoted_old = Self::quote_pg_table(old_name);
+                let quoted_new = Self::quote_pg_ident(new_name);
+                format!("ALTER TABLE {} RENAME TO {}", quoted_old, quoted_new)
+            }
         };
 
         execute_query!(pool, &query)?;
 
         Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
+    }
+
+    pub async fn execute_transaction(
+        &self,
+        connection_id: &str,
+        queries: &[String],
+    ) -> Result<u64> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let mut total_rows_affected = 0_u64;
+
+        match pool {
+            DatabasePool::Sqlite(pool) => {
+                let mut tx = pool.begin().await?;
+                for query in queries {
+                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                }
+                tx.commit().await?;
+            }
+            DatabasePool::Postgres(pool) => {
+                let mut tx = pool.begin().await?;
+                for query in queries {
+                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                }
+                tx.commit().await?;
+            }
+            DatabasePool::MySql(pool) => {
+                let mut tx = pool.begin().await?;
+                for query in queries {
+                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                }
+                tx.commit().await?;
+            }
+        }
+
+        Ok(total_rows_affected)
     }
 
     pub async fn export_table_structure(
