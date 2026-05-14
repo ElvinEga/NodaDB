@@ -164,3 +164,31 @@ pub struct TableIndex {
     pub predicate: Option<String>,
     pub definition: Option<String>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresConnectionInfo {
+    pub version: String,
+    pub server_version: String,
+    pub current_database: String,
+    pub current_user: String,
+    pub search_path: String,
+    pub timezone: String,
+    pub backend_pid: i32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresExtension {
+    pub extname: String,
+    pub extversion: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresTablePrivileges {
+    pub can_select: bool,
+    pub can_insert: bool,
+    pub can_update: bool,
+    pub can_delete: bool,
+    pub can_truncate: bool,
+    pub can_references: bool,
+    pub can_trigger: bool,
+}
