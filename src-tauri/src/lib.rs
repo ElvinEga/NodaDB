@@ -32,6 +32,8 @@ pub fn run() {
             commands::execute_transaction,
             commands::rename_table,
             commands::export_table_structure,
+            commands::get_table_constraints,
+            commands::get_table_indexes,
             commands::create_new_window,
             commands::create_window_from_label,
         ])
