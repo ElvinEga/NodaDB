@@ -34,6 +34,10 @@ pub fn run() {
             commands::export_table_structure,
             commands::get_table_constraints,
             commands::get_table_indexes,
+            commands::get_postgres_connection_info,
+            commands::cancel_postgres_backend_query,
+            commands::get_postgres_extensions,
+            commands::get_postgres_table_privileges,
             commands::create_new_window,
             commands::create_window_from_label,
         ])
