@@ -1,6 +1,6 @@
 pub mod types;
 
-use crate::models::{ColumnTypeFamily, ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, PlanStep, ConnectionTestResult};
+use crate::models::{ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PlanStep, QueryResult, TableColumn, TableConstraint, TableIndex};
 use crate::ssh_tunnel::SshTunnel;
 use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
@@ -231,6 +231,25 @@ impl ConnectionManager {
             Self::quote_pg_ident(&schema),
             Self::quote_pg_ident(&table)
         )
+    }
+
+    fn format_sqlx_error(error: sqlx::Error) -> anyhow::Error {
+        match error {
+            sqlx::Error::Database(db_err) => {
+                let message = db_err.message();
+                let code = db_err.code().map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string());
+                let details = db_err.details().unwrap_or_default();
+                let hint = db_err.hint().unwrap_or_default();
+                anyhow!(
+                    "SQLSTATE {}: {}{}{}",
+                    code,
+                    message,
+                    if details.is_empty() { "".to_string() } else { format!(" | detail: {}", details) },
+                    if hint.is_empty() { "".to_string() } else { format!(" | hint: {}", hint) }
+                )
+            }
+            other => anyhow!(other),
+        }
     }
 
 
@@ -661,6 +680,16 @@ impl ConnectionManager {
                             is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
                             is_array: false,
                             enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
                         }
                     })
                     .collect()
@@ -672,24 +701,39 @@ impl ConnectionManager {
                       att.attname AS column_name,
                       pg_catalog.format_type(att.atttypid, att.atttypmod) AS formatted_type,
                       typ.typname AS raw_type_name,
+                      typ_ns.nspname AS type_schema,
                       typ.typtype AS type_kind,
                       typ.typcategory AS type_category,
                       att.attnotnull AS not_null,
                       pg_get_expr(def.adbin, def.adrelid) AS default_value,
                       CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_primary_key,
                       CASE WHEN att.attndims > 0 OR typ.typcategory = 'A' THEN true ELSE false END AS is_array,
+                      att.attndims AS array_dimensions,
+                      CASE WHEN typ.typcategory = 'A' THEN elem.typname ELSE NULL END AS element_raw_type,
                       (
                         SELECT array_agg(enumlabel ORDER BY enumsortorder)
                         FROM pg_enum
                         WHERE enumtypid = typ.oid
-                      ) AS enum_values
+                      ) AS enum_values,
+                      att.attidentity AS identity_kind,
+                      att.attgenerated AS generated_kind,
+                      CASE WHEN att.attgenerated <> '' THEN pg_get_expr(def.adbin, def.adrelid) ELSE NULL END AS generation_expression,
+                      pg_catalog.col_description(att.attrelid, att.attnum) AS column_comment,
+                      col.collname AS collation_name,
+                      CASE WHEN typ.typtype = 'd' THEN typ.typname ELSE NULL END AS domain_name,
+                      CASE WHEN typ.typtype = 'd' THEN typ_ns.nspname ELSE NULL END AS domain_schema,
+                      CASE WHEN typ.typtype = 'd' THEN base_typ.typname ELSE NULL END AS domain_base_type
                     FROM pg_attribute att
                     JOIN pg_class cls ON cls.oid = att.attrelid
                     JOIN pg_namespace ns ON ns.oid = cls.relnamespace
                     JOIN pg_type typ ON typ.oid = att.atttypid
+                    JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
+                    LEFT JOIN pg_type elem ON elem.oid = typ.typelem
+                    LEFT JOIN pg_type base_typ ON base_typ.oid = typ.typbasetype
                     LEFT JOIN pg_attrdef def
                       ON def.adrelid = att.attrelid
                      AND def.adnum = att.attnum
+                    LEFT JOIN pg_collation col ON col.oid = att.attcollation
                     LEFT JOIN (
                       SELECT a.attname
                       FROM pg_index i
@@ -713,13 +757,24 @@ impl ConnectionManager {
                         let name: String = row.try_get(0).unwrap_or_default();
                         let data_type: String = row.try_get(1).unwrap_or_default();
                         let raw_type: String = row.try_get(2).unwrap_or_default();
-                        let type_kind: String = row.try_get(3).unwrap_or_default();
-                        let _type_category: String = row.try_get(4).unwrap_or_default();
-                        let not_null: bool = row.try_get(5).unwrap_or(false);
-                        let default_value: Option<String> = row.try_get(6).ok();
-                        let is_primary_key: bool = row.try_get(7).unwrap_or(false);
-                        let is_array: bool = row.try_get(8).unwrap_or(false);
-                        let enum_values: Option<Vec<String>> = row.try_get(9).ok().flatten();
+                        let _type_schema: String = row.try_get(3).unwrap_or_default();
+                        let type_kind: String = row.try_get(4).unwrap_or_default();
+                        let _type_category: String = row.try_get(5).unwrap_or_default();
+                        let not_null: bool = row.try_get(6).unwrap_or(false);
+                        let default_value: Option<String> = row.try_get(7).ok();
+                        let is_primary_key: bool = row.try_get(8).unwrap_or(false);
+                        let is_array: bool = row.try_get(9).unwrap_or(false);
+                        let array_dimensions: Option<i32> = row.try_get(10).ok();
+                        let element_raw_type: Option<String> = row.try_get(11).ok();
+                        let enum_values: Option<Vec<String>> = row.try_get(12).ok().flatten();
+                        let identity_kind: Option<String> = row.try_get(13).ok();
+                        let generated_kind: Option<String> = row.try_get(14).ok();
+                        let generation_expression: Option<String> = row.try_get(15).ok();
+                        let column_comment: Option<String> = row.try_get(16).ok();
+                        let collation_name: Option<String> = row.try_get(17).ok();
+                        let domain_name: Option<String> = row.try_get(18).ok();
+                        let domain_schema: Option<String> = row.try_get(19).ok();
+                        let domain_base_type: Option<String> = row.try_get(20).ok();
                         let family = classify_postgres_type(&data_type, &raw_type, &type_kind, is_array);
 
                         TableColumn {
@@ -735,6 +790,16 @@ impl ConnectionManager {
                             is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
                             is_array,
                             enum_values,
+                            identity_kind,
+                            generated_kind,
+                            generation_expression,
+                            column_comment,
+                            collation_name,
+                            domain_name,
+                            domain_schema,
+                            domain_base_type,
+                            array_dimensions,
+                            element_raw_type,
                         }
                     })
                     .collect()
@@ -763,6 +828,16 @@ impl ConnectionManager {
                             is_boolean_like: matches!(family, ColumnTypeFamily::Boolean),
                             is_array: false,
                             enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
                         }
                     })
                     .collect()
@@ -784,15 +859,24 @@ impl ConnectionManager {
 
         match pool {
             DatabasePool::Sqlite(pool) => {
-                let rows = sqlx::query(query).fetch_all(pool).await?;
+                let rows = sqlx::query(query)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(Self::format_sqlx_error)?;
                 Ok(process_rows!(rows))
             }
             DatabasePool::Postgres(pool) => {
-                let rows = sqlx::query(query).fetch_all(pool).await?;
+                let rows = sqlx::query(query)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(Self::format_sqlx_error)?;
                 Ok(process_rows!(rows))
             }
             DatabasePool::MySql(pool) => {
-                let rows = sqlx::query(query).fetch_all(pool).await?;
+                let rows = sqlx::query(query)
+                    .fetch_all(pool)
+                    .await
+                    .map_err(Self::format_sqlx_error)?;
                 Ok(process_rows!(rows))
             }
         }
@@ -1072,7 +1156,7 @@ impl ConnectionManager {
             value_list
         );
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully inserted 1 row into {}", table_name))
     }
@@ -1134,7 +1218,7 @@ impl ConnectionManager {
             value_lists.join(", ")
         );
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully inserted {} rows into {}", rows.len(), table_name))
     }
@@ -1180,7 +1264,7 @@ impl ConnectionManager {
             where_clause
         );
 
-        let rows_affected = execute_query!(pool, &query)?;
+        let rows_affected = execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully updated {} row(s)", rows_affected))
     }
@@ -1206,7 +1290,7 @@ impl ConnectionManager {
             where_clause
         );
 
-        let rows_affected = execute_query!(pool, &query)?;
+        let rows_affected = execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully deleted {} row(s)", rows_affected))
     }
@@ -1254,7 +1338,7 @@ impl ConnectionManager {
             column_defs.join(", ")
         );
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully created table {}", table_name))
     }
@@ -1278,7 +1362,7 @@ impl ConnectionManager {
             }
         );
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully dropped table {}", table_name))
     }
@@ -1320,7 +1404,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully added column {} to {}", column_name, table_name))
     }
@@ -1357,7 +1441,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully dropped column {} from {}", column_name, table_name))
     }
@@ -1384,7 +1468,7 @@ impl ConnectionManager {
             }
         };
 
-        execute_query!(pool, &query)?;
+        execute_query!(pool, &query).map_err(Self::format_sqlx_error)?;
 
         Ok(format!("Successfully renamed table {} to {}", old_name, new_name))
     }
@@ -1405,27 +1489,177 @@ impl ConnectionManager {
             DatabasePool::Sqlite(pool) => {
                 let mut tx = pool.begin().await?;
                 for query in queries {
-                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                    total_rows_affected += sqlx::query(query)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(Self::format_sqlx_error)?
+                        .rows_affected();
                 }
                 tx.commit().await?;
             }
             DatabasePool::Postgres(pool) => {
                 let mut tx = pool.begin().await?;
                 for query in queries {
-                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                    total_rows_affected += sqlx::query(query)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(Self::format_sqlx_error)?
+                        .rows_affected();
                 }
                 tx.commit().await?;
             }
             DatabasePool::MySql(pool) => {
                 let mut tx = pool.begin().await?;
                 for query in queries {
-                    total_rows_affected += sqlx::query(query).execute(&mut *tx).await?.rows_affected();
+                    total_rows_affected += sqlx::query(query)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(Self::format_sqlx_error)?
+                        .rows_affected();
                 }
                 tx.commit().await?;
             }
         }
 
         Ok(total_rows_affected)
+    }
+
+    pub async fn get_table_constraints(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<Vec<TableConstraint>> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        if !matches!(db_type, DatabaseType::PostgreSQL) {
+            return Ok(vec![]);
+        }
+
+        let query = r#"
+            SELECT
+              c.conname,
+              c.contype,
+              ns.nspname,
+              cl.relname,
+              COALESCE(array_agg(att.attname ORDER BY u.ordinality) FILTER (WHERE att.attname IS NOT NULL), ARRAY[]::text[]) AS column_names,
+              fns.nspname AS foreign_schema,
+              fcl.relname AS foreign_table,
+              COALESCE(array_agg(fatt.attname ORDER BY fu.ordinality) FILTER (WHERE fatt.attname IS NOT NULL), NULL) AS foreign_column_names,
+              CASE WHEN c.contype = 'c' THEN pg_get_constraintdef(c.oid, true) ELSE NULL END AS check_expr,
+              c.condeferrable,
+              c.condeferred
+            FROM pg_constraint c
+            JOIN pg_class cl ON cl.oid = c.conrelid
+            JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+            LEFT JOIN pg_class fcl ON fcl.oid = c.confrelid
+            LEFT JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+            LEFT JOIN LATERAL unnest(c.conkey) WITH ORDINALITY u(attnum, ordinality) ON true
+            LEFT JOIN pg_attribute att ON att.attrelid = c.conrelid AND att.attnum = u.attnum
+            LEFT JOIN LATERAL unnest(c.confkey) WITH ORDINALITY fu(attnum, ordinality) ON true
+            LEFT JOIN pg_attribute fatt ON fatt.attrelid = c.confrelid AND fatt.attnum = fu.attnum
+            WHERE c.conrelid = to_regclass($1)
+            GROUP BY c.oid, ns.nspname, cl.relname, fns.nspname, fcl.relname
+            ORDER BY c.conname
+        "#;
+
+        let constraints = match pool {
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query(query).bind(table_name).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| {
+                        let constraint_type_code: String = row.try_get(1).unwrap_or_default();
+                        let constraint_type = match constraint_type_code.as_str() {
+                            "p" => "PRIMARY KEY",
+                            "f" => "FOREIGN KEY",
+                            "u" => "UNIQUE",
+                            "c" => "CHECK",
+                            "x" => "EXCLUSION",
+                            _ => "OTHER",
+                        };
+                        TableConstraint {
+                            constraint_name: row.try_get(0).unwrap_or_default(),
+                            constraint_type: constraint_type.to_string(),
+                            table_schema: row.try_get(2).ok(),
+                            table_name: row.try_get(3).unwrap_or_default(),
+                            column_names: row.try_get(4).unwrap_or_default(),
+                            foreign_table_schema: row.try_get(5).ok(),
+                            foreign_table_name: row.try_get(6).ok(),
+                            foreign_column_names: row.try_get(7).ok(),
+                            check_expression: row.try_get(8).ok(),
+                            is_deferrable: row.try_get(9).ok(),
+                            initially_deferred: row.try_get(10).ok(),
+                        }
+                    })
+                    .collect()
+            }
+            _ => vec![],
+        };
+
+        Ok(constraints)
+    }
+
+    pub async fn get_table_indexes(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<Vec<TableIndex>> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        if !matches!(db_type, DatabaseType::PostgreSQL) {
+            return Ok(vec![]);
+        }
+
+        let query = r#"
+            SELECT
+              i.relname AS index_name,
+              am.amname AS method,
+              ix.indisunique,
+              ix.indisprimary,
+              ix.indisvalid,
+              COALESCE(array_agg(a.attname ORDER BY k.ordinality) FILTER (WHERE a.attname IS NOT NULL), ARRAY[]::text[]) AS columns,
+              pg_get_expr(ix.indexprs, ix.indrelid) AS expression,
+              pg_get_expr(ix.indpred, ix.indrelid) AS predicate,
+              pg_get_indexdef(ix.indexrelid) AS definition
+            FROM pg_index ix
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN pg_am am ON am.oid = i.relam
+            LEFT JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY k(attnum, ordinality) ON true
+            LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum AND a.attnum > 0
+            WHERE ix.indrelid = to_regclass($1)
+            GROUP BY i.relname, am.amname, ix.indisunique, ix.indisprimary, ix.indisvalid, ix.indexprs, ix.indpred, ix.indexrelid, ix.indrelid
+            ORDER BY i.relname
+        "#;
+
+        let indexes = match pool {
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query(query).bind(table_name).fetch_all(pool).await?;
+                rows.into_iter()
+                    .map(|row| TableIndex {
+                        index_name: row.try_get(0).unwrap_or_default(),
+                        method: row.try_get(1).ok(),
+                        is_unique: row.try_get(2).unwrap_or(false),
+                        is_primary: row.try_get(3).unwrap_or(false),
+                        is_valid: row.try_get(4).ok(),
+                        columns: row.try_get(5).unwrap_or_default(),
+                        expression: row.try_get(6).ok(),
+                        predicate: row.try_get(7).ok(),
+                        definition: row.try_get(8).ok(),
+                    })
+                    .collect()
+            }
+            _ => vec![],
+        };
+
+        Ok(indexes)
     }
 
     pub async fn export_table_structure(
