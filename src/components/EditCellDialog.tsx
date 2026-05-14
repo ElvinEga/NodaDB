@@ -40,6 +40,7 @@ export function EditCellDialog({
   onSave,
 }: EditCellDialogProps) {
   const [value, setValue] = useState('');
+  const [valueMode, setValueMode] = useState<'value' | 'null' | 'default' | 'empty'>('value');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isBoolean = column.type_family === 'boolean';
@@ -47,6 +48,7 @@ export function EditCellDialog({
 
   useEffect(() => {
     if (open) {
+      setValueMode('value');
       if (isBoolean) {
         if (currentValue === true || currentValue === 1 || currentValue === '1' || currentValue === 'true' || currentValue === 't') {
           setValue('true');
@@ -70,7 +72,15 @@ export function EditCellDialog({
     setIsSubmitting(true);
 
     try {
-      await onSave(value);
+      const outgoingValue =
+        valueMode === 'null'
+          ? ''
+          : valueMode === 'default'
+            ? '__NODADB_USE_DEFAULT__'
+            : valueMode === 'empty'
+              ? '__NODADB_EMPTY_STRING__'
+              : value;
+      await onSave(outgoingValue);
       onOpenChange(false);
     } catch (error) {
       // Error handling is done in parent component
@@ -127,7 +137,18 @@ export function EditCellDialog({
               <label htmlFor="cell-value" className="text-sm font-medium">
                 New Value
               </label>
-              {isReadOnlyGenerated ? (
+              <Select value={valueMode} onValueChange={(v) => setValueMode(v as 'value' | 'null' | 'default' | 'empty')}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="value">Set Value</SelectItem>
+                  <SelectItem value="null">Set NULL</SelectItem>
+                  <SelectItem value="default">Use DEFAULT</SelectItem>
+                  <SelectItem value="empty">Set Empty String</SelectItem>
+                </SelectContent>
+              </Select>
+              {valueMode === 'value' && (isReadOnlyGenerated ? (
                 <Input
                   id="cell-value"
                   value={value}
@@ -176,7 +197,7 @@ export function EditCellDialog({
                   autoFocus
                   className="h-9"
                 />
-              )}
+              ))}
               <p className="text-xs text-muted-foreground">
                 {isReadOnlyGenerated
                   ? 'Generated columns are read-only'
