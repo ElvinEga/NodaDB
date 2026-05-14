@@ -134,7 +134,7 @@ export function DataGeneratorDialog({
 
         await invoke('bulk_insert_rows', {
           connectionId: connection.id,
-          tableName: table.name,
+          tableName: table.full_name ?? table.name,
           rows: chunk,
           dbType: connection.db_type,
         });
