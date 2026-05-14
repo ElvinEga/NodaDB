@@ -114,6 +114,31 @@ export interface TableIndex {
   definition?: string | null;
 }
 
+export interface PostgresConnectionInfo {
+  version: string;
+  server_version: string;
+  current_database: string;
+  current_user: string;
+  search_path: string;
+  timezone: string;
+  backend_pid: number;
+}
+
+export interface PostgresExtension {
+  extname: string;
+  extversion: string;
+}
+
+export interface PostgresTablePrivileges {
+  can_select: boolean;
+  can_insert: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+  can_truncate: boolean;
+  can_references: boolean;
+  can_trigger: boolean;
+}
+
 export interface ExecutionPlan {
   query: string;
   planSteps: PlanStep[];
