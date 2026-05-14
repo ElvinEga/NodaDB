@@ -186,7 +186,7 @@ export function TanStackTableViewer({
       // Build dynamic query with sorting, filtering, and pagination
       // Fetch one extra row to detect if there are more pages
       const query = buildSelectQuery({
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         schema: table.schema,
         dbType: connection.db_type,
         limit: currentPageSize + 1,
@@ -350,7 +350,7 @@ export function TanStackTableViewer({
         id: `duplicate-${Date.now()}`,
         type: "insert",
         timestamp: new Date(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -409,7 +409,7 @@ export function TanStackTableViewer({
         id: `delete-${Date.now()}`,
         type: "delete",
         timestamp: new Date(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -731,7 +731,7 @@ Sum: ${stats.sum}`
 
       await invoke("update_row", {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         data: updateData,
         whereClause: whereClause,
         dbType: connection.db_type,
@@ -742,7 +742,7 @@ Sum: ${stats.sum}`
         id: `update-${Date.now()}`,
         type: "update",
         timestamp: new Date(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -814,7 +814,7 @@ Sum: ${stats.sum}`
 
       await invoke("delete_rows", {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         whereClause: whereClause,
         dbType: connection.db_type,
       });
@@ -824,7 +824,7 @@ Sum: ${stats.sum}`
         id: `batch-delete-${Date.now()}`,
         type: "batch_delete",
         timestamp: new Date(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -905,7 +905,7 @@ Sum: ${stats.sum}`
         id: `batch-update-${Date.now()}`,
         type: "batch_update",
         timestamp: new Date(),
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -942,7 +942,7 @@ Sum: ${stats.sum}`
 
         await invoke("insert_row", {
           connectionId: connection.id,
-          tableName: table.name,
+          tableName: table.full_name ?? table.name,
           row: newRow,
           dbType: connection.db_type,
         });
