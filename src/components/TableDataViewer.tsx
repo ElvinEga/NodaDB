@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, Upload } from 'lucide-react';
+import { Loader2, Database, ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown, Upload, ListTree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AddRowDialog } from '@/components/AddRowDialog';
 import { ImportCSVDialog } from '@/components/ImportCSVDialog';
@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { DatabaseTable, QueryResult, TableColumn, ConnectionConfig } from '@/types';
+import { ConnectionConfig, DatabaseTable, QueryResult, TableColumn, TableConstraint, TableIndex } from '@/types';
 import { TableFilter } from '@/types/filter';
 import { toast } from 'sonner';
 import { validateCellValue, getPlaceholderForType } from '@/lib/validation';
@@ -45,6 +45,9 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [activeWhereClause, setActiveWhereClause] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [constraints, setConstraints] = useState<TableConstraint[]>([]);
+  const [indexes, setIndexes] = useState<TableIndex[]>([]);
+  const [showPgMeta, setShowPgMeta] = useState(false);
 
   const loadTableStructure = async () => {
     try {
@@ -95,6 +98,28 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     loadTableData();
   };
 
+  const loadPostgresMetadata = async () => {
+    if (connection.db_type !== 'postgresql') return;
+    try {
+      const [constraintData, indexData] = await Promise.all([
+        invoke<TableConstraint[]>('get_table_constraints', {
+          connectionId: connection.id,
+          tableName: tableRef,
+          dbType: connection.db_type,
+        }),
+        invoke<TableIndex[]>('get_table_indexes', {
+          connectionId: connection.id,
+          tableName: tableRef,
+          dbType: connection.db_type,
+        }),
+      ]);
+      setConstraints(constraintData);
+      setIndexes(indexData);
+    } catch (error) {
+      console.error('Failed to load PostgreSQL metadata:', error);
+    }
+  };
+
   const handleApplyFilters = (whereClause: string) => {
     setActiveWhereClause(whereClause);
     setCurrentPage(1); // Reset to first page when filters change
@@ -143,6 +168,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
     setSortDirection(null);
     loadTableStructure();
     loadTableData();
+    loadPostgresMetadata();
   }, [tableRef, connection.id]);
 
   useEffect(() => {
@@ -327,6 +353,17 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
         </div>
         
         <div className="flex items-center gap-2">
+          {connection.db_type === 'postgresql' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPgMeta((prev) => !prev)}
+              className="h-8"
+            >
+              <ListTree className="h-3.5 w-3.5 mr-1.5" />
+              PG Metadata
+            </Button>
+          )}
           {selectedRows.size > 0 && (
             <Button
               variant="destructive"
@@ -367,6 +404,34 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
           </Button>
         </div>
       </div>
+
+      {showPgMeta && connection.db_type === 'postgresql' && (
+        <div className="border-b border-border bg-muted/20 px-4 py-3 space-y-3">
+          <div>
+            <div className="text-xs font-semibold mb-1">Constraints ({constraints.length})</div>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {constraints.length === 0 && <div>None</div>}
+              {constraints.map((c) => (
+                <div key={c.constraint_name} className="font-mono break-all">
+                  {c.constraint_type} {c.constraint_name} ({c.column_names.join(', ')})
+                  {c.foreign_table_name ? ` -> ${c.foreign_table_schema ?? 'public'}.${c.foreign_table_name}` : ''}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold mb-1">Indexes ({indexes.length})</div>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {indexes.length === 0 && <div>None</div>}
+              {indexes.map((idx) => (
+                <div key={idx.index_name} className="font-mono break-all">
+                  {idx.index_name} [{idx.method ?? 'unknown'}] {idx.is_unique ? 'UNIQUE' : ''} {idx.predicate ? ` WHERE ${idx.predicate}` : ''}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter Builder */}
       {columns.length > 0 && (
