@@ -1,5 +1,22 @@
 export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql';
 
+export type ColumnTypeFamily =
+  | 'boolean'
+  | 'integer'
+  | 'float'
+  | 'decimal'
+  | 'text'
+  | 'date_time'
+  | 'date'
+  | 'time'
+  | 'json'
+  | 'uuid'
+  | 'binary'
+  | 'enum'
+  | 'array'
+  | 'network'
+  | 'unknown';
+
 export type SSHAuthMethod = 'password' | 'privateKey';
 
 export interface SSHConfig {
@@ -37,9 +54,16 @@ export interface DatabaseTable {
 export interface TableColumn {
   name: string;
   data_type: string;
+  raw_type?: string | null;
+  normalized_type: string;
+  type_family: ColumnTypeFamily;
+  db_type: DatabaseType;
   is_nullable: boolean;
   default_value?: string;
   is_primary_key: boolean;
+  is_boolean_like: boolean;
+  is_array: boolean;
+  enum_values?: string[] | null;
 }
 
 export interface QueryResult {
