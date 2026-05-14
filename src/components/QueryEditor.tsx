@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor from '@monaco-editor/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
-import { Play, Loader2, Copy, Download, History, Activity, BarChart3, Wand2, ChevronDown } from 'lucide-react';
+import { Play, Loader2, Copy, Download, History, Activity, BarChart3, Wand2, ChevronDown, Info, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ConnectionConfig, QueryResult, ExecutionPlan } from '@/types';
+import { ConnectionConfig, ExecutionPlan, PostgresConnectionInfo, PostgresExtension, QueryResult } from '@/types';
 import { QueryHistory } from '@/components/QueryHistory';
 import { QueryAnalyzer } from '@/components/QueryAnalyzer';
 import { DataVisualization } from '@/components/DataVisualization';
@@ -43,6 +43,8 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   const [executionTime, setExecutionTime] = useState<number>(0);
   const [showHistory, setShowHistory] = useState(false);
   const [executionPlan, setExecutionPlan] = useState<ExecutionPlan | null>(null);
+  const [pgInfo, setPgInfo] = useState<PostgresConnectionInfo | null>(null);
+  const [pgExtensions, setPgExtensions] = useState<PostgresExtension[]>([]);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const addQueryToHistory = useQueryHistoryStore((state) => state.addQuery);
 
@@ -234,6 +236,48 @@ export function QueryEditor({ connection }: QueryEditorProps) {
     toast.success('Query loaded from history');
   };
 
+  const handleLoadPostgresInfo = async () => {
+    if (connection.db_type !== 'postgresql') return;
+    try {
+      const [info, extensions] = await Promise.all([
+        invoke<PostgresConnectionInfo>('get_postgres_connection_info', {
+          connectionId: connection.id,
+        }),
+        invoke<PostgresExtension[]>('get_postgres_extensions', {
+          connectionId: connection.id,
+        }),
+      ]);
+      setPgInfo(info);
+      setPgExtensions(extensions);
+      toast.success('PostgreSQL info loaded');
+    } catch (err) {
+      toast.error(`Failed to load PostgreSQL info: ${err}`);
+      console.error('PostgreSQL info error:', err);
+    }
+  };
+
+  const handleCancelBackend = async () => {
+    if (!pgInfo) {
+      toast.error('Load PG info first');
+      return;
+    }
+
+    try {
+      const cancelled = await invoke<boolean>('cancel_postgres_backend_query', {
+        connectionId: connection.id,
+        backendPid: pgInfo.backend_pid,
+      });
+      if (cancelled) {
+        toast.success(`Cancel sent to backend pid ${pgInfo.backend_pid}`);
+      } else {
+        toast.error('Cancel request was not accepted');
+      }
+    } catch (err) {
+      toast.error(`Failed to cancel backend query: ${err}`);
+      console.error('Cancel backend error:', err);
+    }
+  };
+
   const handleCopyResults = () => {
     if (!result) return;
     
@@ -303,6 +347,26 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {connection.db_type === 'postgresql' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadPostgresInfo}
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  PG Info
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelBackend}
+                >
+                  <Ban className="h-4 w-4 mr-2" />
+                  Cancel PID
+                </Button>
+              </>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -396,6 +460,18 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             </DropdownMenu>
           </div>
         </div>
+
+        {connection.db_type === 'postgresql' && pgInfo && (
+          <div className="px-4 py-2 border-b border-border text-xs bg-muted/20">
+            <div className="font-mono">
+              db={pgInfo.current_database} user={pgInfo.current_user} server={pgInfo.server_version} timezone={pgInfo.timezone} pid={pgInfo.backend_pid}
+            </div>
+            <div className="text-muted-foreground truncate">search_path: {pgInfo.search_path}</div>
+            <div className="text-muted-foreground truncate">
+              extensions: {pgExtensions.map((ext) => `${ext.extname}@${ext.extversion}`).join(', ') || 'none'}
+            </div>
+          </div>
+        )}
 
         {/* Editor and Results */}
         <div className="flex-1 flex flex-col overflow-hidden">
