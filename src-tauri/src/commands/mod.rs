@@ -1,5 +1,5 @@
 use crate::database::ConnectionManager;
-use crate::models::{ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, QueryResult, TableColumn, TableConstraint, TableIndex};
+use crate::models::{ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
 use tauri::State;
 use chrono::Utc;
 
@@ -269,6 +269,52 @@ pub async fn get_table_indexes(
         .get_table_indexes(&connection_id, &table_name, &db_type)
         .await
         .map_err(|e| format!("Failed to get table indexes: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_connection_info(
+    connection_id: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<PostgresConnectionInfo, String> {
+    manager
+        .get_postgres_connection_info(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL connection info: {}", e))
+}
+
+#[tauri::command]
+pub async fn cancel_postgres_backend_query(
+    connection_id: String,
+    backend_pid: i32,
+    manager: State<'_, ConnectionManager>,
+) -> Result<bool, String> {
+    manager
+        .cancel_postgres_backend_query(&connection_id, backend_pid)
+        .await
+        .map_err(|e| format!("Failed to cancel PostgreSQL query: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_extensions(
+    connection_id: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<PostgresExtension>, String> {
+    manager
+        .get_postgres_extensions(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL extensions: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_table_privileges(
+    connection_id: String,
+    table_name: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<PostgresTablePrivileges, String> {
+    manager
+        .get_postgres_table_privileges(&connection_id, &table_name)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL table privileges: {}", e))
 }
 
 #[tauri::command]
