@@ -255,6 +255,9 @@ export function AddRowDialog({
                           <SelectItem value="empty">Set Empty String</SelectItem>
                         </SelectContent>
                       </Select>
+                      <div className="text-[10px] text-muted-foreground">
+                        Choose how to write this field: value, SQL NULL, SQL DEFAULT, or empty string.
+                      </div>
                     </div>
                   )}
                   {(valueMode[column.name] ?? "value") !== "value" ? null : column.type_family === "boolean" ? (
