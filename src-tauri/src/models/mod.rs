@@ -25,6 +25,11 @@ pub enum ColumnTypeFamily {
     Enum,
     Array,
     Network,
+    Range,
+    FullText,
+    Extension,
+    Domain,
+    Custom,
     Unknown,
 }
 
@@ -85,6 +90,16 @@ pub struct TableColumn {
     pub is_boolean_like: bool,
     pub is_array: bool,
     pub enum_values: Option<Vec<String>>,
+    pub identity_kind: Option<String>,
+    pub generated_kind: Option<String>,
+    pub generation_expression: Option<String>,
+    pub column_comment: Option<String>,
+    pub collation_name: Option<String>,
+    pub domain_name: Option<String>,
+    pub domain_schema: Option<String>,
+    pub domain_base_type: Option<String>,
+    pub array_dimensions: Option<i32>,
+    pub element_raw_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,4 +135,32 @@ pub struct ConnectionTestResult {
     pub latency_ms: u64,
     pub db_version: String,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TableConstraint {
+    pub constraint_name: String,
+    pub constraint_type: String,
+    pub table_schema: Option<String>,
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub foreign_table_schema: Option<String>,
+    pub foreign_table_name: Option<String>,
+    pub foreign_column_names: Option<Vec<String>>,
+    pub check_expression: Option<String>,
+    pub is_deferrable: Option<bool>,
+    pub initially_deferred: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TableIndex {
+    pub index_name: String,
+    pub method: Option<String>,
+    pub is_unique: bool,
+    pub is_primary: bool,
+    pub is_valid: Option<bool>,
+    pub columns: Vec<String>,
+    pub expression: Option<String>,
+    pub predicate: Option<String>,
+    pub definition: Option<String>,
 }

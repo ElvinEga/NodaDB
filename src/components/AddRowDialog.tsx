@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConnectionConfig, TableColumn, DatabaseTable } from "@/types";
 import { parseInputValue, resolveColumnInputType } from "@/lib/db-types";
 import { toast } from "sonner";
@@ -39,6 +46,7 @@ export function AddRowDialog({
   onAddAction,
 }: AddRowDialogProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [valueMode, setValueMode] = useState<Record<string, "value" | "null" | "default" | "empty">>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const tableRef = table.full_name ?? table.name;
 
@@ -53,6 +61,11 @@ export function AddRowDialog({
       }
     });
     setFormData(initialData);
+    const initialModes: Record<string, "value" | "null" | "default" | "empty"> = {};
+    columns.forEach((col) => {
+      initialModes[col.name] = col.default_value ? "default" : "value";
+    });
+    setValueMode(initialModes);
   }, [columns, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,9 +78,22 @@ export function AddRowDialog({
 
       columns.forEach((col) => {
         const value = formData[col.name];
+        const mode = valueMode[col.name] ?? "value";
 
         // Skip generated columns and identity-always columns
         if ((col.generated_kind ?? "") !== "" || col.identity_kind === "a") {
+          return;
+        }
+
+        if (mode === "default") {
+          return;
+        }
+        if (mode === "null") {
+          data[col.name] = null;
+          return;
+        }
+        if (mode === "empty") {
+          data[col.name] = "";
           return;
         }
 
@@ -203,14 +229,35 @@ export function AddRowDialog({
                     )}
                   </div>
                   {(column.is_nullable || column.default_value) && (
-                    <div className="text-[10px] text-muted-foreground -mt-1">
-                      {column.is_nullable && "Optional"}
-                      {column.is_nullable && column.default_value && " • "}
-                      {column.default_value &&
-                        `Default: ${column.default_value}`}
+                    <div className="space-y-1 -mt-1">
+                      <div className="text-[10px] text-muted-foreground">
+                        {column.is_nullable && "Optional"}
+                        {column.is_nullable && column.default_value && " • "}
+                        {column.default_value &&
+                          `Default: ${column.default_value}`}
+                      </div>
+                      <Select
+                        value={valueMode[column.name] ?? "value"}
+                        onValueChange={(val) =>
+                          setValueMode((prev) => ({
+                            ...prev,
+                            [column.name]: val as "value" | "null" | "default" | "empty",
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-7 text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="value">Set Value</SelectItem>
+                          {column.is_nullable && <SelectItem value="null">Set NULL</SelectItem>}
+                          {column.default_value && <SelectItem value="default">Use DEFAULT</SelectItem>}
+                          <SelectItem value="empty">Set Empty String</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
-                  {column.type_family === "boolean" ? (
+                  {(valueMode[column.name] ?? "value") !== "value" ? null : column.type_family === "boolean" ? (
                     <div className="flex items-center gap-2 rounded-md border border-input px-3 py-2">
                       <input
                         id={column.name}
