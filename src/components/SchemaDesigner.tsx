@@ -63,7 +63,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           type: "schemaNode",
           position: { x: 0, y: 0 }, // Will be calculated
           data: {
-            tableName: table.name,
+            tableName: table.full_name ?? table.name,
             columns: columns.map((col: any) => ({
               name: col.name,
               type: col.data_type,
@@ -148,7 +148,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           try {
             const columns = await invoke<TableColumn[]>("get_table_structure", {
               connectionId: connection.id,
-              tableName: table.name,
+              tableName: table.full_name ?? table.name,
               dbType: connection.db_type,
             });
             columnsMap.set(table.name, columns);
@@ -369,7 +369,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           try {
             const columns = await invoke<TableColumn[]>("get_table_structure", {
               connectionId: connection.id,
-              tableName: table.name,
+              tableName: table.full_name ?? table.name,
               dbType: connection.db_type,
             });
             columnsMap.set(table.name, columns);
