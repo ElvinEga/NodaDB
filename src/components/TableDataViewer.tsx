@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ConnectionConfig, DatabaseTable, QueryResult, TableColumn, TableConstraint, TableIndex } from '@/types';
+import { ConnectionConfig, DatabaseTable, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex } from '@/types';
 import { TableFilter } from '@/types/filter';
 import { toast } from 'sonner';
 import { validateCellValue, getPlaceholderForType } from '@/lib/validation';
@@ -48,6 +48,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
   const [constraints, setConstraints] = useState<TableConstraint[]>([]);
   const [indexes, setIndexes] = useState<TableIndex[]>([]);
   const [showPgMeta, setShowPgMeta] = useState(false);
+  const [pgPrivileges, setPgPrivileges] = useState<PostgresTablePrivileges | null>(null);
 
   const loadTableStructure = async () => {
     try {
@@ -115,6 +116,11 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
       ]);
       setConstraints(constraintData);
       setIndexes(indexData);
+      const privileges = await invoke<PostgresTablePrivileges>('get_postgres_table_privileges', {
+        connectionId: connection.id,
+        tableName: tableRef,
+      });
+      setPgPrivileges(privileges);
     } catch (error) {
       console.error('Failed to load PostgreSQL metadata:', error);
     }
@@ -369,7 +375,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
               variant="destructive"
               size="sm"
               onClick={handleDeleteSelected}
-              disabled={isLoading}
+              disabled={isLoading || (connection.db_type === 'postgresql' && pgPrivileges ? !pgPrivileges.can_delete : false)}
               className="h-8"
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
@@ -397,6 +403,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
           <Button
             size="sm"
             onClick={() => setAddRowDialogOpen(true)}
+            disabled={connection.db_type === 'postgresql' && pgPrivileges ? !pgPrivileges.can_insert : false}
             className="h-8"
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" />
@@ -408,6 +415,11 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
       {showPgMeta && connection.db_type === 'postgresql' && (
         <div className="border-b border-border bg-muted/20 px-4 py-3 space-y-3">
           <div>
+            {pgPrivileges && (
+              <div className="text-[11px] text-muted-foreground mb-1 font-mono">
+                privileges: select={String(pgPrivileges.can_select)} insert={String(pgPrivileges.can_insert)} update={String(pgPrivileges.can_update)} delete={String(pgPrivileges.can_delete)}
+              </div>
+            )}
             <div className="text-xs font-semibold mb-1">Constraints ({constraints.length})</div>
             <div className="space-y-1 text-xs text-muted-foreground">
               {constraints.length === 0 && <div>None</div>}
