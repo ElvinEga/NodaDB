@@ -16,7 +16,11 @@
         "title": "NodaDB",
         "width": 1200,
         "height": 800,
-        "backgroundColor": "#09090b"
+        "backgroundColor": "#09090b",
+        "decorations": true,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
       }
     ],
     "security": {
