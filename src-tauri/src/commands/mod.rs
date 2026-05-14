@@ -208,13 +208,14 @@ pub async fn execute_transaction(
     manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
     let count = queries.len();
-    for query in &queries {
-        manager
-            .execute_query(&connection_id, query)
-            .await
-            .map_err(|e| format!("Transaction failed: {}", e))?;
-    }
-    Ok(format!("Successfully executed {} queries", count))
+    let rows_affected = manager
+        .execute_transaction(&connection_id, &queries)
+        .await
+        .map_err(|e| format!("Transaction failed (rolled back): {}", e))?;
+    Ok(format!(
+        "Successfully executed {} queries in a transaction ({} row(s) affected)",
+        count, rows_affected
+    ))
 }
 
 #[tauri::command]
