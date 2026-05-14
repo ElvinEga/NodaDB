@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConnectionConfig, TableColumn, DatabaseTable } from "@/types";
+import { parseInputValue, resolveColumnInputType } from "@/lib/db-types";
 import { toast } from "sonner";
 import { TableAction } from "@/stores/undoRedoStore";
 
@@ -83,22 +84,7 @@ export function AddRowDialog({
           return;
         }
 
-        // Type conversion based on data type
-        const dataType = col.data_type.toUpperCase();
-        if (dataType.includes("INT") || dataType.includes("SERIAL")) {
-          data[col.name] = parseInt(value);
-        } else if (
-          dataType.includes("FLOAT") ||
-          dataType.includes("REAL") ||
-          dataType.includes("DOUBLE") ||
-          dataType.includes("NUMERIC")
-        ) {
-          data[col.name] = parseFloat(value);
-        } else if (dataType.includes("BOOL")) {
-          data[col.name] = value.toLowerCase() === "true" || value === "1";
-        } else {
-          data[col.name] = value;
-        }
+        data[col.name] = parseInputValue(col, value);
       });
 
       // Generate INSERT SQL for tracking
@@ -154,21 +140,6 @@ export function AddRowDialog({
     }));
   };
 
-  const getInputType = (dataType: string): string => {
-    const type = dataType.toUpperCase();
-    if (type.includes("INT") || type.includes("SERIAL")) return "number";
-    if (
-      type.includes("FLOAT") ||
-      type.includes("REAL") ||
-      type.includes("DOUBLE") ||
-      type.includes("NUMERIC")
-    )
-      return "number";
-    if (type.includes("BOOL")) return "checkbox";
-    if (type.includes("DATE") || type.includes("TIME")) return "datetime-local";
-    return "text";
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
@@ -215,26 +186,59 @@ export function AddRowDialog({
                         `Default: ${column.default_value}`}
                     </div>
                   )}
-                  <Input
-                    id={column.name}
-                    type={getInputType(column.data_type)}
-                    value={formData[column.name] || ""}
-                    onChange={(e) =>
-                      handleInputChange(column.name, e.target.value)
-                    }
-                    placeholder={
-                      column.is_primary_key
-                        ? "Auto-generated (leave empty)"
-                        : column.is_nullable
-                        ? "NULL (optional)"
-                        : "Required"
-                    }
-                    disabled={
-                      column.is_primary_key &&
-                      column.data_type.toUpperCase().includes("SERIAL")
-                    }
-                    className="h-9 text-sm"
-                  />
+                  {column.type_family === "boolean" ? (
+                    <div className="flex items-center gap-2 rounded-md border border-input px-3 py-2">
+                      <input
+                        id={column.name}
+                        type="checkbox"
+                        checked={formData[column.name] === "true"}
+                        onChange={(e) =>
+                          handleInputChange(
+                            column.name,
+                            e.target.checked ? "true" : "false",
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {formData[column.name] === "true" ? "true" : "false"}
+                      </span>
+                    </div>
+                  ) : column.type_family === "json" ? (
+                    <textarea
+                      id={column.name}
+                      value={formData[column.name] || ""}
+                      onChange={(e) =>
+                        handleInputChange(column.name, e.target.value)
+                      }
+                      placeholder={
+                        column.is_nullable ? "NULL (optional)" : "Valid JSON"
+                      }
+                      className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                    />
+                  ) : (
+                    <Input
+                      id={column.name}
+                      type={resolveColumnInputType(column)}
+                      value={formData[column.name] || ""}
+                      onChange={(e) =>
+                        handleInputChange(column.name, e.target.value)
+                      }
+                      placeholder={
+                        column.is_primary_key
+                          ? "Auto-generated (leave empty)"
+                          : column.is_nullable
+                          ? "NULL (optional)"
+                          : "Required"
+                      }
+                      disabled={
+                        column.is_primary_key &&
+                        (column.data_type.toUpperCase().includes("SERIAL") ||
+                          column.default_value?.toLowerCase().includes("identity"))
+                      }
+                      className="h-9 text-sm"
+                    />
+                  )}
                 </div>
               ))}
             </div>
