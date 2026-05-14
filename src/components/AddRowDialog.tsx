@@ -40,6 +40,7 @@ export function AddRowDialog({
 }: AddRowDialogProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const tableRef = table.full_name ?? table.name;
 
   useEffect(() => {
     // Initialize form with empty values or defaults
@@ -64,6 +65,11 @@ export function AddRowDialog({
 
       columns.forEach((col) => {
         const value = formData[col.name];
+
+        // Skip generated columns and identity-always columns
+        if ((col.generated_kind ?? "") !== "" || col.identity_kind === "a") {
+          return;
+        }
 
         // Skip primary key if it's auto-increment
         if (col.is_primary_key && !value) {
@@ -96,11 +102,11 @@ export function AddRowDialog({
           return v;
         })
         .join(", ");
-      const insertSql = `INSERT INTO ${table.name} (${columns_list}) VALUES (${values_list})`;
+      const insertSql = `INSERT INTO ${tableRef} (${columns_list}) VALUES (${values_list})`;
 
       const result = await invoke<string>("insert_row", {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: tableRef,
         data,
         dbType: connection.db_type,
       });
@@ -111,7 +117,7 @@ export function AddRowDialog({
           id: `insert-${Date.now()}`,
           type: "insert",
           timestamp: new Date(),
-          tableName: table.name,
+          tableName: tableRef,
           connectionId: connection.id,
           dbType: connection.db_type,
           data: {
@@ -165,7 +171,10 @@ export function AddRowDialog({
                       className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
                     >
                       {column.name}
-                      {!column.is_nullable && !column.is_primary_key && (
+                      {!column.is_nullable &&
+                        !column.is_primary_key &&
+                        (column.generated_kind ?? "") === "" &&
+                        column.identity_kind !== "a" && (
                         <span className="ml-1 text-destructive">*</span>
                       )}
                     </label>
@@ -177,6 +186,21 @@ export function AddRowDialog({
                     <span className="px-1.5 py-0.5 text-[10px] rounded bg-secondary border border-border font-mono">
                       {column.data_type}
                     </span>
+                    {column.identity_kind === "a" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-600 font-mono">
+                        IDENTITY ALWAYS
+                      </span>
+                    )}
+                    {column.identity_kind === "d" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-600 font-mono">
+                        IDENTITY BY DEFAULT
+                      </span>
+                    )}
+                    {(column.generated_kind ?? "") !== "" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-600 font-mono">
+                        GENERATED
+                      </span>
+                    )}
                   </div>
                   {(column.is_nullable || column.default_value) && (
                     <div className="text-[10px] text-muted-foreground -mt-1">
@@ -232,9 +256,11 @@ export function AddRowDialog({
                           : "Required"
                       }
                       disabled={
-                        column.is_primary_key &&
-                        (column.data_type.toUpperCase().includes("SERIAL") ||
-                          column.default_value?.toLowerCase().includes("identity"))
+                        (column.generated_kind ?? "") !== "" ||
+                        column.identity_kind === "a" ||
+                        (column.is_primary_key &&
+                          (column.data_type.toUpperCase().includes("SERIAL") ||
+                            column.default_value?.toLowerCase().includes("identity")))
                       }
                       className="h-9 text-sm"
                     />
