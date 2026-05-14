@@ -148,6 +148,9 @@ export function EditCellDialog({
                   <SelectItem value="empty">Set Empty String</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Mode controls SQL semantics: value, NULL, DEFAULT, or empty string.
+              </p>
               {valueMode === 'value' && (isReadOnlyGenerated ? (
                 <Input
                   id="cell-value"
