@@ -54,6 +54,9 @@ pub fn classify_postgres_type(
     if type_kind == "e" {
         return ColumnTypeFamily::Enum;
     }
+    if type_kind == "d" {
+        return ColumnTypeFamily::Domain;
+    }
 
     match r.as_str() {
         "bool" => ColumnTypeFamily::Boolean,
@@ -70,6 +73,12 @@ pub fn classify_postgres_type(
         "uuid" => ColumnTypeFamily::Uuid,
         "bytea" => ColumnTypeFamily::Binary,
         "inet" | "cidr" | "macaddr" | "macaddr8" => ColumnTypeFamily::Network,
+        "int4range" | "int8range" | "numrange" | "daterange" | "tsrange" | "tstzrange"
+        | "int4multirange" | "int8multirange" | "nummultirange" | "datemultirange"
+        | "tsmultirange" | "tstzmultirange" => ColumnTypeFamily::Range,
+        "tsvector" | "tsquery" => ColumnTypeFamily::FullText,
+        "hstore" | "ltree" | "vector" | "geometry" | "geography" => ColumnTypeFamily::Extension,
+        "citext" => ColumnTypeFamily::Text,
         _ => ColumnTypeFamily::Unknown,
     }
 }
