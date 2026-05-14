@@ -360,12 +360,13 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
         
         <div className="flex items-center gap-2">
           {connection.db_type === 'postgresql' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPgMeta((prev) => !prev)}
-              className="h-8"
-            >
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPgMeta((prev) => !prev)}
+                className="h-8"
+                title="Show PostgreSQL constraints, indexes, and effective privileges for this table"
+              >
               <ListTree className="h-3.5 w-3.5 mr-1.5" />
               PG Metadata
             </Button>
@@ -417,7 +418,7 @@ export function TableDataViewer({ connection, table }: TableDataViewerProps) {
           <div>
             {pgPrivileges && (
               <div className="text-[11px] text-muted-foreground mb-1 font-mono">
-                privileges: select={String(pgPrivileges.can_select)} insert={String(pgPrivileges.can_insert)} update={String(pgPrivileges.can_update)} delete={String(pgPrivileges.can_delete)}
+                privileges: select={String(pgPrivileges.can_select)}, insert={String(pgPrivileges.can_insert)}, update={String(pgPrivileges.can_update)}, delete={String(pgPrivileges.can_delete)}
               </div>
             )}
             <div className="text-xs font-semibold mb-1">Constraints ({constraints.length})</div>
