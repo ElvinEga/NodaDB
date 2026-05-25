@@ -20,16 +20,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
-            rust-target: aarch64-apple-darwin
+          - platform: macos-14
+            args: ""
+            rust-target: ""
             artifact-name: nodadb-macos-aarch64
-            bundle-dir: src-tauri/target/aarch64-apple-darwin/release/bundle
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-            rust-target: x86_64-apple-darwin
+            bundle-dir: src-tauri/target/release/bundle
+          - platform: macos-13
+            args: ""
+            rust-target: ""
             artifact-name: nodadb-macos-x86_64
-            bundle-dir: src-tauri/target/x86_64-apple-darwin/release/bundle
+            bundle-dir: src-tauri/target/release/bundle
           - platform: ubuntu-22.04
             args: ""
             rust-target: ""
@@ -84,10 +84,10 @@ jobs:
         run: bun tauri build ${{ matrix.args }}
 
       - name: Package macOS .app
-        if: matrix.platform == 'macos-latest' && !startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(matrix.platform, 'macos-') && !startsWith(github.ref, 'refs/tags/v')
         run: |
           cd ${{ matrix.bundle-dir }}/macos
-          tar -czf NodaDB-${{ matrix.rust-target }}.app.tar.gz NodaDB.app
+          tar -czf ${{ matrix.artifact-name }}.app.tar.gz NodaDB.app
 
       - name: Upload build artifacts
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
