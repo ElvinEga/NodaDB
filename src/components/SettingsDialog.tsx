@@ -117,19 +117,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           className="flex-1 overflow-hidden flex flex-col"
         >
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="appearance">
+            <TabsTrigger value="appearance" className="!text-sm">
               <Palette className="h-4 w-4 mr-2" />
               Appearance
             </TabsTrigger>
-            <TabsTrigger value="editor">
+            <TabsTrigger value="editor" className="!text-sm">
               <Code className="h-4 w-4 mr-2" />
               Editor
             </TabsTrigger>
-            <TabsTrigger value="query">
+            <TabsTrigger value="query" className="!text-sm">
               <FileText className="h-4 w-4 mr-2" />
               Query
             </TabsTrigger>
-            <TabsTrigger value="table">
+            <TabsTrigger value="table" className="!text-sm">
               <Database className="h-4 w-4 mr-2" />
               Table
             </TabsTrigger>
