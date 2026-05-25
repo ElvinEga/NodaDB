@@ -73,6 +73,7 @@ function App() {
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tabs, setTabs] = useState<TabType[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const connections = useConnectionStore((state) => state.connections);
@@ -380,7 +381,7 @@ function App() {
   }, [fontFamily, fontSize]);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       <div className="relative flex min-h-screen w-full">
         {activeConnectionId && activeConnection ? (
           <>
@@ -401,7 +402,7 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className="pl-24 md:pl-0 pb-1 border-b border-border bg-background  text-foreground flex items-center px-4 gap-4"
+                className={`pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
