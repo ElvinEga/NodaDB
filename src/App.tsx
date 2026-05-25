@@ -392,7 +392,7 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className="pl-24 md:pl-0 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+                className="pl-24 md:pl-0 pb-1 border-b border-border bg-background  text-foreground flex items-center px-4 gap-4"
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
@@ -599,7 +599,11 @@ function App() {
           </>
         ) : connections.length > 0 ? (
           /* Connection List when no active connection */
-          <div className="flex-1 flex flex-col p-6">
+          <div className="flex-1 flex flex-col">
+            <header
+              data-tauri-drag-region
+              className="pl-24 md:pl-0 h-10 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+            ></header>
             {/* Back button when switching connections */}
             {activeConnectionId && (
               <div className="flex items-center mb-6">
