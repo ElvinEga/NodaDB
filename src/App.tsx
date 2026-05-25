@@ -390,7 +390,10 @@ function App() {
                 </header>
               )}
               {/* Top Navigation Bar */}
-              <header className="h-14 border-b border-border bg-background text-foreground flex items-center px-4 gap-4">
+              <header
+                data-tauri-drag-region
+                className="pl-24 md:pl-0 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+              >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
                   <div className="flex items-center gap-2">
@@ -400,10 +403,10 @@ function App() {
 
                 {/* Connection Selector */}
                 {activeConnection && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-sm">
-                    <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                    <span className="font-medium">{activeConnection.name}</span>
-                    <span className="text-muted-foreground">
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary text-sm">
+                    <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
+                    <span className="text-sm">{activeConnection.name}</span>
+                    <span className="text-muted-foreground text-xs">
                       ({activeConnection.db_type})
                     </span>
                   </div>

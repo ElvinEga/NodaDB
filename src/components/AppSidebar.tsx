@@ -27,18 +27,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="sm" tooltip="New Query">
-              {/* Logo & App Name */}
-              <div className="flex items-center gap-4">
-                {/* <Database className="h-5 w-5 text-primary" /> */}
-                <img src="/logo.png" alt="NodaDB Logo" className="h-5 w-5" />
-                <h1 className="text-lg font-bold text-primary">NodaDB</h1>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-4"></div>
       </SidebarHeader>
 
       <SidebarContent>
