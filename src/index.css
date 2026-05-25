@@ -203,6 +203,10 @@
         @apply transition-colors duration-150;
     }
 
+    [data-tauri-drag-region] {
+        app-region: drag;
+    }
+
     /* React Flow Controls Dark Mode */
     .react-flow__controls {
         background-color: hsl(var(--background)) !important;
