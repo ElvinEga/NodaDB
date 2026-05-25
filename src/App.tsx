@@ -82,6 +82,15 @@ function App() {
   const setActiveConnection = useConnectionStore(
     (state) => state.setActiveConnection,
   );
+  const previousConnectionId = useConnectionStore(
+    (state) => state.previousConnectionId,
+  );
+  const openConnectionSwitcher = useConnectionStore(
+    (state) => state.openConnectionSwitcher,
+  );
+  const restorePreviousConnection = useConnectionStore(
+    (state) => state.restorePreviousConnection,
+  );
   const getActiveConnection = useConnectionStore(
     (state) => state.getActiveConnection,
   );
@@ -349,13 +358,13 @@ function App() {
       // Ctrl+Shift+C for Switch Connection
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "C") {
         e.preventDefault();
-        setActiveConnection(null);
+        openConnectionSwitcher();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSchemaDesignerTab, setActiveConnection]);
+  }, [openConnectionSwitcher, openSchemaDesignerTab]);
 
   // Apply font family and font size to root element
   useEffect(() => {
@@ -417,10 +426,7 @@ function App() {
                       description="Switch Connection"
                       keys={["Ctrl", "Shift", "C"]}
                     >
-                      <Button
-                        variant="ghost"
-                        onClick={() => setActiveConnection(null)}
-                      >
+                      <Button variant="ghost" onClick={openConnectionSwitcher}>
                         <DatabaseZap className="h-4 w-4" />
                         Switch
                       </Button>
@@ -602,20 +608,20 @@ function App() {
           <div className="flex-1 flex flex-col">
             <header
               data-tauri-drag-region
-              className="pl-24 md:pl-0 h-10 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+              className="pl-24 md:pl-0 h-9 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
             ></header>
             {/* Back button when switching connections */}
-            {activeConnectionId && (
-              <div className="flex items-center mb-6">
+            {previousConnectionId && (
+              <div className="flex items-center p-6 mb-6">
                 <Button
-                  variant="ghost"
-                  onClick={() => setActiveConnection(activeConnectionId)}
+                  variant="outline"
+                  onClick={restorePreviousConnection}
                   className="gap-2"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to{" "}
-                  {connections.find((c) => c.id === activeConnectionId)?.name ||
-                    "Connection"}
+                  {connections.find((c) => c.id === previousConnectionId)
+                    ?.name || "Connection"}
                 </Button>
               </div>
             )}
