@@ -25,7 +25,7 @@ export function AppSidebar({
   onNewQuery,
 }: AppSidebarProps) {
   return (
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader>
         <div className="flex items-center gap-4"></div>
       </SidebarHeader>
