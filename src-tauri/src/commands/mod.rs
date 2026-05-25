@@ -1,12 +1,14 @@
 use crate::database::ConnectionManager;
-use crate::models::{ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
-use tauri::State;
+use crate::models::{
+    ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan,
+    PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn,
+    TableConstraint, TableIndex,
+};
 use chrono::Utc;
+use tauri::State;
 
 #[tauri::command]
-pub async fn test_connection(
-    config: ConnectionConfig,
-) -> Result<ConnectionTestResult, String> {
+pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult, String> {
     ConnectionManager::test_connection(config)
         .await
         .map_err(|e| format!("Connection test failed: {}", e))
@@ -21,7 +23,7 @@ pub async fn connect_database(
         .connect(config.clone())
         .await
         .map_err(|e| format!("Failed to connect: {}", e))?;
-    
+
     Ok(format!("Successfully connected to {}", config.name))
 }
 
@@ -34,7 +36,7 @@ pub async fn disconnect_database(
         .disconnect(&connection_id)
         .await
         .map_err(|e| format!("Failed to disconnect: {}", e))?;
-    
+
     Ok("Successfully disconnected".to_string())
 }
 
@@ -182,7 +184,14 @@ pub async fn alter_table_add_column(
     manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
     manager
-        .alter_table_add_column(&connection_id, &table_name, &column_name, &data_type, nullable, &db_type)
+        .alter_table_add_column(
+            &connection_id,
+            &table_name,
+            &column_name,
+            &data_type,
+            nullable,
+            &db_type,
+        )
         .await
         .map_err(|e| format!("Failed to add column: {}", e))
 }
@@ -320,27 +329,27 @@ pub async fn get_postgres_table_privileges(
 #[tauri::command]
 pub async fn create_new_window(app: tauri::AppHandle) -> Result<(), String> {
     let label = format!("nodadb-window-{}", Utc::now().timestamp_millis());
-    
-    let webview_window = tauri::WebviewWindowBuilder::new(
-        &app,
-        label,
-        tauri::WebviewUrl::App("index.html".into())
-    )
-    .title("NodaDB")
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .center()
-    .resizable(true)
-    .fullscreen(false)
-    .decorations(true)
-    .always_on_top(false)
-    .visible(true)
-    .build()
-    .map_err(|e| format!("Failed to create new window: {}", e))?;
-    
-    webview_window.show().map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
-    
+
+    let webview_window =
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("index.html".into()))
+            .title("NodaDB")
+            .inner_size(1200.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .center()
+            .resizable(true)
+            .fullscreen(false)
+            .always_on_top(false)
+            .visible(true)
+            .build()
+            .map_err(|e| format!("Failed to create new window: {}", e))?;
+
+    webview_window
+        .show()
+        .map_err(|e| format!("Failed to show window: {}", e))?;
+    webview_window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus window: {}", e))?;
+
     Ok(())
 }
 
@@ -349,7 +358,7 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     let webview_window = tauri::WebviewWindowBuilder::new(
         &app,
         label.clone(),
-        tauri::WebviewUrl::App("index.html".into())
+        tauri::WebviewUrl::App("index.html".into()),
     )
     .title("NodaDB")
     .inner_size(1200.0, 800.0)
@@ -357,14 +366,17 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     .center()
     .resizable(true)
     .fullscreen(false)
-    .decorations(true)
     .always_on_top(false)
     .visible(true)
     .build()
     .map_err(|e| format!("Failed to create window {}: {}", label, e))?;
-    
-    webview_window.show().map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
-    
+
+    webview_window
+        .show()
+        .map_err(|e| format!("Failed to show window: {}", e))?;
+    webview_window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus window: {}", e))?;
+
     Ok(())
 }
