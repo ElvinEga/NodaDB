@@ -30,7 +30,9 @@
         {
           "identifier": "main-capability",
           "description": "Main window capabilities",
-          "windows": ["main"],
+          "windows": [
+            "main"
+          ],
           "permissions": [
             "core:default",
             "core:window:allow-set-background-color",
@@ -65,12 +67,18 @@
     ],
     "windows": {
       "nsis": {
-        "installerIcon": "icons/icon.ico"
-      }
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      },
+      "allowDowngrades": true
     },
     "resources": [],
     "category": "Productivity",
     "shortDescription": "A modern database management desktop application",
-    "longDescription": "A modern, cross-platform database management tool."
+    "longDescription": "A modern, cross-platform database management tool.",
+    "publisher": "Elvin Ega",
+    "homepage": "https://github.com/ElvinEga/NodaDB",
+    "copyright": "Copyright \u00a9 2026 Elvin Ega"
   }
 }
