@@ -380,3 +380,11 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn save_export_file(path: String, bytes: Vec<u8>) -> Result<String, String> {
+    std::fs::write(&path, bytes)
+        .map_err(|e| format!("Failed to save export file: {}", e))?;
+
+    Ok(format!("Successfully saved file to {}", path))
+}
