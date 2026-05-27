@@ -25,11 +25,6 @@ jobs:
             rust-target: ""
             artifact-name: nodadb-macos-aarch64
             bundle-dir: src-tauri/target/release/bundle
-          - platform: macos-13
-            args: ""
-            rust-target: ""
-            artifact-name: nodadb-macos-x86_64
-            bundle-dir: src-tauri/target/release/bundle
           - platform: ubuntu-22.04
             args: ""
             rust-target: ""
