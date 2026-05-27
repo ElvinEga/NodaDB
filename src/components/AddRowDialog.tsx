@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConnectionConfig, TableColumn, DatabaseTable } from "@/types";
-import { parseInputValue, resolveColumnInputType } from "@/lib/db-types";
+import { coerceValueForDatabase, parseInputValue, resolveColumnInputType } from "@/lib/db-types";
 import { toast } from "sonner";
 import { TableAction } from "@/stores/undoRedoStore";
 
@@ -46,7 +46,9 @@ export function AddRowDialog({
   onAddAction,
 }: AddRowDialogProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
-  const [valueMode, setValueMode] = useState<Record<string, "value" | "null" | "default" | "empty">>({});
+  const [valueMode, setValueMode] = useState<
+    Record<string, "value" | "null" | "default" | "empty">
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const tableRef = table.full_name ?? table.name;
 
@@ -61,7 +63,8 @@ export function AddRowDialog({
       }
     });
     setFormData(initialData);
-    const initialModes: Record<string, "value" | "null" | "default" | "empty"> = {};
+    const initialModes: Record<string, "value" | "null" | "default" | "empty"> =
+      {};
     columns.forEach((col) => {
       initialModes[col.name] = col.default_value ? "default" : "value";
     });
@@ -116,7 +119,11 @@ export function AddRowDialog({
           return;
         }
 
-        data[col.name] = parseInputValue(col, value);
+        data[col.name] = coerceValueForDatabase(
+          col,
+          parseInputValue(col, value),
+          connection.db_type,
+        );
       });
 
       // Generate INSERT SQL for tracking
@@ -201,8 +208,8 @@ export function AddRowDialog({
                         !column.is_primary_key &&
                         (column.generated_kind ?? "") === "" &&
                         column.identity_kind !== "a" && (
-                        <span className="ml-1 text-destructive">*</span>
-                      )}
+                          <span className="ml-1 text-destructive">*</span>
+                        )}
                     </label>
                     {column.is_primary_key && (
                       <span className="px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary font-mono">
@@ -241,7 +248,11 @@ export function AddRowDialog({
                         onValueChange={(val) =>
                           setValueMode((prev) => ({
                             ...prev,
-                            [column.name]: val as "value" | "null" | "default" | "empty",
+                            [column.name]: val as
+                              | "value"
+                              | "null"
+                              | "default"
+                              | "empty",
                           }))
                         }
                       >
@@ -250,17 +261,25 @@ export function AddRowDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="value">Set Value</SelectItem>
-                          {column.is_nullable && <SelectItem value="null">Set NULL</SelectItem>}
-                          {column.default_value && <SelectItem value="default">Use DEFAULT</SelectItem>}
-                          <SelectItem value="empty">Set Empty String</SelectItem>
+                          {column.is_nullable && (
+                            <SelectItem value="null">Set NULL</SelectItem>
+                          )}
+                          {column.default_value && (
+                            <SelectItem value="default">Use DEFAULT</SelectItem>
+                          )}
+                          <SelectItem value="empty">
+                            Set Empty String
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <div className="text-[10px] text-muted-foreground">
-                        Choose how to write this field: value, SQL NULL, SQL DEFAULT, or empty string.
+                        Choose how to write this field: value, SQL NULL, SQL
+                        DEFAULT, or empty string.
                       </div>
                     </div>
                   )}
-                  {(valueMode[column.name] ?? "value") !== "value" ? null : column.type_family === "boolean" ? (
+                  {(valueMode[column.name] ?? "value") !==
+                  "value" ? null : column.type_family === "boolean" ? (
                     <div className="flex items-center gap-2 rounded-md border border-input px-3 py-2">
                       <input
                         id={column.name}
@@ -302,15 +321,17 @@ export function AddRowDialog({
                         column.is_primary_key
                           ? "Auto-generated (leave empty)"
                           : column.is_nullable
-                          ? "NULL (optional)"
-                          : "Required"
+                            ? "NULL (optional)"
+                            : "Required"
                       }
                       disabled={
                         (column.generated_kind ?? "") !== "" ||
                         column.identity_kind === "a" ||
                         (column.is_primary_key &&
                           (column.data_type.toUpperCase().includes("SERIAL") ||
-                            column.default_value?.toLowerCase().includes("identity")))
+                            column.default_value
+                              ?.toLowerCase()
+                              .includes("identity")))
                       }
                       className="h-9 text-sm"
                     />
@@ -337,7 +358,7 @@ export function AddRowDialog({
                 </>
               ) : (
                 <>
-                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  <Plus className="h-3.5 w-3.5" />
                   Insert Row
                 </>
               )}
