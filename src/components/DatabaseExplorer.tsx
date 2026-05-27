@@ -391,6 +391,7 @@ export function DatabaseExplorer({
                             handleDropTable={handleDropTable}
                             formatRowCount={formatRowCount}
                             formatSize={formatSize}
+                            showSize={connection.db_type !== "sqlite"}
                           />
                         ))}
                       </div>
@@ -440,6 +441,7 @@ export function DatabaseExplorer({
                           handleDropTable={handleDropTable}
                           formatRowCount={formatRowCount}
                           formatSize={formatSize}
+                          showSize={connection.db_type !== "sqlite"}
                         />
                       ))}
                   </div>
