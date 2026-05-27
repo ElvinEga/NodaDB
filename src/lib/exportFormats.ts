@@ -124,12 +124,12 @@ export function exportToSQL(
 }
 
 /**
- * Export data to Excel format (returns blob)
+ * Export data to Excel format (returns binary bytes)
  */
 export function exportToExcel(
   data: QueryResult,
   options: ExportOptions = {}
-): Blob {
+): Uint8Array {
   const { tableName = 'Sheet1' } = options;
   // Note: options parameter available for future enhancements
 
@@ -159,9 +159,7 @@ export function exportToExcel(
 
   // Generate Excel file
   const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new Blob([excelBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  return new Uint8Array(excelBuffer);
 }
 
 /**
@@ -279,6 +277,17 @@ export function exportToHTML(
   lines.push('</html>');
 
   return lines.join('\n');
+}
+
+
+export function serializeExportContent(
+  content: string | Uint8Array,
+): number[] {
+  if (typeof content === "string") {
+    return Array.from(new TextEncoder().encode(content));
+  }
+
+  return Array.from(content);
 }
 
 /**
