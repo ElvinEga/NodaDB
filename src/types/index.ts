@@ -57,6 +57,11 @@ export interface DatabaseTable {
   table_type?: string; // "TABLE" or "VIEW"
 }
 
+export interface SQLiteBooleanSuggestion {
+  columnName: string;
+  sampleSize: number;
+}
+
 export interface TableColumn {
   name: string;
   data_type: string;
