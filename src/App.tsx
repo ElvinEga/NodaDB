@@ -382,7 +382,7 @@ function App() {
 
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <div className="relative flex min-h-screen w-full">
+      <div className="relative flex min-h-screen w-full overflow-hidden">
         {activeConnectionId && activeConnection ? (
           <>
             <AppSidebar
