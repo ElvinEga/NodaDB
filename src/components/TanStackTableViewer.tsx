@@ -83,23 +83,36 @@ import {
 } from "@/components/ui/empty";
 import { useUndoRedoStore } from "@/stores/undoRedoStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useColumnDisplayStore } from "@/stores/columnDisplayStore";
 
 import {
   ConnectionConfig,
   DatabaseTable,
   TableColumn,
   QueryResult,
+  SQLiteBooleanSuggestion,
 } from "@/types";
 import { toast } from "sonner";
 import { getCellRenderer } from "@/lib/cellRenderers";
-import { parseInputValue } from "@/lib/db-types";
+import {
+  coerceValueForDatabase,
+  getTypeBadgeColor,
+  getTypeFamilyLabel,
+  parseInputValue,
+  withEffectiveTypeFamily,
+} from "@/lib/db-types";
 import {
   generateSetNullSql,
   generateDeleteSql,
   generateDuplicateSql,
   calculateColumnStats,
 } from "@/lib/tableOperations";
-import { buildSelectQuery, buildCountQuery } from "@/lib/sqlUtils";
+import {
+  buildSelectQuery,
+  buildCountQuery,
+  qualifyTableName,
+  quoteIdentifier,
+} from "@/lib/sqlUtils";
 import { KeyboardTooltip } from "./ui/keyboard-tooltip";
 
 interface TanStackTableViewerProps {
@@ -115,6 +128,8 @@ export function TanStackTableViewer({
   columns: tableColumns,
 }: TanStackTableViewerProps) {
   const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
+  const overrides = useColumnDisplayStore((state) => state.overrides);
+  const setColumnOverride = useColumnDisplayStore((state) => state.setOverride);
 
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -130,6 +145,12 @@ export function TanStackTableViewer({
   });
   const [executionTime, setExecutionTime] = useState(0);
   const [rowCount, setRowCount] = useState(0);
+  const [booleanSuggestions, setBooleanSuggestions] = useState<
+    Record<string, SQLiteBooleanSuggestion>
+  >({});
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<
+    Record<string, true>
+  >({});
 
   // Update page size when settings change
   useEffect(() => {
@@ -166,11 +187,112 @@ export function TanStackTableViewer({
   const canUndo = useUndoRedoStore((state) => state.canUndo(tableKey));
   const canRedo = useUndoRedoStore((state) => state.canRedo(tableKey));
 
+  const tableRef = table.full_name ?? table.name;
+  const effectiveTableColumns = useMemo(
+    () =>
+      tableColumns.map((column) =>
+        withEffectiveTypeFamily(
+          column,
+          overrides[`${connection.id}::${tableRef}::${column.name}`],
+        ),
+      ),
+    [connection.id, overrides, tableColumns, tableRef],
+  );
+
   // Helper: Get primary key column
-  const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
+  const primaryKeyColumn = effectiveTableColumns.find(
+    (col) => col.is_primary_key,
+  );
   const getPrimaryKeyValue = (row: Record<string, any>) => {
     return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
   };
+
+  useEffect(() => {
+    if (connection.db_type !== "sqlite") {
+      setBooleanSuggestions({});
+      return;
+    }
+
+    const candidateColumns = tableColumns.filter((column) => {
+      const hasOverride =
+        overrides[`${connection.id}::${tableRef}::${column.name}`] !==
+        undefined;
+      return column.type_family === "integer" && !hasOverride;
+    });
+
+    if (candidateColumns.length === 0) {
+      setBooleanSuggestions({});
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadSuggestions = async () => {
+      try {
+        const qualifiedTable = qualifyTableName(
+          tableRef,
+          table.schema,
+          connection.db_type,
+        );
+        const results = await Promise.all(
+          candidateColumns.map(async (column) => {
+            const columnRef = quoteIdentifier(column.name, connection.db_type);
+            const query = `SELECT ${columnRef} FROM ${qualifiedTable} WHERE ${columnRef} IS NOT NULL LIMIT 200`;
+            const result = await invoke<QueryResult>("execute_query", {
+              connectionId: connection.id,
+              query,
+            });
+            const values = result.rows.map((row) => row[column.name]);
+            const hasRows = values.length > 0;
+            const isCandidate =
+              hasRows &&
+              values.every(
+                (value) =>
+                  value === 0 ||
+                  value === 1 ||
+                  value === "0" ||
+                  value === "1" ||
+                  value === null ||
+                  value === undefined,
+              );
+
+            return isCandidate
+              ? [
+                  column.name,
+                  { columnName: column.name, sampleSize: values.length },
+                ]
+              : null;
+          }),
+        );
+
+        if (isCancelled) return;
+
+        setBooleanSuggestions(
+          Object.fromEntries(
+            results.filter(
+              (entry): entry is [string, SQLiteBooleanSuggestion] =>
+                entry !== null,
+            ),
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to detect SQLite boolean suggestions:", error);
+      }
+    };
+
+    loadSuggestions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    connection.db_type,
+    connection.id,
+    overrides,
+    table.schema,
+    tableColumns,
+    tableRef,
+  ]);
 
   // Load table data with server-side operations
   const loadData = async (pageIndex?: number, pageSizeValue?: number) => {
@@ -186,7 +308,7 @@ export function TanStackTableViewer({
       // Build dynamic query with sorting, filtering, and pagination
       // Fetch one extra row to detect if there are more pages
       const query = buildSelectQuery({
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         schema: table.schema,
         dbType: connection.db_type,
         limit: currentPageSize + 1,
@@ -194,7 +316,7 @@ export function TanStackTableViewer({
         sorting: sorting,
         filters: columnFilters,
         globalFilter: globalFilter,
-        columns: tableColumns.map((col) => col.name),
+        columns: effectiveTableColumns.map((col) => col.name),
       });
 
       console.log("SQL Query:", query);
@@ -290,7 +412,7 @@ export function TanStackTableViewer({
   // Context menu handlers
   const handleSetCellNull = async (
     row: Record<string, any>,
-    columnName: string
+    columnName: string,
   ) => {
     if (!primaryKeyColumn) {
       toast.error("Cannot update: No primary key defined");
@@ -304,7 +426,7 @@ export function TanStackTableViewer({
       primaryKeyColumn.name,
       pkValue,
       table.schema,
-      connection.db_type
+      connection.db_type,
     );
 
     try {
@@ -332,7 +454,7 @@ export function TanStackTableViewer({
       columnNames,
       primaryKeyColumn.name,
       table.schema,
-      connection.db_type
+      connection.db_type,
     );
 
     try {
@@ -350,7 +472,7 @@ export function TanStackTableViewer({
         id: `duplicate-${Date.now()}`,
         type: "insert",
         timestamp: new Date(),
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -379,7 +501,7 @@ export function TanStackTableViewer({
       primaryKeyColumn.name,
       pkValue,
       table.schema,
-      connection.db_type
+      connection.db_type,
     );
 
     if (!confirm(`Delete this row?\n\n${deleteSql}`)) {
@@ -396,7 +518,7 @@ export function TanStackTableViewer({
         return value;
       });
       const insertSql = `INSERT INTO ${table.name} (${columns.join(
-        ", "
+        ", ",
       )}) VALUES (${values.join(", ")})`;
 
       await invoke("execute_query", {
@@ -409,7 +531,7 @@ export function TanStackTableViewer({
         id: `delete-${Date.now()}`,
         type: "delete",
         timestamp: new Date(),
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -449,30 +571,6 @@ Sum: ${stats.sum}`
     }`;
 
     toast.info(message, { duration: 5000 });
-  };
-
-  // Get SQL type badge color
-  const getTypeBadgeColor = (dataType: string): string => {
-    const type = dataType.toUpperCase();
-    if (type.includes("INT") || type.includes("SERIAL"))
-      return "text-blue-400 bg-blue-500/10";
-    if (
-      type.includes("VARCHAR") ||
-      type.includes("TEXT") ||
-      type.includes("CHAR")
-    )
-      return "text-green-400 bg-green-500/10";
-    if (type.includes("DATE") || type.includes("TIME"))
-      return "text-yellow-400 bg-yellow-500/10";
-    if (type.includes("BOOL")) return "text-purple-400 bg-purple-500/10";
-    if (
-      type.includes("FLOAT") ||
-      type.includes("REAL") ||
-      type.includes("DOUBLE") ||
-      type.includes("NUMERIC")
-    )
-      return "text-orange-400 bg-orange-500/10";
-    return "text-gray-400 bg-gray-500/10";
   };
 
   // Define columns for TanStack Table
@@ -519,7 +617,7 @@ Sum: ${stats.sum}`
     ];
 
     // Add data columns
-    tableColumns.forEach((col) => {
+    effectiveTableColumns.forEach((col) => {
       cols.push({
         accessorKey: col.name,
         id: col.name,
@@ -557,14 +655,58 @@ Sum: ${stats.sum}`
                     )}
                   </div>
                 </button>
-                <div className="flex items-center gap-1 text-[10px]">
+                <div className="flex items-center gap-1 text-[10px] flex-wrap">
                   <span
                     className={`px-1 py-0.5 rounded font-mono ${getTypeBadgeColor(
-                      col.data_type
+                      col.type_family,
                     )}`}
                   >
-                    {col.data_type}
+                    {getTypeFamilyLabel(col.type_family)}
                   </span>
+                  {booleanSuggestions[col.name] &&
+                    !dismissedSuggestions[col.name] && (
+                      <>
+                        <button
+                          type="button"
+                          className="rounded bg-emerald-500/10 px-1 py-0.5 font-mono text-emerald-500 hover:bg-emerald-500/20"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setColumnOverride({
+                              connectionId: connection.id,
+                              tableName: tableRef,
+                              columnName: col.name,
+                              typeFamily: "boolean",
+                              source: "suggested",
+                            });
+                            setDismissedSuggestions((prev) => ({
+                              ...prev,
+                              [col.name]: true,
+                            }));
+                          }}
+                        >
+                          Treat as boolean?
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded bg-secondary px-1 py-0.5 font-mono text-muted-foreground hover:bg-muted"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDismissedSuggestions((prev) => ({
+                              ...prev,
+                              [col.name]: true,
+                            }));
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </>
+                    )}
+                  {col.type_family === "boolean" &&
+                    col.data_type.toUpperCase().includes("INT") && (
+                      <span className="px-1 py-0.5 rounded font-mono bg-amber-500/10 text-amber-600">
+                        OVERRIDE
+                      </span>
+                    )}
                   {col.is_primary_key && (
                     <span className="px-1 py-0.5 rounded font-mono bg-primary/10 text-primary">
                       PK
@@ -707,7 +849,11 @@ Sum: ${stats.sum}`
             ? "__NODADB_EMPTY_STRING__"
             : newValue === ""
               ? null
-              : parseInputValue(editingCell.column, newValue);
+              : coerceValueForDatabase(
+                  editingCell.column,
+                  parseInputValue(editingCell.column, newValue),
+                  connection.db_type,
+                );
 
       // Build update data object with only the changed column
       const updateData: Record<string, any> = {
@@ -729,15 +875,15 @@ Sum: ${stats.sum}`
       };
 
       const updateSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
-        parsedValue
+        parsedValue,
       )} WHERE ${whereClause}`;
       const undoSql = `UPDATE ${table.name} SET ${columnName} = ${formatValue(
-        oldValue
+        oldValue,
       )} WHERE ${whereClause}`;
 
       await invoke("update_row", {
         connectionId: connection.id,
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         data: updateData,
         whereClause: whereClause,
         dbType: connection.db_type,
@@ -748,7 +894,7 @@ Sum: ${stats.sum}`
         id: `update-${Date.now()}`,
         type: "update",
         timestamp: new Date(),
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -798,7 +944,7 @@ Sum: ${stats.sum}`
       });
 
       const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(
-        ", "
+        ", ",
       )})`;
       const deleteSql = `DELETE FROM ${table.name} WHERE ${whereClause}`;
 
@@ -813,14 +959,14 @@ Sum: ${stats.sum}`
           return value;
         });
         return `INSERT INTO ${table.name} (${columns.join(
-          ", "
+          ", ",
         )}) VALUES (${values.join(", ")})`;
       });
       const undoSql = insertStatements.join("; ");
 
       await invoke("delete_rows", {
         connectionId: connection.id,
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         whereClause: whereClause,
         dbType: connection.db_type,
       });
@@ -830,14 +976,14 @@ Sum: ${stats.sum}`
         id: `batch-delete-${Date.now()}`,
         type: "batch_delete",
         timestamp: new Date(),
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
           rows: selectedRows.map((r) => r.original),
           primaryKeyColumn: primaryKeyColumn.name,
           primaryKeyValues: primaryKeyValues.map((v) =>
-            typeof v === "string" ? v.replace(/'/g, "") : v
+            typeof v === "string" ? v.replace(/'/g, "") : v,
           ),
         },
         undoSql,
@@ -877,7 +1023,7 @@ Sum: ${stats.sum}`
     }));
 
     const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(
-      ", "
+      ", ",
     )})`;
     const setValue = value === "NULL" ? "NULL" : `'${value}'`;
 
@@ -891,8 +1037,8 @@ Sum: ${stats.sum}`
         oldValue === null
           ? "NULL"
           : typeof oldValue === "string"
-          ? `'${oldValue.replace(/'/g, "''")}'`
-          : oldValue;
+            ? `'${oldValue.replace(/'/g, "''")}'`
+            : oldValue;
       const formattedPkValue =
         typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
       return `UPDATE ${table.name} SET ${columnName} = ${formattedOldValue} WHERE ${primaryKeyColumn.name} = ${formattedPkValue}`;
@@ -911,7 +1057,7 @@ Sum: ${stats.sum}`
         id: `batch-update-${Date.now()}`,
         type: "batch_update",
         timestamp: new Date(),
-        tableName: table.full_name ?? table.name,
+        tableName: tableRef,
         connectionId: connection.id,
         dbType: connection.db_type,
         data: {
@@ -920,7 +1066,7 @@ Sum: ${stats.sum}`
           value,
           primaryKeyColumn: primaryKeyColumn.name,
           primaryKeyValues: primaryKeyValues.map((v) =>
-            typeof v === "string" ? v.replace(/'/g, "") : v
+            typeof v === "string" ? v.replace(/'/g, "") : v,
           ),
         },
         undoSql,
@@ -948,7 +1094,7 @@ Sum: ${stats.sum}`
 
         await invoke("insert_row", {
           connectionId: connection.id,
-          tableName: table.full_name ?? table.name,
+          tableName: tableRef,
           row: newRow,
           dbType: connection.db_type,
         });
@@ -1118,7 +1264,7 @@ Sum: ${stats.sum}`
               onClick={() => setAddRowDialogOpen(true)}
               className="h-8"
             >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              <Plus className="h-3.5 w-3.5" />
               Insert
             </Button>
             {selectedCount === 1 && (
@@ -1128,7 +1274,7 @@ Sum: ${stats.sum}`
                 onClick={handleDeleteRows}
                 className="h-8"
               >
-                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete
               </Button>
             )}
@@ -1153,7 +1299,7 @@ Sum: ${stats.sum}`
                   onClick={() => setBatchOperationsDialogOpen(true)}
                   className="h-8"
                 >
-                  <Workflow className="h-3.5 w-3.5 mr-1.5" />
+                  <Workflow className="h-3.5 w-3.5" />
                   Batch ops{" "}
                   <span className="text-xs text-muted-foreground">
                     {selectedCount}
@@ -1165,9 +1311,9 @@ Sum: ${stats.sum}`
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8">
-                  <Columns3 className="h-3.5 w-3.5 mr-1.5" />
+                  <Columns3 className="h-3.5 w-3.5 mr-1" />
                   Columns
-                  <ChevronDown className="h-3.5 w-3.5 ml-1.5" />
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -1246,7 +1392,7 @@ Sum: ${stats.sum}`
                                   ? null
                                   : flexRender(
                                       header.column.columnDef.header,
-                                      header.getContext()
+                                      header.getContext(),
                                     )}
                               </div>
 
@@ -1388,7 +1534,7 @@ Sum: ${stats.sum}`
                               >
                                 {flexRender(
                                   cell.column.columnDef.cell,
-                                  cell.getContext()
+                                  cell.getContext(),
                                 )}
                               </td>
                             ))}
@@ -1407,7 +1553,7 @@ Sum: ${stats.sum}`
               <ContextMenuItem
                 onClick={() => {
                   const tableCol = tableColumns.find(
-                    (c) => c.name === contextMenuCell.columnName
+                    (c) => c.name === contextMenuCell.columnName,
                   );
                   if (tableCol) {
                     setEditingCell({
@@ -1430,7 +1576,7 @@ Sum: ${stats.sum}`
                 onClick={() =>
                   handleSetCellNull(
                     contextMenuCell.row,
-                    contextMenuCell.columnName
+                    contextMenuCell.columnName,
                   )
                 }
               >
@@ -1441,7 +1587,7 @@ Sum: ${stats.sum}`
                 onClick={() =>
                   handleFilterByValue(
                     contextMenuCell.columnName,
-                    contextMenuCell.value
+                    contextMenuCell.value,
                   )
                 }
               >
@@ -1596,7 +1742,7 @@ Sum: ${stats.sum}`
                     <PaginationLink
                       onClick={() =>
                         tableInstance.setPageIndex(
-                          tableInstance.getPageCount() - 1
+                          tableInstance.getPageCount() - 1,
                         )
                       }
                       className="cursor-pointer"
@@ -1630,7 +1776,7 @@ Sum: ${stats.sum}`
           onOpenChange={setAddRowDialogOpen}
           connection={connection}
           table={table}
-          columns={tableColumns}
+          columns={effectiveTableColumns}
           onSuccess={loadData}
           tableKey={tableKey}
           onAddAction={addAction}
@@ -1641,7 +1787,7 @@ Sum: ${stats.sum}`
           onOpenChange={setDataGeneratorDialogOpen}
           connection={connection}
           table={table}
-          columns={tableColumns}
+          columns={effectiveTableColumns}
           onSuccess={loadData}
         />
 
@@ -1656,7 +1802,7 @@ Sum: ${stats.sum}`
           open={batchOperationsDialogOpen}
           onOpenChange={setBatchOperationsDialogOpen}
           selectedRowCount={selectedCount}
-          columns={tableColumns}
+          columns={effectiveTableColumns}
           onBatchDelete={handleBatchDelete}
           onBatchUpdate={handleBatchUpdate}
           onBatchExport={handleBatchExport}
