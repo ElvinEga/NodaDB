@@ -40,6 +40,7 @@ pub fn run() {
             commands::get_postgres_table_privileges,
             commands::create_new_window,
             commands::create_window_from_label,
+            commands::save_export_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
