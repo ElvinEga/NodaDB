@@ -14,8 +14,10 @@ A modern, cross-platform database management tool built with Tauri 2, React, and
 - **Visual Table Explorer** - Browse and navigate database schemas
 - **SQL Query Editor** - Monaco-powered editor with syntax highlighting
 - **CRUD Operations** - Insert, update, and delete rows with inline editing
-- **Schema Designer** - Create and modify tables visually
+- **Schema Designer** - Create and modify tables visually, inspect real relationships, and export schema SQL
 - **Visual Query Builder** - Build queries with a node-based interface
+- **Foreign Key Management** - Create, inspect, and drop foreign key constraints across supported databases
+- **Database Migrations** - Save manual up/down SQL migrations per connection and apply or rollback them in-app
 - **Query History** - Track, search, and favorite your queries
 - **Export Data** - Download results as CSV
 - **Connection Picker** - Switch quickly from the current database pill or browse all saved connections
@@ -160,8 +162,16 @@ The built app bundle should now contain both `Assets.car` (for Liquid Glass) and
 
 - Hover over tables for context menu
 - Create new tables with visual designer
-- Add columns, set constraints
+- Add columns, primary keys, and foreign key relationships
+- Open the foreign key manager from the explorer toolbar to inspect or drop relationships
 - Drop or rename tables
+
+### Run Database Migrations
+
+- Open the migrations manager from the explorer toolbar
+- Save manual **up** and **down** SQL scripts per connection
+- Apply pending migrations into the target database
+- Roll back the latest applied migration when needed
 
 ### Query History
 
@@ -214,10 +224,10 @@ NodaDB/
 - [x] Query history
 - [x] In-app desktop updates
 - [x] Data filtering and sorting
-- [ ] Foreign key management
+- [x] Foreign key management
 - [x] ERD visualization
 - [x] Dark/light theme toggle
-- [ ] Database migrations
+- [x] Database migrations
 
 ## Release Updates
 
@@ -235,8 +245,8 @@ To publish an update:
 3. Push a version tag:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 The release workflow builds platform installers, generates updater artifacts such as `latest.json`, signs them, and publishes them to GitHub Releases.
