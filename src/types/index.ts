@@ -87,6 +87,40 @@ export interface TableColumn {
   element_raw_type?: string | null;
 }
 
+
+export interface ForeignKeyDefinition {
+  constraint_name: string;
+  table_name: string;
+  column_names: string[];
+  referenced_table_name: string;
+  referenced_column_names: string[];
+  on_delete?: string | null;
+  on_update?: string | null;
+}
+
+export interface MigrationRecord {
+  id: string;
+  connectionId: string;
+  name: string;
+  upSql: string;
+  downSql: string;
+  createdAt: number;
+}
+
+export interface AppliedMigration {
+  id: string;
+  name: string;
+  applied_at: string;
+  checksum?: string | null;
+}
+
+export interface MigrationStatus {
+  migration: MigrationRecord;
+  appliedAt?: string | null;
+  isApplied: boolean;
+  isLatestApplied: boolean;
+}
+
 export interface QueryResult {
   columns: string[];
   rows: Record<string, unknown>[];
