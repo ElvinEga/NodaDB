@@ -1,16 +1,17 @@
 pub mod types;
 
-use crate::models::{ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
+use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
 use crate::ssh_tunnel::SshTunnel;
 use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
 use base64::Engine;
 use sqlx::{Row, TypeInfo, Column};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
+use std::collections::{BTreeMap, HashMap};
 
+#[derive(Clone)]
 pub enum DatabasePool {
     Sqlite(sqlx::SqlitePool),
     Postgres(sqlx::PgPool),
@@ -242,6 +243,133 @@ impl ConnectionManager {
             }
             other => anyhow!(other),
         }
+    }
+
+    fn quote_identifier(identifier: &str, db_type: &DatabaseType) -> String {
+        match db_type {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite => {
+                format!("\"{}\"", identifier.replace('"', "\"\""))
+            }
+            DatabaseType::MySQL => format!("`{}`", identifier.replace('`', "``")),
+        }
+    }
+
+    fn quote_table_name(table_name: &str, db_type: &DatabaseType) -> String {
+        match db_type {
+            DatabaseType::PostgreSQL => Self::quote_pg_table(table_name),
+            DatabaseType::SQLite => {
+                if table_name.contains('.') {
+                    let parts: Vec<String> = table_name
+                        .split('.')
+                        .map(|part| Self::quote_identifier(part.trim_matches('"'), db_type))
+                        .collect();
+                    parts.join(".")
+                } else {
+                    Self::quote_identifier(table_name.trim_matches('"'), db_type)
+                }
+            }
+            DatabaseType::MySQL => {
+                if table_name.contains('.') {
+                    let parts: Vec<String> = table_name
+                        .split('.')
+                        .map(|part| Self::quote_identifier(part.trim_matches('`'), db_type))
+                        .collect();
+                    parts.join(".")
+                } else {
+                    Self::quote_identifier(table_name.trim_matches('`'), db_type)
+                }
+            }
+        }
+    }
+
+    fn normalize_referential_action(action: Option<&str>) -> Option<String> {
+        let normalized = action?.trim();
+        if normalized.is_empty() {
+            return None;
+        }
+
+        Some(
+            normalized
+                .split_whitespace()
+                .map(|segment| segment.to_uppercase())
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+
+    fn split_sql_statements(sql: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        let mut chars = sql.chars().peekable();
+        let mut in_single = false;
+        let mut in_double = false;
+        let mut in_line_comment = false;
+        let mut in_block_comment = false;
+
+        while let Some(ch) = chars.next() {
+            if in_line_comment {
+                current.push(ch);
+                if ch == '\n' {
+                    in_line_comment = false;
+                }
+                continue;
+            }
+
+            if in_block_comment {
+                current.push(ch);
+                if ch == '*' && matches!(chars.peek(), Some('/')) {
+                    current.push(chars.next().unwrap());
+                    in_block_comment = false;
+                }
+                continue;
+            }
+
+            if !in_single && !in_double {
+                if ch == '-' && matches!(chars.peek(), Some('-')) {
+                    current.push(ch);
+                    current.push(chars.next().unwrap());
+                    in_line_comment = true;
+                    continue;
+                }
+
+                if ch == '/' && matches!(chars.peek(), Some('*')) {
+                    current.push(ch);
+                    current.push(chars.next().unwrap());
+                    in_block_comment = true;
+                    continue;
+                }
+            }
+
+            if ch == '\'' && !in_double {
+                in_single = !in_single;
+                current.push(ch);
+                continue;
+            }
+
+            if ch == '"' && !in_single {
+                in_double = !in_double;
+                current.push(ch);
+                continue;
+            }
+
+            if ch == ';' && !in_single && !in_double {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    statements.push(trimmed.to_string());
+                }
+                current.clear();
+                continue;
+            }
+
+            current.push(ch);
+        }
+
+        let trimmed = current.trim();
+        if !trimmed.is_empty() {
+            statements.push(trimmed.to_string());
+        }
+
+        statements
     }
 
 
@@ -1524,46 +1652,93 @@ impl ConnectionManager {
         &self,
         connection_id: &str,
         table_name: &str,
-        db_type: &DatabaseType,
+        _db_type: &DatabaseType,
     ) -> Result<Vec<TableConstraint>> {
         let connections = self.connections.read().await;
         let pool = connections
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
-        if !matches!(db_type, DatabaseType::PostgreSQL) {
-            return Ok(vec![]);
-        }
-
-        let query = r#"
-            SELECT
-              c.conname,
-              c.contype,
-              ns.nspname,
-              cl.relname,
-              COALESCE(array_agg(att.attname ORDER BY u.ordinality) FILTER (WHERE att.attname IS NOT NULL), ARRAY[]::text[]) AS column_names,
-              fns.nspname AS foreign_schema,
-              fcl.relname AS foreign_table,
-              COALESCE(array_agg(fatt.attname ORDER BY fu.ordinality) FILTER (WHERE fatt.attname IS NOT NULL), NULL) AS foreign_column_names,
-              CASE WHEN c.contype = 'c' THEN pg_get_constraintdef(c.oid, true) ELSE NULL END AS check_expr,
-              c.condeferrable,
-              c.condeferred
-            FROM pg_constraint c
-            JOIN pg_class cl ON cl.oid = c.conrelid
-            JOIN pg_namespace ns ON ns.oid = cl.relnamespace
-            LEFT JOIN pg_class fcl ON fcl.oid = c.confrelid
-            LEFT JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
-            LEFT JOIN LATERAL unnest(c.conkey) WITH ORDINALITY u(attnum, ordinality) ON true
-            LEFT JOIN pg_attribute att ON att.attrelid = c.conrelid AND att.attnum = u.attnum
-            LEFT JOIN LATERAL unnest(c.confkey) WITH ORDINALITY fu(attnum, ordinality) ON true
-            LEFT JOIN pg_attribute fatt ON fatt.attrelid = c.confrelid AND fatt.attnum = fu.attnum
-            WHERE c.conrelid = to_regclass($1)
-            GROUP BY c.oid, ns.nspname, cl.relname, fns.nspname, fcl.relname
-            ORDER BY c.conname
-        "#;
-
         let constraints = match pool {
+            DatabasePool::Sqlite(pool) => {
+                let table_quoted = table_name.replace('"', "\"\"");
+                let rows = sqlx::query(&format!("PRAGMA foreign_key_list(\"{}\")", table_quoted))
+                    .fetch_all(pool)
+                    .await?;
+
+                let mut grouped: BTreeMap<i64, Vec<sqlx::sqlite::SqliteRow>> = BTreeMap::new();
+                for row in rows {
+                    let id: i64 = row.try_get(0).unwrap_or_default();
+                    grouped.entry(id).or_default().push(row);
+                }
+
+                grouped
+                    .into_iter()
+                    .map(|(id, rows)| {
+                        let first = &rows[0];
+                        let foreign_table_name: String = first.try_get(2).unwrap_or_default();
+                        let on_update: String = first.try_get(5).unwrap_or_default();
+                        let on_delete: String = first.try_get(6).unwrap_or_default();
+                        let column_names = rows
+                            .iter()
+                            .map(|row| row.try_get(3).unwrap_or_default())
+                            .collect::<Vec<String>>();
+                        let foreign_column_names = rows
+                            .iter()
+                            .map(|row| row.try_get(4).unwrap_or_default())
+                            .collect::<Vec<String>>();
+
+                        TableConstraint {
+                            constraint_name: format!("fk_{}_{}", table_name, id),
+                            constraint_type: "FOREIGN KEY".to_string(),
+                            table_schema: None,
+                            table_name: table_name.to_string(),
+                            column_names,
+                            foreign_table_schema: None,
+                            foreign_table_name: Some(foreign_table_name),
+                            foreign_column_names: Some(foreign_column_names),
+                            check_expression: Some(format!(
+                                "ON UPDATE {} ON DELETE {}",
+                                on_update.to_uppercase(),
+                                on_delete.to_uppercase()
+                            )),
+                            is_deferrable: None,
+                            initially_deferred: None,
+                        }
+                    })
+                    .collect()
+            }
             DatabasePool::Postgres(pool) => {
+                let query = r#"
+                    SELECT
+                      c.conname,
+                      c.contype,
+                      ns.nspname,
+                      cl.relname,
+                      COALESCE(array_agg(att.attname ORDER BY u.ordinality) FILTER (WHERE att.attname IS NOT NULL), ARRAY[]::text[]) AS column_names,
+                      fns.nspname AS foreign_schema,
+                      fcl.relname AS foreign_table,
+                      COALESCE(array_agg(fatt.attname ORDER BY fu.ordinality) FILTER (WHERE fatt.attname IS NOT NULL), NULL) AS foreign_column_names,
+                      CASE
+                        WHEN c.contype IN ('c', 'f') THEN pg_get_constraintdef(c.oid, true)
+                        ELSE NULL
+                      END AS check_expr,
+                      c.condeferrable,
+                      c.condeferred
+                    FROM pg_constraint c
+                    JOIN pg_class cl ON cl.oid = c.conrelid
+                    JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+                    LEFT JOIN pg_class fcl ON fcl.oid = c.confrelid
+                    LEFT JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+                    LEFT JOIN LATERAL unnest(c.conkey) WITH ORDINALITY u(attnum, ordinality) ON true
+                    LEFT JOIN pg_attribute att ON att.attrelid = c.conrelid AND att.attnum = u.attnum
+                    LEFT JOIN LATERAL unnest(c.confkey) WITH ORDINALITY fu(attnum, ordinality) ON true
+                    LEFT JOIN pg_attribute fatt ON fatt.attrelid = c.confrelid AND fatt.attnum = fu.attnum
+                    WHERE c.conrelid = to_regclass($1)
+                    GROUP BY c.oid, ns.nspname, cl.relname, fns.nspname, fcl.relname
+                    ORDER BY c.conname
+                "#;
+
                 let rows = sqlx::query(query).bind(table_name).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
@@ -1592,7 +1767,74 @@ impl ConnectionManager {
                     })
                     .collect()
             }
-            _ => vec![],
+            DatabasePool::MySql(pool) => {
+                let query = r#"
+                    SELECT
+                      kcu.CONSTRAINT_NAME,
+                      kcu.TABLE_NAME,
+                      kcu.COLUMN_NAME,
+                      kcu.REFERENCED_TABLE_SCHEMA,
+                      kcu.REFERENCED_TABLE_NAME,
+                      kcu.REFERENCED_COLUMN_NAME,
+                      rc.UPDATE_RULE,
+                      rc.DELETE_RULE,
+                      kcu.ORDINAL_POSITION
+                    FROM information_schema.KEY_COLUMN_USAGE kcu
+                    LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+                      ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+                     AND rc.TABLE_NAME = kcu.TABLE_NAME
+                     AND rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+                    WHERE kcu.TABLE_SCHEMA = DATABASE()
+                      AND kcu.TABLE_NAME = ?
+                      AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+                    ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+                "#;
+
+                let rows = sqlx::query(query).bind(table_name).fetch_all(pool).await?;
+                let mut grouped: BTreeMap<String, Vec<sqlx::mysql::MySqlRow>> = BTreeMap::new();
+                for row in rows {
+                    let name: String = row.try_get(0).unwrap_or_default();
+                    grouped.entry(name).or_default().push(row);
+                }
+
+                grouped
+                    .into_iter()
+                    .map(|(constraint_name, rows)| {
+                        let first = &rows[0];
+                        let column_names = rows
+                            .iter()
+                            .map(|row| row.try_get(2).unwrap_or_default())
+                            .collect::<Vec<String>>();
+                        let foreign_column_names = rows
+                            .iter()
+                            .map(|row| row.try_get(5).unwrap_or_default())
+                            .collect::<Vec<String>>();
+                        TableConstraint {
+                            constraint_name,
+                            constraint_type: "FOREIGN KEY".to_string(),
+                            table_schema: None,
+                            table_name: first.try_get(1).unwrap_or_default(),
+                            column_names,
+                            foreign_table_schema: first.try_get(3).ok(),
+                            foreign_table_name: first.try_get(4).ok(),
+                            foreign_column_names: Some(foreign_column_names),
+                            check_expression: Some(format!(
+                                "ON UPDATE {} ON DELETE {}",
+                                first
+                                    .try_get::<String, _>(6)
+                                    .unwrap_or_else(|_| "RESTRICT".to_string())
+                                    .to_uppercase(),
+                                first
+                                    .try_get::<String, _>(7)
+                                    .unwrap_or_else(|_| "RESTRICT".to_string())
+                                    .to_uppercase()
+                            )),
+                            is_deferrable: None,
+                            initially_deferred: None,
+                        }
+                    })
+                    .collect()
+            }
         };
 
         Ok(constraints)
@@ -1656,6 +1898,284 @@ impl ConnectionManager {
         };
 
         Ok(indexes)
+    }
+
+    pub async fn create_foreign_key(
+        &self,
+        connection_id: &str,
+        foreign_key: ForeignKeyDefinition,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        self.validate_foreign_key_definition(connection_id, &foreign_key, db_type)
+            .await?;
+
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let source_table = Self::quote_table_name(&foreign_key.table_name, db_type);
+        let referenced_table = Self::quote_table_name(&foreign_key.referenced_table_name, db_type);
+        let source_columns = foreign_key
+            .column_names
+            .iter()
+            .map(|column| Self::quote_identifier(column, db_type))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let referenced_columns = foreign_key
+            .referenced_column_names
+            .iter()
+            .map(|column| Self::quote_identifier(column, db_type))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let on_delete_clause = Self::normalize_referential_action(foreign_key.on_delete.as_deref())
+            .map(|action| format!(" ON DELETE {}", action))
+            .unwrap_or_default();
+        let on_update_clause = Self::normalize_referential_action(foreign_key.on_update.as_deref())
+            .map(|action| format!(" ON UPDATE {}", action))
+            .unwrap_or_default();
+
+        match db_type {
+            DatabaseType::SQLite => {
+                let mut constraints = self
+                    .get_table_constraints(connection_id, &foreign_key.table_name, db_type)
+                    .await?
+                    .into_iter()
+                    .filter(|constraint| constraint.constraint_type == "FOREIGN KEY")
+                    .collect::<Vec<_>>();
+
+                constraints.push(TableConstraint {
+                    constraint_name: foreign_key.constraint_name.clone(),
+                    constraint_type: "FOREIGN KEY".to_string(),
+                    table_schema: None,
+                    table_name: foreign_key.table_name.clone(),
+                    column_names: foreign_key.column_names.clone(),
+                    foreign_table_schema: None,
+                    foreign_table_name: Some(foreign_key.referenced_table_name.clone()),
+                    foreign_column_names: Some(foreign_key.referenced_column_names.clone()),
+                    check_expression: Some(
+                        format!(
+                            "ON UPDATE {} ON DELETE {}",
+                            Self::normalize_referential_action(foreign_key.on_update.as_deref())
+                                .unwrap_or_else(|| "NO ACTION".to_string()),
+                            Self::normalize_referential_action(foreign_key.on_delete.as_deref())
+                                .unwrap_or_else(|| "NO ACTION".to_string())
+                        ),
+                    ),
+                    is_deferrable: None,
+                    initially_deferred: None,
+                });
+
+                self.rebuild_sqlite_table_with_constraints(
+                    connection_id,
+                    &foreign_key.table_name,
+                    constraints,
+                )
+                .await?;
+            }
+            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
+                let sql = format!(
+                    "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){}{}",
+                    source_table,
+                    Self::quote_identifier(&foreign_key.constraint_name, db_type),
+                    source_columns,
+                    referenced_table,
+                    referenced_columns,
+                    on_delete_clause,
+                    on_update_clause
+                );
+                execute_query!(pool, &sql)?;
+            }
+        }
+
+        Ok(format!(
+            "Successfully created foreign key {} on {}",
+            foreign_key.constraint_name, foreign_key.table_name
+        ))
+    }
+
+    pub async fn drop_foreign_key(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        constraint_name: &str,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        match db_type {
+            DatabaseType::SQLite => {
+                let constraints = self
+                    .get_table_constraints(connection_id, table_name, db_type)
+                    .await?
+                    .into_iter()
+                    .filter(|constraint| {
+                        constraint.constraint_type == "FOREIGN KEY"
+                            && constraint.constraint_name != constraint_name
+                    })
+                    .collect::<Vec<_>>();
+
+                self.rebuild_sqlite_table_with_constraints(connection_id, table_name, constraints)
+                    .await?;
+            }
+            DatabaseType::PostgreSQL => {
+                let sql = format!(
+                    "ALTER TABLE {} DROP CONSTRAINT {}",
+                    Self::quote_table_name(table_name, db_type),
+                    Self::quote_identifier(constraint_name, db_type)
+                );
+                execute_query!(pool, &sql)?;
+            }
+            DatabaseType::MySQL => {
+                let sql = format!(
+                    "ALTER TABLE {} DROP FOREIGN KEY {}",
+                    Self::quote_table_name(table_name, db_type),
+                    Self::quote_identifier(constraint_name, db_type)
+                );
+                execute_query!(pool, &sql)?;
+            }
+        }
+
+        Ok(format!(
+            "Successfully dropped foreign key {} from {}",
+            constraint_name, table_name
+        ))
+    }
+
+    pub async fn list_applied_migrations(
+        &self,
+        connection_id: &str,
+        db_type: &DatabaseType,
+    ) -> Result<Vec<AppliedMigration>> {
+        self.ensure_schema_migrations_table(connection_id, db_type).await?;
+
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let sql = match db_type {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite => {
+                "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
+            }
+            DatabaseType::MySQL => {
+                "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
+            }
+        };
+
+        let migrations = match pool {
+            DatabasePool::Sqlite(pool) => sqlx::query(sql)
+                .fetch_all(pool)
+                .await?
+                .into_iter()
+                .map(|row| AppliedMigration {
+                    id: row.try_get(0).unwrap_or_default(),
+                    name: row.try_get(1).unwrap_or_default(),
+                    applied_at: row.try_get(2).unwrap_or_default(),
+                    checksum: row.try_get(3).ok(),
+                })
+                .collect(),
+            DatabasePool::Postgres(pool) => sqlx::query(sql)
+                .fetch_all(pool)
+                .await?
+                .into_iter()
+                .map(|row| AppliedMigration {
+                    id: row.try_get(0).unwrap_or_default(),
+                    name: row.try_get(1).unwrap_or_default(),
+                    applied_at: row.try_get(2).unwrap_or_default(),
+                    checksum: row.try_get(3).ok(),
+                })
+                .collect(),
+            DatabasePool::MySql(pool) => sqlx::query(sql)
+                .fetch_all(pool)
+                .await?
+                .into_iter()
+                .map(|row| AppliedMigration {
+                    id: row.try_get(0).unwrap_or_default(),
+                    name: row.try_get(1).unwrap_or_default(),
+                    applied_at: row.try_get(2).unwrap_or_default(),
+                    checksum: row.try_get(3).ok(),
+                })
+                .collect(),
+        };
+
+        Ok(migrations)
+    }
+
+    pub async fn apply_migration(
+        &self,
+        connection_id: &str,
+        migration_id: &str,
+        migration_name: &str,
+        up_sql: &str,
+        checksum: Option<&str>,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        self.ensure_schema_migrations_table(connection_id, db_type).await?;
+        let statements = Self::split_sql_statements(up_sql);
+        if statements.is_empty() {
+            return Err(anyhow!("Migration SQL is empty"));
+        }
+
+        let applied = self.list_applied_migrations(connection_id, db_type).await?;
+        if applied.iter().any(|migration| migration.id == migration_id) {
+            return Err(anyhow!("Migration {} has already been applied", migration_id));
+        }
+
+        let mut transactional_statements = statements;
+        let insert_sql = format!(
+            "INSERT INTO schema_migrations (id, name, checksum) VALUES ({}, {}, {})",
+            Self::sql_string_literal(migration_id),
+            Self::sql_string_literal(migration_name),
+            checksum
+                .map(Self::sql_string_literal)
+                .unwrap_or_else(|| "NULL".to_string())
+        );
+        transactional_statements.push(insert_sql);
+        self.execute_transaction(connection_id, &transactional_statements)
+            .await?;
+
+        Ok(format!("Applied migration {}", migration_id))
+    }
+
+    pub async fn rollback_migration(
+        &self,
+        connection_id: &str,
+        migration_id: &str,
+        down_sql: &str,
+        db_type: &DatabaseType,
+    ) -> Result<String> {
+        self.ensure_schema_migrations_table(connection_id, db_type).await?;
+
+        let applied = self.list_applied_migrations(connection_id, db_type).await?;
+        let latest = applied
+            .last()
+            .ok_or_else(|| anyhow!("There are no applied migrations to rollback"))?;
+
+        if latest.id != migration_id {
+            return Err(anyhow!(
+                "Only the latest applied migration can be rolled back (latest: {})",
+                latest.id
+            ));
+        }
+
+        let mut transactional_statements = Self::split_sql_statements(down_sql);
+        if transactional_statements.is_empty() {
+            return Err(anyhow!("Rollback SQL is empty"));
+        }
+        transactional_statements.push(format!(
+            "DELETE FROM schema_migrations WHERE id = {}",
+            Self::sql_string_literal(migration_id)
+        ));
+
+        self.execute_transaction(connection_id, &transactional_statements)
+            .await?;
+
+        Ok(format!("Rolled back migration {}", migration_id))
     }
 
     pub async fn get_postgres_connection_info(
@@ -1788,6 +2308,306 @@ impl ConnectionManager {
         }
     }
 
+    async fn validate_foreign_key_definition(
+        &self,
+        connection_id: &str,
+        foreign_key: &ForeignKeyDefinition,
+        db_type: &DatabaseType,
+    ) -> Result<()> {
+        if foreign_key.constraint_name.trim().is_empty() {
+            return Err(anyhow!("Constraint name is required"));
+        }
+        if foreign_key.column_names.is_empty() || foreign_key.referenced_column_names.is_empty() {
+            return Err(anyhow!("Source and referenced columns are required"));
+        }
+        if foreign_key.column_names.len() != foreign_key.referenced_column_names.len() {
+            return Err(anyhow!("Source and referenced column counts must match"));
+        }
+
+        let source_columns = self
+            .get_table_structure(connection_id, &foreign_key.table_name, db_type)
+            .await?;
+        let source_by_name = source_columns
+            .iter()
+            .map(|column| (column.name.clone(), column))
+            .collect::<HashMap<_, _>>();
+        for column_name in &foreign_key.column_names {
+            if !source_by_name.contains_key(column_name) {
+                return Err(anyhow!("Source column {} does not exist", column_name));
+            }
+        }
+
+        let referenced_columns = self
+            .get_table_structure(connection_id, &foreign_key.referenced_table_name, db_type)
+            .await?;
+        let referenced_by_name = referenced_columns
+            .iter()
+            .map(|column| (column.name.clone(), column))
+            .collect::<HashMap<_, _>>();
+        for column_name in &foreign_key.referenced_column_names {
+            if !referenced_by_name.contains_key(column_name) {
+                return Err(anyhow!("Referenced column {} does not exist", column_name));
+            }
+        }
+
+        let existing_constraints = self
+            .get_table_constraints(connection_id, &foreign_key.table_name, db_type)
+            .await?;
+        if existing_constraints.iter().any(|constraint| {
+            constraint.constraint_name.eq_ignore_ascii_case(&foreign_key.constraint_name)
+        }) {
+            return Err(anyhow!(
+                "Constraint {} already exists on {}",
+                foreign_key.constraint_name,
+                foreign_key.table_name
+            ));
+        }
+
+        for (source_name, target_name) in foreign_key
+            .column_names
+            .iter()
+            .zip(foreign_key.referenced_column_names.iter())
+        {
+            let source_column = source_by_name
+                .get(source_name)
+                .ok_or_else(|| anyhow!("Source column {} does not exist", source_name))?;
+            let referenced_column = referenced_by_name
+                .get(target_name)
+                .ok_or_else(|| anyhow!("Referenced column {} does not exist", target_name))?;
+
+            if source_column.type_family != referenced_column.type_family
+                && source_column.normalized_type != referenced_column.normalized_type
+            {
+                return Err(anyhow!(
+                    "Column type mismatch: {} ({}) cannot reference {} ({})",
+                    source_name,
+                    source_column.data_type,
+                    target_name,
+                    referenced_column.data_type
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_schema_migrations_table(
+        &self,
+        connection_id: &str,
+        db_type: &DatabaseType,
+    ) -> Result<()> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let create_sql = match db_type {
+            DatabaseType::SQLite => r#"
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    checksum TEXT,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            "#,
+            DatabaseType::PostgreSQL => r#"
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    checksum TEXT,
+                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            "#,
+            DatabaseType::MySQL => r#"
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    id VARCHAR(255) PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    checksum TEXT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            "#,
+        };
+
+        execute_query!(pool, create_sql)?;
+        Ok(())
+    }
+
+    fn sql_string_literal(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "''"))
+    }
+
+    fn sqlite_constraint_actions(constraint: &TableConstraint) -> (String, String) {
+        let expression = constraint
+            .check_expression
+            .as_deref()
+            .unwrap_or_default()
+            .to_uppercase();
+
+        let on_delete = ["NO ACTION", "RESTRICT", "SET NULL", "SET DEFAULT", "CASCADE"]
+            .into_iter()
+            .find(|action| expression.contains(&format!("ON DELETE {}", action)))
+            .unwrap_or("NO ACTION")
+            .to_string();
+        let on_update = ["NO ACTION", "RESTRICT", "SET NULL", "SET DEFAULT", "CASCADE"]
+            .into_iter()
+            .find(|action| expression.contains(&format!("ON UPDATE {}", action)))
+            .unwrap_or("NO ACTION")
+            .to_string();
+        (on_delete, on_update)
+    }
+
+    fn constraint_action_suffix(constraint: &TableConstraint) -> String {
+        let expression = constraint.check_expression.as_deref().unwrap_or_default();
+        let upper = expression.to_uppercase();
+        let on_delete_index = upper.find("ON DELETE");
+        let on_update_index = upper.find("ON UPDATE");
+        let start = match (on_delete_index, on_update_index) {
+            (Some(delete_index), Some(update_index)) => delete_index.min(update_index),
+            (Some(delete_index), None) => delete_index,
+            (None, Some(update_index)) => update_index,
+            (None, None) => return String::new(),
+        };
+        expression[start..].trim().to_string()
+    }
+
+    async fn rebuild_sqlite_table_with_constraints(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        foreign_keys: Vec<TableConstraint>,
+    ) -> Result<()> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let DatabasePool::Sqlite(pool) = pool else {
+            return Err(anyhow!("SQLite rebuild is only available for SQLite connections"));
+        };
+
+        let columns = self
+            .get_table_structure(connection_id, table_name, &DatabaseType::SQLite)
+            .await?;
+        let primary_keys = self
+            .get_primary_keys(&DatabasePool::Sqlite(pool.clone()), table_name, &DatabaseType::SQLite)
+            .await?;
+        let indexes = self
+            .get_indexes(&DatabasePool::Sqlite(pool.clone()), table_name, &DatabaseType::SQLite)
+            .await?;
+
+        let mut column_defs = Vec::new();
+        for column in &columns {
+            let mut definition = format!(
+                "{} {}",
+                Self::quote_identifier(&column.name, &DatabaseType::SQLite),
+                column.data_type
+            );
+            if !column.is_nullable {
+                definition.push_str(" NOT NULL");
+            }
+            if let Some(default_value) = &column.default_value {
+                if !default_value.trim().is_empty() {
+                    definition.push_str(" DEFAULT ");
+                    definition.push_str(default_value);
+                }
+            }
+            column_defs.push(definition);
+        }
+
+        if !primary_keys.is_empty() {
+            column_defs.push(format!(
+                "PRIMARY KEY ({})",
+                primary_keys
+                    .iter()
+                    .map(|column| Self::quote_identifier(column, &DatabaseType::SQLite))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
+        for constraint in &foreign_keys {
+            let Some(foreign_table_name) = &constraint.foreign_table_name else {
+                continue;
+            };
+            let referenced_columns = constraint
+                .foreign_column_names
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|column| Self::quote_identifier(&column, &DatabaseType::SQLite))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let source_columns = constraint
+                .column_names
+                .iter()
+                .map(|column| Self::quote_identifier(column, &DatabaseType::SQLite))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let (on_delete, on_update) = Self::sqlite_constraint_actions(constraint);
+            column_defs.push(format!(
+                "FOREIGN KEY ({}) REFERENCES {} ({}) ON DELETE {} ON UPDATE {}",
+                source_columns,
+                Self::quote_table_name(foreign_table_name, &DatabaseType::SQLite),
+                referenced_columns,
+                on_delete,
+                on_update
+            ));
+        }
+
+        let temp_table_name = format!("__nodadb_rebuild_{}", table_name);
+        let quoted_table = Self::quote_table_name(table_name, &DatabaseType::SQLite);
+        let quoted_temp = Self::quote_table_name(&temp_table_name, &DatabaseType::SQLite);
+        let create_sql = format!(
+            "CREATE TABLE {} (\n  {}\n)",
+            quoted_table,
+            column_defs.join(",\n  ")
+        );
+        let column_list = columns
+            .iter()
+            .map(|column| Self::quote_identifier(&column.name, &DatabaseType::SQLite))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut tx = pool.begin().await?;
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::format_sqlx_error)?;
+        sqlx::query(&format!("ALTER TABLE {} RENAME TO {}", quoted_table, quoted_temp))
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::format_sqlx_error)?;
+        sqlx::query(&create_sql)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::format_sqlx_error)?;
+        sqlx::query(&format!(
+            "INSERT INTO {} ({}) SELECT {} FROM {}",
+            quoted_table, column_list, column_list, quoted_temp
+        ))
+        .execute(&mut *tx)
+        .await
+        .map_err(Self::format_sqlx_error)?;
+        sqlx::query(&format!("DROP TABLE {}", quoted_temp))
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::format_sqlx_error)?;
+
+        for index_sql in indexes {
+            sqlx::query(&index_sql)
+                .execute(&mut *tx)
+                .await
+                .map_err(Self::format_sqlx_error)?;
+        }
+
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::format_sqlx_error)?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn export_table_structure(
         &self,
         connection_id: &str,
@@ -1809,6 +2629,14 @@ impl ConnectionManager {
         // Get primary keys
         let primary_keys = self.get_primary_keys(pool, table_name, db_type).await?;
         
+        // Get foreign keys
+        let foreign_keys = self
+            .get_table_constraints(connection_id, table_name, db_type)
+            .await?
+            .into_iter()
+            .filter(|constraint| constraint.constraint_type == "FOREIGN KEY")
+            .collect::<Vec<_>>();
+
         // Get indexes
         let indexes = self.get_indexes(pool, table_name, db_type).await?;
 
@@ -1833,7 +2661,7 @@ impl ConnectionManager {
                 }
             }
             
-            if i < columns.len() - 1 || !primary_keys.is_empty() {
+            if i < columns.len() - 1 || !primary_keys.is_empty() || !foreign_keys.is_empty() {
                 sql.push(',');
             }
             sql.push('\n');
@@ -1843,7 +2671,37 @@ impl ConnectionManager {
         if !primary_keys.is_empty() {
             sql.push_str("  PRIMARY KEY (");
             sql.push_str(&primary_keys.join(", "));
-            sql.push_str(")\n");
+            if !foreign_keys.is_empty() {
+                sql.push_str("),\n");
+            } else {
+                sql.push_str(")\n");
+            }
+        }
+
+        for (index, constraint) in foreign_keys.iter().enumerate() {
+            let Some(foreign_table_name) = &constraint.foreign_table_name else {
+                continue;
+            };
+            let foreign_columns = constraint
+                .foreign_column_names
+                .clone()
+                .unwrap_or_default()
+                .join(", ");
+            let actions = Self::constraint_action_suffix(constraint);
+            sql.push_str(&format!(
+                "  FOREIGN KEY ({}) REFERENCES {} ({})",
+                constraint.column_names.join(", "),
+                foreign_table_name,
+                foreign_columns
+            ));
+            if !actions.is_empty() {
+                sql.push(' ');
+                sql.push_str(&actions);
+            }
+            if index < foreign_keys.len() - 1 {
+                sql.push(',');
+            }
+            sql.push('\n');
         }
         
         sql.push_str(");\n");
@@ -1957,6 +2815,9 @@ impl ConnectionManager {
                 for row in rows {
                     let index_name: String = row.try_get(1).unwrap_or_default();
                     let is_unique: i64 = row.try_get(2).unwrap_or(0);
+                    if index_name.starts_with("sqlite_autoindex") {
+                        continue;
+                    }
                     
                     // Get index columns
                     let index_info_query = format!("PRAGMA index_info({})", index_name);
