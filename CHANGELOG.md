@@ -136,6 +136,18 @@ All notable changes to NodaDB will be documented in this file.
 
 ## [Unreleased]
 
+### Planned
+- Schema designer (Create, Alter, Drop tables)
+- Query history and favorites
+- Inline table editing
+- Import/Export (CSV, JSON, SQL)
+- Additional keyboard shortcuts
+- Theme customization (Dark/Light mode)
+- Further connection management improvements
+- Performance optimizations
+
+## [0.2.1] - 2026-06-01
+
 ### Added
 - In-app desktop auto-update support using the Tauri v2 updater and process plugins
 - Changelog-aware update UI in Settings and About dialogs
@@ -146,13 +158,3 @@ All notable changes to NodaDB will be documented in this file.
 - Replaced the separate header **Switch** button with a clickable current-connection selector
 - Changed the top-bar **New Connection** button to open the full saved-connections list instead of jumping straight into the modal
 - Persisted recent-connection ordering to speed up switching between databases
-
-### Planned
-- Schema designer (Create, Alter, Drop tables)
-- Query history and favorites
-- Inline table editing
-- Import/Export (CSV, JSON, SQL)
-- Additional keyboard shortcuts
-- Theme customization (Dark/Light mode)
-- Further connection management improvements
-- Performance optimizations
