@@ -37,6 +37,7 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -59,6 +60,8 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TanStackTableViewer } from "./components/TanStackTableViewer";
+import { OPEN_ABOUT_EVENT } from "@/lib/appEvents";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -72,6 +75,7 @@ function App() {
   const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tabs, setTabs] = useState<TabType[]>([]);
@@ -101,6 +105,13 @@ function App() {
   const updateConnection = useConnectionStore(
     (state) => state.updateConnection,
   );
+  const setAutoCheckForUpdates = useSettingsStore(
+    (state) => state.setAutoCheckForUpdates,
+  );
+  const autoCheckForUpdates = useSettingsStore(
+    (state) => state.autoCheckForUpdates,
+  );
+  const appUpdate = useAppUpdate();
 
   const activeConnection = getActiveConnection();
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -110,6 +121,28 @@ function App() {
     setTabs([]);
     setActiveTabId(null);
   }, [activeConnectionId]);
+
+  useEffect(() => {
+    const handleOpenAbout = () => {
+      setAboutDialogOpen(true);
+    };
+
+    window.addEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
+    return () => {
+      window.removeEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!autoCheckForUpdates) {
+      return;
+    }
+
+    void appUpdate.checkForUpdates({
+      silent: true,
+      onViewDetails: () => setAboutDialogOpen(true),
+    });
+  }, [appUpdate.checkForUpdates, autoCheckForUpdates]);
 
   const handleTableSelect = async (table: DatabaseTable) => {
     const existingTab = tabs.find(
@@ -396,7 +429,7 @@ function App() {
               {/* MenuBar for Linux/Windows (macOS uses native menu) */}
               {!navigator.userAgent.includes("Mac") && (
                 <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-                  <MenuBar />
+                  <MenuBar onOpenAbout={() => setAboutDialogOpen(true)} />
                 </header>
               )}
               {/* Top Navigation Bar */}
@@ -863,6 +896,14 @@ function App() {
         <SettingsDialog
           open={settingsDialogOpen}
           onOpenChange={setSettingsDialogOpen}
+          appUpdate={appUpdate}
+        />
+        <AboutDialog
+          open={aboutDialogOpen}
+          onOpenChange={setAboutDialogOpen}
+          appUpdate={appUpdate}
+          autoCheckForUpdates={autoCheckForUpdates}
+          onAutoCheckChange={setAutoCheckForUpdates}
         />
         <KeyboardCheatSheet />
       </div>
