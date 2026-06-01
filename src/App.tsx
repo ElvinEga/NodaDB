@@ -9,17 +9,20 @@ import {
   Network,
   Shapes,
   LogOut,
-  DatabaseZap,
   Trash2,
   MoreVertical,
   Pencil,
   ArrowLeft,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -90,6 +93,9 @@ function App() {
   const previousConnectionId = useConnectionStore(
     (state) => state.previousConnectionId,
   );
+  const recentConnectionIds = useConnectionStore(
+    (state) => state.recentConnectionIds,
+  );
   const openConnectionSwitcher = useConnectionStore(
     (state) => state.openConnectionSwitcher,
   );
@@ -115,6 +121,13 @@ function App() {
 
   const activeConnection = getActiveConnection();
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const recentConnections = recentConnectionIds
+    .map((connectionId) =>
+      connections.find((connection) => connection.id === connectionId),
+    )
+    .filter((connection): connection is (typeof connections)[number] =>
+      Boolean(connection),
+    );
 
   // Clear all tabs when active connection changes
   useEffect(() => {
@@ -163,6 +176,18 @@ function App() {
       };
       setTabs([...tabs, newTab]);
       setActiveTabId(newTab.id);
+    }
+  };
+
+  const connectToConnection = async (connection: (typeof connections)[number]) => {
+    try {
+      await invoke("connect_database", {
+        config: connection,
+      });
+      setActiveConnection(connection.id);
+    } catch (error) {
+      console.error("Failed to connect:", error);
+      alert(`Failed to connect to ${connection.name}: ${error}`);
     }
   };
 
@@ -445,28 +470,81 @@ function App() {
                 )}
 
                 {/* Connection Selector */}
-                {activeConnection && (
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-secondary text-sm">
-                    <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
-                    <span className="text-sm">{activeConnection.name}</span>
-                    <span className="text-muted-foreground text-xs">
-                      ({activeConnection.db_type})
-                    </span>
-                  </div>
-                )}
-                {activeConnectionId && activeConnection && (
-                  <div className="flex items-center">
-                    <KeyboardTooltip
-                      description="Switch Connection"
-                      keys={["Ctrl", "Shift", "C"]}
-                    >
-                      <Button variant="ghost" onClick={openConnectionSwitcher}>
-                        <DatabaseZap className="h-4 w-4" />
-                        Switch
-                      </Button>
-                    </KeyboardTooltip>
-                  </div>
-                )}
+                {activeConnection ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 text-sm transition-colors hover:bg-secondary/80"
+                      >
+                        <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
+                        <span className="text-sm">{activeConnection.name}</span>
+                        <span className="text-muted-foreground text-xs">
+                          ({activeConnection.db_type})
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-72">
+                      <DropdownMenuLabel>Recent Connections</DropdownMenuLabel>
+                      {recentConnections.length > 0 ? (
+                        recentConnections.map((connection) => {
+                          const isActive = connection.id === activeConnection.id;
+
+                          return (
+                            <DropdownMenuItem
+                              key={connection.id}
+                              onClick={() => {
+                                if (!isActive) {
+                                  void connectToConnection(connection);
+                                }
+                              }}
+                              className="items-start py-2"
+                            >
+                              <div className="flex min-w-0 flex-1 items-start gap-2">
+                                <div className="pt-0.5">
+                                  {isActive ? (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  ) : (
+                                    <Database className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate font-medium">
+                                      {connection.name}
+                                    </span>
+                                    {isActive ? (
+                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                        Current
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="truncate text-xs text-muted-foreground">
+                                    {connection.db_type.toUpperCase()}
+                                    {connection.file_path
+                                      ? ` • ${connection.file_path}`
+                                      : connection.host
+                                        ? ` • ${connection.host}:${connection.port}`
+                                        : ""}
+                                  </div>
+                                </div>
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })
+                      ) : (
+                        <div className="px-2 py-3 text-sm text-muted-foreground">
+                          No recent connections yet.
+                        </div>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={openConnectionSwitcher}>
+                        Browse all connections
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
                 <div className="flex-1" />
 
                 {/* Right Actions */}
@@ -496,11 +574,14 @@ function App() {
                   </Button>
                 </KeyboardTooltip>
 
-                <KeyboardTooltip description="New Connection">
+                <KeyboardTooltip
+                  description="Open Connections"
+                  keys={["Ctrl", "Shift", "C"]}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setConnectionDialogOpen(true)}
+                    onClick={openConnectionSwitcher}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -673,17 +754,7 @@ function App() {
                     >
                       <button
                         onClick={async () => {
-                          try {
-                            await invoke("connect_database", {
-                              config: conn,
-                            });
-                            setActiveConnection(conn.id);
-                          } catch (error) {
-                            console.error("Failed to connect:", error);
-                            alert(
-                              `Failed to connect to ${conn.name}: ${error}`,
-                            );
-                          }
+                          await connectToConnection(conn);
                         }}
                         className="w-full"
                       >
