@@ -26,6 +26,9 @@ interface SettingsStore {
   rowsPerPage: number;
   showRowNumbers: boolean;
 
+  // Updates
+  autoCheckForUpdates: boolean;
+
   // Actions
   setTheme: (theme: Theme) => void;
   setFontSize: (fontSize: FontSize) => void;
@@ -39,6 +42,7 @@ interface SettingsStore {
   setMaxHistorySize: (size: number) => void;
   setRowsPerPage: (rows: number) => void;
   setShowRowNumbers: (show: boolean) => void;
+  setAutoCheckForUpdates: (enabled: boolean) => void;
   resetToDefaults: () => void;
 }
 
@@ -55,6 +59,7 @@ const defaultSettings = {
   maxHistorySize: 50,
   rowsPerPage: 100,
   showRowNumbers: true,
+  autoCheckForUpdates: true,
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -75,6 +80,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setMaxHistorySize: (maxHistorySize) => set({ maxHistorySize }),
       setRowsPerPage: (rowsPerPage) => set({ rowsPerPage }),
       setShowRowNumbers: (showRowNumbers) => set({ showRowNumbers }),
+      setAutoCheckForUpdates: (autoCheckForUpdates) =>
+        set({ autoCheckForUpdates }),
       resetToDefaults: () => set(defaultSettings),
     }),
     {
