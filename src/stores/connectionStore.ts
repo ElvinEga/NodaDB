@@ -6,6 +6,7 @@ interface ConnectionStore {
   connections: ConnectionConfig[];
   activeConnectionId: string | null;
   previousConnectionId: string | null;
+  recentConnectionIds: string[];
   addConnection: (connection: ConnectionConfig) => void;
   removeConnection: (id: string) => void;
   updateConnection: (id: string, updates: Partial<ConnectionConfig>) => void;
@@ -22,6 +23,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       connections: [],
       activeConnectionId: null,
       previousConnectionId: null,
+      recentConnectionIds: [],
       
       addConnection: (connection) =>
         set((state) => ({
@@ -33,6 +35,9 @@ export const useConnectionStore = create<ConnectionStore>()(
           connections: state.connections.filter((c) => c.id !== id),
           activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
           previousConnectionId: state.previousConnectionId === id ? null : state.previousConnectionId,
+          recentConnectionIds: state.recentConnectionIds.filter(
+            (connectionId) => connectionId !== id
+          ),
         })),
       
       updateConnection: (id, updates) =>
@@ -43,7 +48,18 @@ export const useConnectionStore = create<ConnectionStore>()(
         })),
       
       setActiveConnection: (id) =>
-        set({ activeConnectionId: id, previousConnectionId: null }),
+        set((state) => ({
+          activeConnectionId: id,
+          previousConnectionId: null,
+          recentConnectionIds: id
+            ? [
+                id,
+                ...state.recentConnectionIds.filter(
+                  (connectionId) => connectionId !== id
+                ),
+              ].slice(0, 5)
+            : state.recentConnectionIds,
+        })),
 
       openConnectionSwitcher: () =>
         set((state) => ({
@@ -68,7 +84,10 @@ export const useConnectionStore = create<ConnectionStore>()(
     {
       name: 'nodadb-connections-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ connections: state.connections }),
+      partialize: (state) => ({
+        connections: state.connections,
+        recentConnectionIds: state.recentConnectionIds,
+      }),
     }
   )
 );
