@@ -1,8 +1,8 @@
 use crate::database::ConnectionManager;
 use crate::models::{
-    ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan,
-    PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn,
-    TableConstraint, TableIndex,
+    AppliedMigration, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType,
+    ExecutionPlan, ForeignKeyDefinition, PostgresConnectionInfo, PostgresExtension,
+    PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex,
 };
 use chrono::Utc;
 use tauri::State;
@@ -278,6 +278,82 @@ pub async fn get_table_indexes(
         .get_table_indexes(&connection_id, &table_name, &db_type)
         .await
         .map_err(|e| format!("Failed to get table indexes: {}", e))
+}
+
+#[tauri::command]
+pub async fn create_foreign_key(
+    connection_id: String,
+    foreign_key: ForeignKeyDefinition,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .create_foreign_key(&connection_id, foreign_key, &db_type)
+        .await
+        .map_err(|e| format!("Failed to create foreign key: {}", e))
+}
+
+#[tauri::command]
+pub async fn drop_foreign_key(
+    connection_id: String,
+    table_name: String,
+    constraint_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .drop_foreign_key(&connection_id, &table_name, &constraint_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to drop foreign key: {}", e))
+}
+
+#[tauri::command]
+pub async fn list_applied_migrations(
+    connection_id: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<AppliedMigration>, String> {
+    manager
+        .list_applied_migrations(&connection_id, &db_type)
+        .await
+        .map_err(|e| format!("Failed to list applied migrations: {}", e))
+}
+
+#[tauri::command]
+pub async fn apply_migration(
+    connection_id: String,
+    migration_id: String,
+    migration_name: String,
+    up_sql: String,
+    checksum: Option<String>,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .apply_migration(
+            &connection_id,
+            &migration_id,
+            &migration_name,
+            &up_sql,
+            checksum.as_deref(),
+            &db_type,
+        )
+        .await
+        .map_err(|e| format!("Failed to apply migration: {}", e))
+}
+
+#[tauri::command]
+pub async fn rollback_migration(
+    connection_id: String,
+    migration_id: String,
+    down_sql: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .rollback_migration(&connection_id, &migration_id, &down_sql, &db_type)
+        .await
+        .map_err(|e| format!("Failed to rollback migration: {}", e))
 }
 
 #[tauri::command]
