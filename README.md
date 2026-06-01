@@ -15,8 +15,11 @@ A modern, cross-platform database management tool built with Tauri 2, React, and
 - **SQL Query Editor** - Monaco-powered editor with syntax highlighting
 - **CRUD Operations** - Insert, update, and delete rows with inline editing
 - **Schema Designer** - Create and modify tables visually
+- **Visual Query Builder** - Build queries with a node-based interface
 - **Query History** - Track, search, and favorite your queries
 - **Export Data** - Download results as CSV
+- **Connection Picker** - Switch quickly from the current database pill or browse all saved connections
+- **In-App Auto Updates** - Check release notes, download signed updates, and restart into the latest version
 
 ## Tech Stack
 
@@ -31,7 +34,7 @@ A modern, cross-platform database management tool built with Tauri 2, React, and
 - Bun (JavaScript runtime)
 - Rust (latest stable)
 - System dependencies for Tauri:
-  - **Linux:** `webkit2gtk`, `libgtk-3-dev`, `libsoup2.4-dev`
+  - **Linux:** `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`, `libssl-dev`, `pkg-config`, `libxdo-dev`
   - **macOS:** Xcode command line tools
   - **Windows:** WebView2
 
@@ -123,11 +126,20 @@ The built app bundle should now contain both `Assets.car` (for Liquid Glass) and
 
 ### Connect to Database
 
-1. Click "New Connection"
-2. Enter connection details:
+1. Click the **+** button to open your saved connections list
+2. Either:
+   - select an existing saved connection, or
+   - click **Add New Connection** to open the connection form
+3. Enter connection details:
    - **SQLite:** Browse and select `.db` file
    - **PostgreSQL/MySQL:** Enter host, port, credentials
-3. Click "Connect"
+4. Click **Connect**
+
+### Switch Between Saved Connections
+
+- Click the current database pill in the top bar to open recent connections
+- Select a recent connection to reconnect immediately
+- Use **Browse all connections** to open the full saved-connections screen
 
 ### Browse and Edit Data
 
@@ -158,9 +170,18 @@ The built app bundle should now contain both `Assets.car` (for Liquid Glass) and
 - Star favorites
 - Re-run queries with one click
 
+### App Updates
+
+- Open **Settings → Updates** or **Help → About NodaDB** to:
+  - check for updates
+  - read the latest changelog
+  - download and install the newest desktop build
+- On startup, NodaDB can check for updates automatically and notify you when a new release is available
+
 ## Keyboard Shortcuts
 
 - `Ctrl+Enter` - Execute query
+- `Ctrl+Shift+C` - Open saved connections list
 - `Enter` - Save cell edit
 - `Escape` - Cancel edit
 - `Double-click` - Edit cell
@@ -189,13 +210,36 @@ NodaDB/
 - [x] SQL query editor
 - [x] CRUD operations
 - [x] Schema designer
+- [x] Visual query builder
 - [x] Query history
+- [x] In-app desktop updates
 - [ ] Data filtering and sorting
 - [ ] Foreign key management
-- [ ] Visual query builder
 - [ ] ERD visualization
 - [ ] Dark/light theme toggle
 - [ ] Database migrations
+
+## Release Updates
+
+NodaDB uses signed GitHub Release artifacts for desktop updates.
+
+To publish an update:
+
+1. Bump app versions consistently in:
+   - `package.json`
+   - `src-tauri/tauri.conf.json`
+   - `src-tauri/Cargo.toml`
+2. Ensure GitHub Actions secrets are set:
+   - `TAURI_SIGNING_PRIVATE_KEY`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+3. Push a version tag:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The release workflow builds platform installers, generates updater artifacts such as `latest.json`, signs them, and publishes them to GitHub Releases.
 
 ## Contributing
 
