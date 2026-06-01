@@ -42,8 +42,13 @@ import {
 import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
-export function MenuBar() {
+interface MenuBarProps {
+  onOpenAbout: () => void;
+}
+
+export function MenuBar({ onOpenAbout }: MenuBarProps) {
   const [isWindowMaximized, setIsWindowMaximized] = React.useState(false);
 
   React.useEffect(() => {
@@ -377,18 +382,14 @@ export function MenuBar() {
             <BookOpen className="mr-2 h-4 w-4" />
             Documentation
           </MenubarItem>
-          <MenubarItem onSelect={() => invoke("open_github")}>
+          <MenubarItem
+            onSelect={() => void openUrl("https://github.com/ElvinEga/NodaDB")}
+          >
             <ExternalLink className="mr-2 h-4 w-4" />
             GitHub Repository
           </MenubarItem>
           <MenubarSeparator />
-          <MenubarItem
-            onSelect={() =>
-              toast.info(
-                "NodaDB v0.1.2\n\nA modern database management tool built with Tauri 2, React, and Rust."
-              )
-            }
-          >
+          <MenubarItem onSelect={onOpenAbout}>
             <Info className="mr-2 h-4 w-4" />
             About NodaDB
           </MenubarItem>
