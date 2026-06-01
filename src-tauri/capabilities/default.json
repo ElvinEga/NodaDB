@@ -17,6 +17,8 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "process:default",
+    "updater:default"
   ]
 }
