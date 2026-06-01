@@ -179,7 +179,9 @@ function App() {
     }
   };
 
-  const connectToConnection = async (connection: (typeof connections)[number]) => {
+  const connectToConnection = async (
+    connection: (typeof connections)[number],
+  ) => {
     try {
       await invoke("connect_database", {
         config: connection,
@@ -489,7 +491,8 @@ function App() {
                       <DropdownMenuLabel>Recent Connections</DropdownMenuLabel>
                       {recentConnections.length > 0 ? (
                         recentConnections.map((connection) => {
-                          const isActive = connection.id === activeConnection.id;
+                          const isActive =
+                            connection.id === activeConnection.id;
 
                           return (
                             <DropdownMenuItem
@@ -511,11 +514,11 @@ function App() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
-                                    <span className="truncate font-medium">
+                                    <span className="truncate  text-sm">
                                       {connection.name}
                                     </span>
                                     {isActive ? (
-                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
                                         Current
                                       </span>
                                     ) : null}
