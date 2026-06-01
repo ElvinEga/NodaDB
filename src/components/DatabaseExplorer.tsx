@@ -10,6 +10,7 @@ import {
   Trash2,
   Edit,
   FileCode,
+  Link2,
   Search,
   Filter,
   Tag as TagIcon,
@@ -49,6 +50,8 @@ import {
 } from "@/components/ui/dialog";
 import { CreateTableDialog } from "@/components/CreateTableDialog";
 import { ExportTableDialog } from "@/components/ExportTableDialog";
+import { ForeignKeyManagerDialog } from "@/components/ForeignKeyManagerDialog";
+import { MigrationManagerDialog } from "@/components/MigrationManagerDialog";
 import { TagManager } from "@/components/TagManager";
 import { TagSelectDialog } from "@/components/TagSelectDialog";
 import { TableRow } from "@/components/TableRow";
@@ -111,6 +114,8 @@ export function DatabaseExplorer({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [tableToRename, setTableToRename] = useState<string>("");
   const [newTableName, setNewTableName] = useState("");
+  const [foreignKeyDialogOpen, setForeignKeyDialogOpen] = useState(false);
+  const [migrationDialogOpen, setMigrationDialogOpen] = useState(false);
 
   // Tag-related state
   const [tags, setTags] = useState<TableTag[]>([]);
@@ -253,6 +258,22 @@ export function DatabaseExplorer({
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setForeignKeyDialogOpen(true)}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setMigrationDialogOpen(true)}
+            >
+              <FileCode className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
@@ -467,6 +488,23 @@ export function DatabaseExplorer({
           table={tableToExport}
         />
       )}
+
+      <ForeignKeyManagerDialog
+        open={foreignKeyDialogOpen}
+        onOpenChange={setForeignKeyDialogOpen}
+        connection={connection}
+        tables={tables}
+        initialTableName={
+          selectedTable ? selectedTable.full_name ?? selectedTable.name : null
+        }
+        onSuccess={loadTables}
+      />
+
+      <MigrationManagerDialog
+        open={migrationDialogOpen}
+        onOpenChange={setMigrationDialogOpen}
+        connection={connection}
+      />
 
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent>
