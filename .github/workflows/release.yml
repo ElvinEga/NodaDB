@@ -1,46 +1,49 @@
 name: Release NodaDB
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
     tags:
-      - "v*"
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      - "v*.*.*"
 
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  build:
+  release:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-14
-            args: ""
-            rust-target: ""
-            artifact-name: nodadb-macos-aarch64
-            bundle-dir: src-tauri/target/release/bundle
-          - platform: ubuntu-22.04
-            args: ""
-            rust-target: ""
-            artifact-name: nodadb-ubuntu-22-04
-            bundle-dir: src-tauri/target/release/bundle
-          - platform: windows-latest
-            args: ""
-            rust-target: ""
-            artifact-name: nodadb-windows
-            bundle-dir: src-tauri/target/release/bundle
+        platform:
+          - macos-latest
+          - ubuntu-22.04
+          - windows-latest
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -59,55 +62,16 @@ jobs:
             pkg-config \
             libxdo-dev
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Add Rust target
-        if: matrix.rust-target != ''
-        run: rustup target add ${{ matrix.rust-target }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Install frontend dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Build Tauri app for branch/manual runs
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: bun tauri build ${{ matrix.args }}
-
-      - name: Package macOS .app
-        if: startsWith(matrix.platform, 'macos-') && !startsWith(github.ref, 'refs/tags/v')
-        run: |
-          cd ${{ matrix.bundle-dir }}/macos
-          tar -czf ${{ matrix.artifact-name }}.app.tar.gz NodaDB.app
-
-      - name: Upload build artifacts
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ matrix.artifact-name }}
-          if-no-files-found: warn
-          path: |
-            ${{ matrix.bundle-dir }}/**/*.dmg
-            ${{ matrix.bundle-dir }}/**/*.app.tar.gz
-            ${{ matrix.bundle-dir }}/**/*.AppImage
-            ${{ matrix.bundle-dir }}/**/*.deb
-            ${{ matrix.bundle-dir }}/**/*.rpm
-            ${{ matrix.bundle-dir }}/**/*.exe
-            ${{ matrix.bundle-dir }}/**/*.msi
-
-      - name: Build and upload tagged Tauri release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Build and auto-release NodaDB
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "NodaDB ${{ github.ref_name }}"
-          releaseBody: "NodaDB desktop release."
-          releaseDraft: true
+          releaseBody: "NodaDB desktop builds for macOS, Windows, and Linux."
+          releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
