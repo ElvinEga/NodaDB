@@ -146,6 +146,19 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.2] - 2026-06-01
+
+### Added
+- Foreign key management UI for creating, inspecting, and dropping table relationships
+- Manual SQL migration manager with saved up/down scripts per connection
+- Database-backed migration tracking through the `schema_migrations` table
+- Real foreign key metadata loading in the schema designer for SQLite, PostgreSQL, and MySQL
+
+### Changed
+- Updated schema export to include foreign key DDL alongside columns, primary keys, and indexes
+- Upgraded the schema designer to prefer actual constraint metadata before falling back to name-based relationship detection
+- Added SQLite table-rebuild handling so foreign key changes can be applied on SQLite connections
+
 ## [0.2.1] - 2026-06-01
 
 ### Added
