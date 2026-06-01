@@ -102,6 +102,26 @@ pub struct TableColumn {
     pub element_raw_type: Option<String>,
 }
 
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ForeignKeyDefinition {
+    pub constraint_name: String,
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub referenced_table_name: String,
+    pub referenced_column_names: Vec<String>,
+    pub on_delete: Option<String>,
+    pub on_update: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppliedMigration {
+    pub id: String,
+    pub name: String,
+    pub applied_at: String,
+    pub checksum: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct QueryResult {
     pub columns: Vec<String>,
