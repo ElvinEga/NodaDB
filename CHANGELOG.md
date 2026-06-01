@@ -136,6 +136,17 @@ All notable changes to NodaDB will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- In-app desktop auto-update support using the Tauri v2 updater and process plugins
+- Changelog-aware update UI in Settings and About dialogs
+- Signed release pipeline support for updater artifacts, `latest.json`, and installer verification
+- Recent-connections dropdown from the active database pill in the top bar
+
+### Changed
+- Replaced the separate header **Switch** button with a clickable current-connection selector
+- Changed the top-bar **New Connection** button to open the full saved-connections list instead of jumping straight into the modal
+- Persisted recent-connection ordering to speed up switching between databases
+
 ### Planned
 - Schema designer (Create, Alter, Drop tables)
 - Query history and favorites
@@ -143,5 +154,5 @@ All notable changes to NodaDB will be documented in this file.
 - Import/Export (CSV, JSON, SQL)
 - Additional keyboard shortcuts
 - Theme customization (Dark/Light mode)
-- Connection management improvements
+- Further connection management improvements
 - Performance optimizations
