@@ -146,6 +146,14 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.4] - 2026-06-02
+
+### Fixed
+- Ad-hoc sign macOS builds by default so Apple Silicon downloads are no longer flagged as damaged when no Apple certificate is configured
+
+### Changed
+- Added optional Apple code-signing and notarization environment support to the GitHub release workflow
+
 ## [0.2.3] - 2026-06-02
 
 ### Added
