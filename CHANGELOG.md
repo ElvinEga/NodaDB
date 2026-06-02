@@ -146,6 +146,12 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.8] - 2026-06-02
+
+### Fixed
+- Disabled accidental macOS certificate import attempts unless `ENABLE_APPLE_NOTARIZATION=true` is explicitly set alongside all Apple signing secrets
+- Restored the default macOS release path to ad-hoc signing for teams that do not yet have Apple Developer certificates
+
 ## [0.2.7] - 2026-06-02
 
 ### Fixed
