@@ -242,14 +242,21 @@ To publish an update:
 2. Ensure GitHub Actions secrets are set:
    - `TAURI_SIGNING_PRIVATE_KEY`
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-3. Push a version tag:
+3. Optional for fully trusted macOS distribution outside local testing:
+   - `APPLE_CERTIFICATE`
+   - `APPLE_CERTIFICATE_PASSWORD`
+   - `APPLE_SIGNING_IDENTITY`
+   - `APPLE_ID`
+   - `APPLE_PASSWORD`
+   - `APPLE_TEAM_ID`
+4. Push a version tag:
 
 ```bash
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.2.4
+git push origin v0.2.4
 ```
 
-The release workflow builds platform installers, generates updater artifacts such as `latest.json`, signs them, and publishes them to GitHub Releases.
+The release workflow builds platform installers, ad-hoc signs macOS builds by default for Apple Silicon compatibility, generates updater artifacts such as `latest.json`, and publishes them to GitHub Releases. If the optional Apple secrets are set, Tauri can use your Apple signing identity for full macOS distribution trust.
 
 ## Contributing
 
