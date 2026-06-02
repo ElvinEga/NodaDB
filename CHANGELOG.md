@@ -146,7 +146,7 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
-## [0.2.2] - 2026-06-01
+## [0.2.3] - 2026-06-02
 
 ### Added
 - Foreign key management UI for creating, inspecting, and dropping table relationships

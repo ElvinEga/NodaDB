@@ -245,8 +245,8 @@ To publish an update:
 3. Push a version tag:
 
 ```bash
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.2.3
+git push origin v0.2.3
 ```
 
 The release workflow builds platform installers, generates updater artifacts such as `latest.json`, signs them, and publishes them to GitHub Releases.
