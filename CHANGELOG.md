@@ -146,6 +146,12 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.5] - 2026-06-02
+
+### Fixed
+- Stopped passing Apple certificate import variables into the default release workflow so macOS CI no longer fails in `security import` before ad-hoc signing
+- Kept the release pipeline on ad-hoc macOS signing by default for Apple Silicon compatibility without requiring Apple certificate secrets
+
 ## [0.2.4] - 2026-06-02
 
 ### Fixed
