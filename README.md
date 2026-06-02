@@ -242,14 +242,21 @@ To publish an update:
 2. Ensure GitHub Actions secrets are set:
    - `TAURI_SIGNING_PRIVATE_KEY`
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-3. Push a version tag:
+3. For notarized macOS releases, also set:
+   - `APPLE_CERTIFICATE`
+   - `APPLE_CERTIFICATE_PASSWORD`
+   - `APPLE_SIGNING_IDENTITY`
+   - `APPLE_ID`
+   - `APPLE_PASSWORD`
+   - `APPLE_TEAM_ID`
+4. Push a version tag:
 
 ```bash
-git tag v0.2.5
-git push origin v0.2.5
+git tag v0.2.6
+git push origin v0.2.6
 ```
 
-The release workflow builds platform installers, ad-hoc signs macOS builds by default for Apple Silicon compatibility, generates updater artifacts such as `latest.json`, and publishes them to GitHub Releases.
+The release workflow builds platform installers, notarizes macOS builds when all Apple secrets are configured, falls back to ad-hoc signing otherwise, generates updater artifacts such as `latest.json`, and publishes them to GitHub Releases.
 
 ## Contributing
 

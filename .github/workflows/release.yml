@@ -65,9 +65,32 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Configure macOS signing fallback
+      - name: Configure macOS signing mode
         if: matrix.platform == 'macos-latest'
-        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+        env:
+          APPLE_CERTIFICATE_SECRET: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD_SECRET: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE_SECRET" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD_SECRET" ] && [ -n "$APPLE_SIGNING_IDENTITY_SECRET" ] && [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
+            {
+              echo "MACOS_SIGNING_MODE=notarized"
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE_SECRET"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD_SECRET"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY_SECRET"
+              echo "APPLE_ID=$APPLE_ID_SECRET"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD_SECRET"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "MACOS_SIGNING_MODE=adhoc"
+              echo "APPLE_SIGNING_IDENTITY=-"
+            } >> "$GITHUB_ENV"
+          fi
 
       - name: Build and auto-release NodaDB
         uses: tauri-apps/tauri-action@v0
@@ -75,10 +98,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ env.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ env.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ env.APPLE_ID }}
+          APPLE_PASSWORD: ${{ env.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "NodaDB ${{ github.ref_name }}"
           releaseBody: "NodaDB desktop builds for macOS, Windows, and Linux."
           releaseDraft: false
           prerelease: false
+
+      - name: Verify macOS bundle signature
+        if: matrix.platform == 'macos-latest'
+        run: |
+          APP=$(find src-tauri/target/release/bundle/macos -name 'NodaDB.app' | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Verify macOS notarization and stapling
+        if: matrix.platform == 'macos-latest' && env.MACOS_SIGNING_MODE == 'notarized'
+        run: |
+          DMG=$(find src-tauri/target/release/bundle/dmg -name '*.dmg' | head -n 1)
+          spctl -a -vvv -t install "$DMG"
+          xcrun stapler validate "$DMG"

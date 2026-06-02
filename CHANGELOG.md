@@ -146,6 +146,15 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.6] - 2026-06-02
+
+### Fixed
+- Added a safe notarized macOS release path that only enables Apple certificate import when all required Apple secrets are present
+- Prevented partial Apple secret configuration from breaking macOS CI before the fallback signing path runs
+
+### Changed
+- Added macOS release verification steps for codesign, Gatekeeper, and stapled notarization tickets when notarization is active
+
 ## [0.2.5] - 2026-06-02
 
 ### Fixed
