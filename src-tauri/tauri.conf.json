@@ -86,7 +86,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2OTAzM0NENzMxREMxMEEKUldRS3dSMXp6VE9RcG9BVEl0eDJPMHVCTVZ2cG1xN1hpTlpHSjRzMHFET3g2NEkwckpmbDdoVFYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzMDdDNzYwNzBGNkI4ODIKUldTQ3VQWndZTWNIVTJRbGpzTWt3WDFwdlBGSGlNSUluSWRBNWYzOE1nbUVlNC9LM3EvOC9OVzkK",
       "endpoints": [
         "https://github.com/ElvinEga/NodaDB/releases/latest/download/latest.json"
       ],
