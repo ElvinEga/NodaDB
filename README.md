@@ -252,11 +252,11 @@ To publish an update:
 4. Push a version tag:
 
 ```bash
-git tag v0.2.6
-git push origin v0.2.6
+git tag v0.2.7
+git push origin v0.2.7
 ```
 
-The release workflow builds platform installers, notarizes macOS builds when all Apple secrets are configured, falls back to ad-hoc signing otherwise, generates updater artifacts such as `latest.json`, and publishes them to GitHub Releases.
+The release workflow builds platform installers, notarizes macOS builds when all Apple secrets are configured, falls back to ad-hoc signing otherwise, verifies the app is not linked against Homebrew dylibs, generates updater artifacts such as `latest.json`, and publishes them to GitHub Releases.
 
 ## Contributing
 

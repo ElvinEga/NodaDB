@@ -117,6 +117,16 @@ jobs:
           APP=$(find src-tauri/target/release/bundle/macos -name 'NodaDB.app' | head -n 1)
           codesign --verify --deep --strict --verbose=2 "$APP"
 
+      - name: Fail on Homebrew dylib links
+        if: matrix.platform == 'macos-latest'
+        run: |
+          APP_BIN="src-tauri/target/release/bundle/macos/NodaDB.app/Contents/MacOS/nodadb"
+          otool -L "$APP_BIN"
+          if otool -L "$APP_BIN" | grep -E '/opt/homebrew|/usr/local/opt'; then
+            echo 'Error: app links to Homebrew libraries.'
+            exit 1
+          fi
+
       - name: Verify macOS notarization and stapling
         if: matrix.platform == 'macos-latest' && env.MACOS_SIGNING_MODE == 'notarized'
         run: |

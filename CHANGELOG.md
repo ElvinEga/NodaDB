@@ -146,6 +146,12 @@ All notable changes to NodaDB will be documented in this file.
 - Further connection management improvements
 - Performance optimizations
 
+## [0.2.7] - 2026-06-02
+
+### Fixed
+- Statically vendored OpenSSL for the SSH stack so the macOS app no longer loads `/opt/homebrew/.../libssl.3.dylib` or `/opt/homebrew/.../libcrypto.3.dylib` at launch
+- Added a CI guard that fails macOS releases if the app binary links against Homebrew-managed libraries
+
 ## [0.2.6] - 2026-06-02
 
 ### Fixed
