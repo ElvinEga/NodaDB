@@ -10,6 +10,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TableColumn } from '@/types';
 import { resolveColumnInputType } from '@/lib/db-types';
 import {
@@ -50,6 +60,8 @@ export function EditCellDialog({
   const [value, setValue] = useState('');
   const [valueMode, setValueMode] = useState<'value' | 'null' | 'default' | 'empty'>('value');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<string | null>(null);
+  const [pendingValue, setPendingValue] = useState<string | null>(null);
 
   const isBoolean = column.type_family === 'boolean';
   const isReadOnlyGenerated = (column.generated_kind ?? '') !== '';
@@ -72,33 +84,13 @@ export function EditCellDialog({
     }
   }, [open, currentValue, isBoolean]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isReadOnlyGenerated) {
-      return;
-    }
+  const executeSave = async (outgoingValue: string) => {
     setIsSubmitting(true);
 
     try {
-      const outgoingValue =
-        valueMode === 'null'
-          ? ''
-          : valueMode === 'default'
-            ? '__NODADB_USE_DEFAULT__'
-            : valueMode === 'empty'
-              ? '__NODADB_EMPTY_STRING__'
-              : value;
-
-      const confirmation =
-        typeof confirmMessage === 'function'
-          ? confirmMessage(outgoingValue)
-          : confirmMessage;
-
-      if (confirmation && !window.confirm(confirmation)) {
-        return;
-      }
-
       await onSave(outgoingValue);
+      setPendingConfirmation(null);
+      setPendingValue(null);
       onOpenChange(false);
     } catch (error) {
       // Error handling is done in parent component
@@ -106,6 +98,35 @@ export function EditCellDialog({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isReadOnlyGenerated) {
+      return;
+    }
+
+    const outgoingValue =
+      valueMode === 'null'
+        ? ''
+        : valueMode === 'default'
+          ? '__NODADB_USE_DEFAULT__'
+          : valueMode === 'empty'
+            ? '__NODADB_EMPTY_STRING__'
+            : value;
+
+    const confirmation =
+      typeof confirmMessage === 'function'
+        ? confirmMessage(outgoingValue)
+        : confirmMessage;
+
+    if (confirmation) {
+      setPendingValue(outgoingValue);
+      setPendingConfirmation(confirmation);
+      return;
+    }
+
+    await executeSave(outgoingValue);
   };
 
   const getInputType = (): string => {
@@ -135,8 +156,9 @@ export function EditCellDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-4 w-4 text-primary" />
@@ -252,7 +274,41 @@ export function EditCellDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={pendingConfirmation !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSubmitting) {
+            setPendingConfirmation(null);
+            setPendingValue(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm update</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingConfirmation}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSubmitting || pendingValue === null}
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingValue !== null) {
+                  void executeSave(pendingValue);
+                }
+              }}
+            >
+              {isSubmitting ? 'Updating...' : 'Confirm'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
