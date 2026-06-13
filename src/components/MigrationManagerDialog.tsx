@@ -54,9 +54,17 @@ function hashMigration(record: Pick<MigrationRecord, "name" | "upSql" | "downSql
 }
 
 export function MigrationManagerDialog({ open, onOpenChange, connection }: MigrationManagerDialogProps) {
-  const migrations = useMigrationStore((state) => state.getMigrationsForConnection(connection.id));
+  const allMigrations = useMigrationStore((state) => state.migrations);
   const saveMigration = useMigrationStore((state) => state.saveMigration);
   const removeMigration = useMigrationStore((state) => state.removeMigration);
+
+  const migrations = useMemo(
+    () =>
+      allMigrations
+        .filter((migration) => migration.connectionId === connection.id)
+        .sort((a, b) => a.createdAt - b.createdAt),
+    [allMigrations, connection.id],
+  );
 
   const [appliedMigrations, setAppliedMigrations] = useState<AppliedMigration[]>([]);
   const [selectedMigrationId, setSelectedMigrationId] = useState<string | null>(null);
