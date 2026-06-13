@@ -31,6 +31,7 @@ interface EditCellDialogProps {
   title?: string;
   description?: ReactNode;
   submitLabel?: string;
+  confirmMessage?: string | ((newValue: string) => string);
 }
 
 export function EditCellDialog({
@@ -44,6 +45,7 @@ export function EditCellDialog({
   title = 'Edit Cell Value',
   description,
   submitLabel = 'Save Changes',
+  confirmMessage,
 }: EditCellDialogProps) {
   const [value, setValue] = useState('');
   const [valueMode, setValueMode] = useState<'value' | 'null' | 'default' | 'empty'>('value');
@@ -86,6 +88,16 @@ export function EditCellDialog({
             : valueMode === 'empty'
               ? '__NODADB_EMPTY_STRING__'
               : value;
+
+      const confirmation =
+        typeof confirmMessage === 'function'
+          ? confirmMessage(outgoingValue)
+          : confirmMessage;
+
+      if (confirmation && !window.confirm(confirmation)) {
+        return;
+      }
+
       await onSave(outgoingValue);
       onOpenChange(false);
     } catch (error) {
