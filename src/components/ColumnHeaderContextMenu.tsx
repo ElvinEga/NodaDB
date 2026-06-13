@@ -8,6 +8,8 @@ import {
   BarChart3,
   FileJson,
   FileSpreadsheet,
+  Edit,
+  Eraser,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -36,6 +38,9 @@ interface ColumnHeaderContextMenuProps {
   onClearSort: () => void;
   onHide: () => void;
   onShowStats: () => void;
+  onSetColumnValue?: () => void;
+  onSetColumnNull?: () => void;
+  disableColumnEdit?: boolean;
   children: React.ReactNode;
 }
 
@@ -47,6 +52,9 @@ export function ColumnHeaderContextMenu({
   onClearSort,
   onHide,
   onShowStats,
+  onSetColumnValue,
+  onSetColumnNull,
+  disableColumnEdit = false,
   children,
 }: ColumnHeaderContextMenuProps) {
   return (
@@ -103,6 +111,30 @@ export function ColumnHeaderContextMenu({
         </ContextMenuItem>
 
         <ContextMenuSeparator />
+
+        {(onSetColumnValue || onSetColumnNull) && (
+          <>
+            {onSetColumnValue && (
+              <ContextMenuItem
+                onClick={onSetColumnValue}
+                disabled={disableColumnEdit}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Set Column Value
+              </ContextMenuItem>
+            )}
+            {onSetColumnNull && (
+              <ContextMenuItem
+                onClick={onSetColumnNull}
+                disabled={disableColumnEdit}
+              >
+                <Eraser className="mr-2 h-4 w-4" />
+                Set Column NULL
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )}
 
         <ContextMenuItem onClick={onShowStats}>
           <BarChart3 className="mr-2 h-4 w-4" />
