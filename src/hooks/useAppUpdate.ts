@@ -35,6 +35,13 @@ function formatUpdateError(error: unknown) {
   return "Unable to complete the update request.";
 }
 
+function isMissingPlatformUpdateError(message: string) {
+  return (
+    message.includes("None of the fallback platforms") &&
+    message.includes("were found in the response `platforms` object")
+  );
+}
+
 export function useAppUpdate() {
   const [appName, setAppName] = useState("NodaDB");
   const [currentVersion, setCurrentVersion] = useState("Unknown");
@@ -136,6 +143,21 @@ export function useAppUpdate() {
       } catch (error) {
         console.error("Failed to check for updates:", error);
         const message = formatUpdateError(error);
+
+        if (isMissingPlatformUpdateError(message)) {
+          setNextUpdate(null);
+          setErrorMessage(null);
+          setStatus("up-to-date");
+
+          if (!silent) {
+            toast.info(
+              "No macOS update artifact is published for this release yet.",
+            );
+          }
+
+          return null;
+        }
+
         setErrorMessage(message);
         setStatus("error");
 
