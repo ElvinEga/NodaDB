@@ -218,6 +218,13 @@ export function TanStackTableViewer({
     return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
   };
 
+  const describePendingValue = (value: string) => {
+    if (value === "__NODADB_USE_DEFAULT__") return "DEFAULT";
+    if (value === "__NODADB_EMPTY_STRING__") return "empty string";
+    if (value === "") return "NULL";
+    return value;
+  };
+
   const formatSqlLiteral = (value: unknown) => {
     if (value === "__NODADB_USE_DEFAULT__") return "DEFAULT";
     if (value === "__NODADB_EMPTY_STRING__") return "''";
@@ -2008,6 +2015,9 @@ Sum: ${stats.sum}`
             column={editingCell.column}
             currentValue={editingCell.currentValue}
             onSave={handleSaveEdit}
+            confirmMessage={(newValue) =>
+              `Update ${editingCell.columnName} for this cell to ${describePendingValue(newValue)}?`
+            }
           />
         )}
 
@@ -2025,6 +2035,9 @@ Sum: ${stats.sum}`
             column={columnEditContext.column}
             currentValue={columnEditContext.currentValue}
             onSave={handleSaveColumnEdit}
+            confirmMessage={(newValue) =>
+              `Update column "${columnEditContext.column.name}" for ${columnEditContext.scopeLabel} to ${describePendingValue(newValue)}?`
+            }
             title="Edit Column Value"
             description={
               <>
