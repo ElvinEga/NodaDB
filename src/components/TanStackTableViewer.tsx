@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -34,6 +34,16 @@ import {
   Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -185,6 +195,14 @@ export function TanStackTableViewer({
     columnName: string;
     value: any;
   } | null>(null);
+  const [pendingAlert, setPendingAlert] = useState<{
+    title: string;
+    description: ReactNode;
+    actionLabel: string;
+    tone?: "default" | "destructive";
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [isAlertProcessing, setIsAlertProcessing] = useState(false);
 
   // Undo/Redo store
   const tableKey = `${connection.id}-${table.name}`;
@@ -223,6 +241,28 @@ export function TanStackTableViewer({
     if (value === "__NODADB_EMPTY_STRING__") return "empty string";
     if (value === "") return "NULL";
     return value;
+  };
+
+  const openAlert = (config: {
+    title: string;
+    description: ReactNode;
+    actionLabel: string;
+    tone?: "default" | "destructive";
+    onConfirm: () => Promise<void>;
+  }) => {
+    setPendingAlert(config);
+  };
+
+  const executePendingAlert = async () => {
+    if (!pendingAlert) return;
+
+    setIsAlertProcessing(true);
+    try {
+      await pendingAlert.onConfirm();
+      setPendingAlert(null);
+    } finally {
+      setIsAlertProcessing(false);
+    }
   };
 
   const formatSqlLiteral = (value: unknown) => {
@@ -543,50 +583,60 @@ export function TanStackTableViewer({
       connection.db_type,
     );
 
-    if (!confirm(`Delete this row?\n\n${deleteSql}`)) {
-      return;
-    }
+    openAlert({
+      title: "Confirm row delete",
+      description: (
+        <>
+          <span>Delete this row? This action can be undone from history.</span>
+          <span className="mt-2 block break-all font-mono text-xs text-muted-foreground">
+            {deleteSql}
+          </span>
+        </>
+      ),
+      actionLabel: "Delete row",
+      tone: "destructive",
+      onConfirm: async () => {
+        try {
+          // Generate INSERT SQL for undo
+          const columns = tableColumns.map((col) => col.name);
+          const values = columns.map((col) => {
+            const value = row[col];
+            if (value === null) return "NULL";
+            if (typeof value === "string")
+              return `'${value.replace(/'/g, "''")}'`;
+            return value;
+          });
+          const insertSql = `INSERT INTO ${table.name} (${columns.join(", ")}) VALUES (${values.join(", ")})`;
 
-    try {
-      // Generate INSERT SQL for undo
-      const columns = tableColumns.map((col) => col.name);
-      const values = columns.map((col) => {
-        const value = row[col];
-        if (value === null) return "NULL";
-        if (typeof value === "string") return `'${value.replace(/'/g, "''")}'`;
-        return value;
-      });
-      const insertSql = `INSERT INTO ${table.name} (${columns.join(
-        ", ",
-      )}) VALUES (${values.join(", ")})`;
+          await invoke("execute_query", {
+            connectionId: connection.id,
+            query: deleteSql,
+          });
 
-      await invoke("execute_query", {
-        connectionId: connection.id,
-        query: deleteSql,
-      });
+          addAction(tableKey, {
+            id: `delete-${Date.now()}`,
+            type: "delete",
+            timestamp: new Date(),
+            tableName: tableRef,
+            connectionId: connection.id,
+            dbType: connection.db_type,
+            data: {
+              rows: [row],
+              primaryKeyColumn: primaryKeyColumn.name,
+              primaryKeyValues: [pkValue],
+            },
+            undoSql: insertSql,
+            redoSql: deleteSql,
+          });
 
-      // Add to undo/redo history
-      addAction(tableKey, {
-        id: `delete-${Date.now()}`,
-        type: "delete",
-        timestamp: new Date(),
-        tableName: tableRef,
-        connectionId: connection.id,
-        dbType: connection.db_type,
-        data: {
-          rows: [row],
-          primaryKeyColumn: primaryKeyColumn.name,
-          primaryKeyValues: [pkValue],
-        },
-        undoSql: insertSql,
-        redoSql: deleteSql,
-      });
-
-      toast.success("Row deleted");
-      loadData();
-    } catch (error) {
-      toast.error(`Failed to delete: ${error}`);
-    }
+          toast.success("Row deleted");
+          loadData();
+        } catch (error) {
+          toast.error(`Failed to delete: ${error}`);
+          throw error;
+        }
+      },
+    });
   };
 
   const handleFilterByValue = (columnName: string, value: unknown) => {
@@ -1109,92 +1159,95 @@ Sum: ${stats.sum}`
       return;
     }
 
-    if (!confirm(`Set column "${column.name}" to NULL for ${scopeLabel}?`)) {
-      return;
-    }
-
-    try {
-      await applyColumnUpdate(column, "");
-    } catch (error) {
-      toast.error(`Failed to set column NULL: ${error}`);
-      console.error("Set column NULL error:", error);
-    }
+    openAlert({
+      title: "Confirm column update",
+      description: `Set column "${column.name}" to NULL for ${scopeLabel}?`,
+      actionLabel: "Set NULL",
+      onConfirm: async () => {
+        try {
+          await applyColumnUpdate(column, "");
+        } catch (error) {
+          toast.error(`Failed to set column NULL: ${error}`);
+          console.error("Set column NULL error:", error);
+          throw error;
+        }
+      },
+    });
   };
 
   const handleDeleteRows = async () => {
     if (selectedCount === 0) return;
 
-    if (!confirm(`Delete ${selectedCount} selected row(s)?`)) return;
+    openAlert({
+      title: "Confirm selected rows delete",
+      description: `Delete ${selectedCount} selected row${selectedCount === 1 ? "" : "s"}? This action can be undone from history.`,
+      actionLabel: "Delete rows",
+      tone: "destructive",
+      onConfirm: async () => {
+        try {
+          const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
 
-    try {
-      const primaryKeyColumn = tableColumns.find((col) => col.is_primary_key);
+          if (!primaryKeyColumn) {
+            toast.error("No primary key found for delete");
+            return;
+          }
 
-      if (!primaryKeyColumn) {
-        toast.error("No primary key found for delete");
-        return;
-      }
+          const primaryKeyValues = selectedRows.map((row) => {
+            const pkValue = row.original[primaryKeyColumn.name];
+            return typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
+          });
 
-      // Build WHERE clause with all selected primary key values
-      const primaryKeyValues = selectedRows.map((row) => {
-        const pkValue = row.original[primaryKeyColumn.name];
-        return typeof pkValue === "string" ? `'${pkValue}'` : pkValue;
-      });
+          const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(", ")})`;
+          const deleteSql = `DELETE FROM ${table.name} WHERE ${whereClause}`;
 
-      const whereClause = `${primaryKeyColumn.name} IN (${primaryKeyValues.join(
-        ", ",
-      )})`;
-      const deleteSql = `DELETE FROM ${table.name} WHERE ${whereClause}`;
+          const insertStatements = selectedRows.map((row) => {
+            const columns = tableColumns.map((col) => col.name);
+            const values = columns.map((col) => {
+              const value = row.original[col];
+              if (value === null) return "NULL";
+              if (typeof value === "string")
+                return `'${value.replace(/'/g, "''")}'`;
+              return value;
+            });
+            return `INSERT INTO ${table.name} (${columns.join(", ")}) VALUES (${values.join(", ")})`;
+          });
+          const undoSql = insertStatements.join("; ");
 
-      // Generate INSERT SQL for undo (multiple rows)
-      const insertStatements = selectedRows.map((row) => {
-        const columns = tableColumns.map((col) => col.name);
-        const values = columns.map((col) => {
-          const value = row.original[col];
-          if (value === null) return "NULL";
-          if (typeof value === "string")
-            return `'${value.replace(/'/g, "''")}'`;
-          return value;
-        });
-        return `INSERT INTO ${table.name} (${columns.join(
-          ", ",
-        )}) VALUES (${values.join(", ")})`;
-      });
-      const undoSql = insertStatements.join("; ");
+          await invoke("delete_rows", {
+            connectionId: connection.id,
+            tableName: tableRef,
+            whereClause: whereClause,
+            dbType: connection.db_type,
+          });
 
-      await invoke("delete_rows", {
-        connectionId: connection.id,
-        tableName: tableRef,
-        whereClause: whereClause,
-        dbType: connection.db_type,
-      });
+          addAction(tableKey, {
+            id: `batch-delete-${Date.now()}`,
+            type: "batch_delete",
+            timestamp: new Date(),
+            tableName: tableRef,
+            connectionId: connection.id,
+            dbType: connection.db_type,
+            data: {
+              rows: selectedRows.map((r) => r.original),
+              primaryKeyColumn: primaryKeyColumn.name,
+              primaryKeyValues: primaryKeyValues.map((v) =>
+                typeof v === "string" ? v.replace(/'/g, "") : v,
+              ),
+            },
+            undoSql,
+            redoSql: deleteSql,
+          });
 
-      // Add to undo/redo history
-      addAction(tableKey, {
-        id: `batch-delete-${Date.now()}`,
-        type: "batch_delete",
-        timestamp: new Date(),
-        tableName: tableRef,
-        connectionId: connection.id,
-        dbType: connection.db_type,
-        data: {
-          rows: selectedRows.map((r) => r.original),
-          primaryKeyColumn: primaryKeyColumn.name,
-          primaryKeyValues: primaryKeyValues.map((v) =>
-            typeof v === "string" ? v.replace(/'/g, "") : v,
-          ),
-        },
-        undoSql,
-        redoSql: deleteSql,
-      });
-
-      // Reload data
-      await loadData();
-      setRowSelection({});
-      toast.success(`Deleted ${selectedCount} row(s)`);
-    } catch (error) {
-      toast.error(`Failed to delete rows: ${error}`);
-      console.error("Delete error:", error);
-    }
+          await loadData();
+          setRowSelection({});
+          toast.success(`Deleted ${selectedCount} row(s)`);
+        } catch (error) {
+          toast.error(`Failed to delete rows: ${error}`);
+          console.error("Delete error:", error);
+          throw error;
+        }
+      },
+    });
   };
 
   // Batch operations handlers
@@ -2059,6 +2112,37 @@ Sum: ${stats.sum}`
             }`}
           />
         )}
+        <AlertDialog
+          open={pendingAlert !== null}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen && !isAlertProcessing) {
+              setPendingAlert(null);
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{pendingAlert?.title}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingAlert?.description}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isAlertProcessing}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isAlertProcessing || !pendingAlert}
+                className={pendingAlert?.tone === "destructive" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void executePendingAlert();
+                }}
+              >
+                {isAlertProcessing ? "Processing..." : pendingAlert?.actionLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </div>
 
       {/* Transaction History Panel */}
