@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Edit2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +28,9 @@ interface EditCellDialogProps {
   column: TableColumn;
   currentValue: any;
   onSave: (newValue: string) => Promise<void>;
+  title?: string;
+  description?: ReactNode;
+  submitLabel?: string;
 }
 
 export function EditCellDialog({
@@ -38,6 +41,9 @@ export function EditCellDialog({
   column,
   currentValue,
   onSave,
+  title = 'Edit Cell Value',
+  description,
+  submitLabel = 'Save Changes',
 }: EditCellDialogProps) {
   const [value, setValue] = useState('');
   const [valueMode, setValueMode] = useState<'value' | 'null' | 'default' | 'empty'>('value');
@@ -122,12 +128,16 @@ export function EditCellDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-4 w-4 text-primary" />
-            Edit Cell Value
+            {title}
           </DialogTitle>
           <DialogDescription>
-            Editing column: <span className="font-mono font-semibold text-foreground">{columnName}</span>
-            {' '}
-            <span className="text-xs text-muted-foreground">({columnType})</span>
+            {description ?? (
+              <>
+                Editing column: <span className="font-mono font-semibold text-foreground">{columnName}</span>
+                {' '}
+                <span className="text-xs text-muted-foreground">({columnType})</span>
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -225,7 +235,7 @@ export function EditCellDialog({
                   Saving...
                 </>
               ) : (
-                'Save Changes'
+                submitLabel
               )}
             </Button>
           </DialogFooter>
