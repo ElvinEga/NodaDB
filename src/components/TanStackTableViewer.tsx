@@ -165,6 +165,13 @@ export function TanStackTableViewer({
     currentValue: any;
   } | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [columnEditContext, setColumnEditContext] = useState<{
+    column: TableColumn;
+    rowCount: number;
+    scopeLabel: string;
+    currentValue: any;
+  } | null>(null);
+  const [columnEditDialogOpen, setColumnEditDialogOpen] = useState(false);
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -188,6 +195,10 @@ export function TanStackTableViewer({
   const canRedo = useUndoRedoStore((state) => state.canRedo(tableKey));
 
   const tableRef = table.full_name ?? table.name;
+  const qualifiedTableName = useMemo(
+    () => qualifyTableName(tableRef, table.schema, connection.db_type),
+    [connection.db_type, table.schema, tableRef],
+  );
   const effectiveTableColumns = useMemo(
     () =>
       tableColumns.map((column) =>
@@ -205,6 +216,27 @@ export function TanStackTableViewer({
   );
   const getPrimaryKeyValue = (row: Record<string, any>) => {
     return primaryKeyColumn ? row[primaryKeyColumn.name] : null;
+  };
+
+  const formatSqlLiteral = (value: unknown) => {
+    if (value === "__NODADB_USE_DEFAULT__") return "DEFAULT";
+    if (value === "__NODADB_EMPTY_STRING__") return "''";
+    if (value === null || value === undefined || value === "") return "NULL";
+    if (typeof value === "string") return `'${value.replace(/'/g, "''")}'`;
+    if (typeof value === "boolean") {
+      return connection.db_type === "sqlite"
+        ? value
+          ? "1"
+          : "0"
+        : value
+          ? "TRUE"
+          : "FALSE";
+    }
+    if (typeof value === "number") return String(value);
+    if (typeof value === "object") {
+      return `'${JSON.stringify(value).replace(/'/g, "''")}'`;
+    }
+    return `'${String(value).replace(/'/g, "''")}'`;
   };
 
   useEffect(() => {
@@ -635,6 +667,13 @@ Sum: ${stats.sum}`
               onClearSort={() => column.clearSorting()}
               onHide={() => column.toggleVisibility(false)}
               onShowStats={() => handleShowColumnStats(col.name)}
+              onSetColumnValue={() => openColumnEditDialog(col)}
+              onSetColumnNull={() => void handleSetColumnNull(col)}
+              disableColumnEdit={
+                col.is_primary_key ||
+                (col.generated_kind ?? "") !== "" ||
+                data.length === 0
+              }
             >
               <div className="flex flex-col gap-1">
                 <button
@@ -777,7 +816,15 @@ Sum: ${stats.sum}`
     });
 
     return cols;
-  }, [tableColumns]);
+  }, [
+    effectiveTableColumns,
+    data,
+    booleanSuggestions,
+    dismissedSuggestions,
+    connection.id,
+    tableRef,
+    handleShowColumnStats,
+  ]);
 
   const tableInstance = useReactTable({
     data,
@@ -811,6 +858,20 @@ Sum: ${stats.sum}`
 
   const selectedRows = tableInstance.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
+  const getColumnEditTargets = () => {
+    const targetRows =
+      selectedCount > 0
+        ? selectedRows.map((row) => row.original)
+        : tableInstance.getFilteredRowModel().rows.map((row) => row.original);
+
+    return {
+      rows: targetRows,
+      scopeLabel:
+        selectedCount > 0
+          ? `${selectedCount} selected row${selectedCount === 1 ? "" : "s"}`
+          : `${targetRows.length} filtered row${targetRows.length === 1 ? "" : "s"}`,
+    };
+  };
 
   // Virtual scrolling setup
   const { rows } = tableInstance.getRowModel();
@@ -921,6 +982,135 @@ Sum: ${stats.sum}`
       toast.error(`Failed to update cell: ${error}`);
       console.error("Update error:", error);
       throw error; // Re-throw to let dialog handle loading state
+    }
+  };
+
+  const applyColumnUpdate = async (column: TableColumn, outgoingValue: string) => {
+    if (!primaryKeyColumn) {
+      toast.error("No primary key found for update");
+      return;
+    }
+
+    const { rows, scopeLabel } = getColumnEditTargets();
+    if (rows.length === 0) {
+      toast.error("No rows available for column update");
+      return;
+    }
+
+    const parsedValue =
+      outgoingValue === "__NODADB_USE_DEFAULT__"
+        ? "__NODADB_USE_DEFAULT__"
+        : outgoingValue === "__NODADB_EMPTY_STRING__"
+          ? "__NODADB_EMPTY_STRING__"
+          : outgoingValue === ""
+            ? null
+            : coerceValueForDatabase(
+                column,
+                parseInputValue(column, outgoingValue),
+                connection.db_type,
+              );
+
+    const quotedPrimaryKey = quoteIdentifier(
+      primaryKeyColumn.name,
+      connection.db_type,
+    );
+    const quotedColumn = quoteIdentifier(column.name, connection.db_type);
+    const primaryKeyValues = rows.map((row) => row[primaryKeyColumn.name]);
+    const whereClause = `${quotedPrimaryKey} IN (${primaryKeyValues
+      .map((value) => formatSqlLiteral(value))
+      .join(", ")})`;
+    const updateSql = `UPDATE ${qualifiedTableName} SET ${quotedColumn} = ${formatSqlLiteral(parsedValue)} WHERE ${whereClause}`;
+    const oldValues = rows.map((row) => ({
+      [primaryKeyColumn.name]: row[primaryKeyColumn.name],
+      [column.name]: row[column.name],
+    }));
+    const undoSql = oldValues
+      .map((oldValue) => {
+        const pkValue = oldValue[primaryKeyColumn.name];
+        return `UPDATE ${qualifiedTableName} SET ${quotedColumn} = ${formatSqlLiteral(
+          oldValue[column.name],
+        )} WHERE ${quotedPrimaryKey} = ${formatSqlLiteral(pkValue)}`;
+      })
+      .join("; ");
+
+    await invoke("execute_query", {
+      connectionId: connection.id,
+      query: updateSql,
+    });
+
+    addAction(tableKey, {
+      id: `column-update-${Date.now()}`,
+      type: "batch_update",
+      timestamp: new Date(),
+      tableName: tableRef,
+      connectionId: connection.id,
+      dbType: connection.db_type,
+      data: {
+        oldValues,
+        columnName: column.name,
+        value: outgoingValue,
+        primaryKeyColumn: primaryKeyColumn.name,
+        primaryKeyValues,
+      },
+      undoSql,
+      redoSql: updateSql,
+    });
+
+    await loadData();
+    setRowSelection({});
+    toast.success(`Updated ${scopeLabel} for column ${column.name}`);
+  };
+
+  const openColumnEditDialog = (column: TableColumn) => {
+    const { rows, scopeLabel } = getColumnEditTargets();
+    if (rows.length === 0) {
+      toast.error("No rows available for column update");
+      return;
+    }
+
+    const values = rows.map((row) => row[column.name]);
+    const firstValue = values[0];
+    const hasSingleValue = values.every((value) => value === firstValue);
+
+    setColumnEditContext({
+      column,
+      rowCount: rows.length,
+      scopeLabel,
+      currentValue: hasSingleValue ? firstValue : null,
+    });
+    setColumnEditDialogOpen(true);
+  };
+
+  const handleSaveColumnEdit = async (newValue: string) => {
+    if (!columnEditContext) return;
+
+    try {
+      await applyColumnUpdate(columnEditContext.column, newValue);
+      setColumnEditContext(null);
+      setColumnEditDialogOpen(false);
+    } catch (error) {
+      toast.error(`Failed to update column: ${error}`);
+      console.error("Column update error:", error);
+      throw error;
+    }
+  };
+
+  const handleSetColumnNull = async (column: TableColumn) => {
+    const { rows, scopeLabel } = getColumnEditTargets();
+    if (rows.length === 0) {
+      toast.error("No rows available for column update");
+      return;
+    }
+
+    if (!confirm(`Set column "${column.name}" to NULL for ${scopeLabel}?`)) {
+      return;
+    }
+
+    try {
+      await applyColumnUpdate(column, "");
+    } catch (error) {
+      toast.error(`Failed to set column NULL: ${error}`);
+      console.error("Set column NULL error:", error);
     }
   };
 
@@ -1818,6 +2008,42 @@ Sum: ${stats.sum}`
             column={editingCell.column}
             currentValue={editingCell.currentValue}
             onSave={handleSaveEdit}
+          />
+        )}
+
+        {columnEditContext && (
+          <EditCellDialog
+            open={columnEditDialogOpen}
+            onOpenChange={(open) => {
+              setColumnEditDialogOpen(open);
+              if (!open) {
+                setColumnEditContext(null);
+              }
+            }}
+            columnName={columnEditContext.column.name}
+            columnType={columnEditContext.column.data_type}
+            column={columnEditContext.column}
+            currentValue={columnEditContext.currentValue}
+            onSave={handleSaveColumnEdit}
+            title="Edit Column Value"
+            description={
+              <>
+                Updating column:{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {columnEditContext.column.name}
+                </span>{" "}
+                for{" "}
+                <span className="font-semibold text-foreground">
+                  {columnEditContext.scopeLabel}
+                </span>{" "}
+                <span className="text-xs text-muted-foreground">
+                  ({columnEditContext.column.data_type})
+                </span>
+              </>
+            }
+            submitLabel={`Update ${columnEditContext.rowCount} Row${
+              columnEditContext.rowCount === 1 ? "" : "s"
+            }`}
           />
         )}
       </div>
