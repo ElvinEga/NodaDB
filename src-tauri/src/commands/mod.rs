@@ -1,7 +1,7 @@
 use crate::database::ConnectionManager;
 use crate::models::{
     AppliedMigration, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType,
-    ExecutionPlan, ForeignKeyDefinition, PostgresConnectionInfo, PostgresExtension,
+    ExecutionPlan, ExportArchiveEntry, ForeignKeyDefinition, PostgresConnectionInfo, PostgresExtension,
     PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex,
 };
 use chrono::Utc;
@@ -463,4 +463,30 @@ pub async fn save_export_file(path: String, bytes: Vec<u8>) -> Result<String, St
         .map_err(|e| format!("Failed to save export file: {}", e))?;
 
     Ok(format!("Successfully saved file to {}", path))
+}
+
+#[tauri::command]
+pub async fn create_export_archive(entries: Vec<ExportArchiveEntry>) -> Result<Vec<u8>, String> {
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+
+    let cursor = Cursor::new(Vec::<u8>::new());
+    let mut archive = zip::ZipWriter::new(cursor);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+
+    for entry in entries {
+        archive
+            .start_file(entry.path, options)
+            .map_err(|e| format!("Failed to add file to archive: {}", e))?;
+        archive
+            .write_all(&entry.bytes)
+            .map_err(|e| format!("Failed to write archive entry: {}", e))?;
+    }
+
+    let cursor = archive
+        .finish()
+        .map_err(|e| format!("Failed to finalize archive: {}", e))?;
+
+    Ok(cursor.into_inner())
 }
