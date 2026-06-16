@@ -61,6 +61,7 @@ import { DatabaseTable, ConnectionConfig, TableTag, TagColor } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getTags, getTagForTable, getTablesForTag } from "@/lib/tagStorage";
+import { isExportableBaseTable } from "@/lib/databaseExport";
 
 const colorClasses: Record<TagColor, string> = {
   red: "bg-red-500",
@@ -296,12 +297,7 @@ export function DatabaseExplorer({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setExportDatabaseDialogOpen(true)}
-                  disabled={
-                    !tables.some(
-                      (table) =>
-                        (table.table_type ?? "TABLE").toUpperCase() === "TABLE",
-                    )
-                  }
+                  disabled={!tables.some(isExportableBaseTable)}
                 >
                   <Download className="mr-2 h-3.5 w-3.5" />
                   Export database
