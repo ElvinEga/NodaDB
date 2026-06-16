@@ -252,6 +252,7 @@ export function DatabaseExplorer({
               className="h-7 w-7"
               onClick={loadTables}
               disabled={isLoading}
+              title="Refresh tables"
             >
               {isLoading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -264,6 +265,7 @@ export function DatabaseExplorer({
               size="icon"
               className="h-7 w-7"
               onClick={() => setForeignKeyDialogOpen(true)}
+              title="Manage foreign keys"
             >
               <Link2 className="h-3.5 w-3.5" />
             </Button>
@@ -272,40 +274,44 @@ export function DatabaseExplorer({
               size="icon"
               className="h-7 w-7"
               onClick={() => setMigrationDialogOpen(true)}
+              title="Open migrations"
             >
               <FileCode className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setTagManagerOpen(true)}
-            >
-              <TagIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setExportDatabaseDialogOpen(true)}
-              disabled={
-                !tables.some(
-                  (table) =>
-                    (table.table_type ?? "TABLE").toUpperCase() === "TABLE",
-                )
-              }
-              title="Export database"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setCreateTableDialogOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="More actions"
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setTagManagerOpen(true)}>
+                  <TagIcon className="mr-2 h-3.5 w-3.5" />
+                  Manage tags
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setExportDatabaseDialogOpen(true)}
+                  disabled={
+                    !tables.some(
+                      (table) =>
+                        (table.table_type ?? "TABLE").toUpperCase() === "TABLE",
+                    )
+                  }
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export database
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCreateTableDialogOpen(true)}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  Create table
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         {onNewQuery && (
