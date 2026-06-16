@@ -13,6 +13,7 @@ import {
   Link2,
   Search,
   Filter,
+  Download,
   Tag as TagIcon,
   ChevronDown,
   ChevronRight,
@@ -50,6 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { CreateTableDialog } from "@/components/CreateTableDialog";
 import { ExportTableDialog } from "@/components/ExportTableDialog";
+import { ExportDatabaseDialog } from "@/components/ExportDatabaseDialog";
 import { ForeignKeyManagerDialog } from "@/components/ForeignKeyManagerDialog";
 import { MigrationManagerDialog } from "@/components/MigrationManagerDialog";
 import { TagManager } from "@/components/TagManager";
@@ -58,11 +60,7 @@ import { TableRow } from "@/components/TableRow";
 import { DatabaseTable, ConnectionConfig, TableTag, TagColor } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  getTags,
-  getTagForTable,
-  getTablesForTag,
-} from "@/lib/tagStorage";
+import { getTags, getTagForTable, getTablesForTag } from "@/lib/tagStorage";
 
 const colorClasses: Record<TagColor, string> = {
   red: "bg-red-500",
@@ -106,8 +104,10 @@ export function DatabaseExplorer({
   const [isLoading, setIsLoading] = useState(false);
   const [createTableDialogOpen, setCreateTableDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportDatabaseDialogOpen, setExportDatabaseDialogOpen] =
+    useState(false);
   const [tableToExport, setTableToExport] = useState<DatabaseTable | null>(
-    null
+    null,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "table" | "view">("all");
@@ -149,7 +149,7 @@ export function DatabaseExplorer({
   const handleDropTable = async (tableName: string) => {
     if (
       !confirm(
-        `Are you sure you want to drop table "${tableName}"?\n\nThis action cannot be undone!`
+        `Are you sure you want to drop table "${tableName}"?\n\nThis action cannot be undone!`,
       )
     ) {
       return;
@@ -287,6 +287,21 @@ export function DatabaseExplorer({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
+              onClick={() => setExportDatabaseDialogOpen(true)}
+              disabled={
+                !tables.some(
+                  (table) =>
+                    (table.table_type ?? "TABLE").toUpperCase() === "TABLE",
+                )
+              }
+              title="Export database"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => setCreateTableDialogOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -388,7 +403,9 @@ export function DatabaseExplorer({
                       ) : (
                         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      <div className={`w-2.5 h-2.5 rounded-full ${colorClasses[tag.color]}`} />
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full ${colorClasses[tag.color]}`}
+                      />
                       <span className="text-xs font-semibold text-muted-foreground flex-1 text-left">
                         {tag.name}
                       </span>
@@ -439,7 +456,7 @@ export function DatabaseExplorer({
                   <span className="text-xs text-muted-foreground">
                     {
                       filteredTables.filter(
-                        (table) => !getTagForTable(table.name, connection.id)
+                        (table) => !getTagForTable(table.name, connection.id),
                       ).length
                     }
                   </span>
@@ -447,7 +464,9 @@ export function DatabaseExplorer({
                 {!untaggedCollapsed && (
                   <div className="ml-4 mt-1 space-y-0.5">
                     {filteredTables
-                      .filter((table) => !getTagForTable(table.name, connection.id))
+                      .filter(
+                        (table) => !getTagForTable(table.name, connection.id),
+                      )
                       .map((table) => (
                         <TableRow
                           key={table.name}
@@ -489,13 +508,20 @@ export function DatabaseExplorer({
         />
       )}
 
+      <ExportDatabaseDialog
+        open={exportDatabaseDialogOpen}
+        onOpenChange={setExportDatabaseDialogOpen}
+        connection={connection}
+        tables={tables}
+      />
+
       <ForeignKeyManagerDialog
         open={foreignKeyDialogOpen}
         onOpenChange={setForeignKeyDialogOpen}
         connection={connection}
         tables={tables}
         initialTableName={
-          selectedTable ? selectedTable.full_name ?? selectedTable.name : null
+          selectedTable ? (selectedTable.full_name ?? selectedTable.name) : null
         }
         onSuccess={loadTables}
       />
