@@ -122,6 +122,13 @@ pub struct AppliedMigration {
     pub checksum: Option<String>,
 }
 
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExportArchiveEntry {
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct QueryResult {
     pub columns: Vec<String>,
