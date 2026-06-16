@@ -24,7 +24,8 @@ const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 const INVALID_SHEET_CHARS = /[:\\/?*\[\]]/g;
 
 export function isExportableBaseTable(table: DatabaseTable): boolean {
-  return (table.table_type ?? 'TABLE').toUpperCase() === 'TABLE';
+  const tableType = (table.table_type ?? 'TABLE').toUpperCase();
+  return tableType === 'TABLE' || tableType === 'BASE TABLE' || tableType === 'PARTITIONED TABLE';
 }
 
 export function getDatabaseExportBaseName(name: string): string {
