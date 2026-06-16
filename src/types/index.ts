@@ -127,6 +127,18 @@ export interface QueryResult {
   rows_affected: number;
 }
 
+
+export interface DatabaseExportTableData {
+  table: DatabaseTable;
+  result: QueryResult;
+}
+
+export interface DatabaseExportData {
+  connectionName: string;
+  dbType: DatabaseType;
+  exportedAt: string;
+  tables: DatabaseExportTableData[];
+}
 export interface TableConstraint {
   constraint_name: string;
   constraint_type: string;
