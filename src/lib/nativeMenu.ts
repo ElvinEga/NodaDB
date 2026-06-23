@@ -1,18 +1,28 @@
 import { Menu, Submenu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { exit } from "@tauri-apps/plugin-process";
 import { emitOpenAboutEvent } from "@/lib/appEvents";
 
 export async function setupNativeMenu(): Promise<void> {
-  // About submenu for macOS
+  // App submenu for macOS
   const aboutSubmenu = await Submenu.new({
-    text: "About",
+    text: "NodaDB",
     items: [
       await MenuItem.new({
         id: "about",
         text: "About NodaDB",
         action: async () => {
           emitOpenAboutEvent();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator", text: "" }),
+      await MenuItem.new({
+        id: "quit-nodadb",
+        text: "Quit NodaDB",
+        accelerator: "Cmd+Q",
+        action: async () => {
+          await exit(0);
         },
       }),
     ],
