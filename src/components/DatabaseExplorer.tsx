@@ -302,7 +302,9 @@ export function DatabaseExplorer({
                   <Download className="mr-2 h-3.5 w-3.5" />
                   Export database
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCreateTableDialogOpen(true)}>
+                <DropdownMenuItem
+                  onClick={() => setCreateTableDialogOpen(true)}
+                >
                   <Plus className="mr-2 h-3.5 w-3.5" />
                   Create table
                 </DropdownMenuItem>

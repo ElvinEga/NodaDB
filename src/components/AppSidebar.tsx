@@ -26,7 +26,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
-      <SidebarHeader>
+      <SidebarHeader data-tauri-drag-region>
         <div className="flex items-center gap-4"></div>
       </SidebarHeader>
 
