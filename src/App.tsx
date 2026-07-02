@@ -43,7 +43,6 @@ import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { OptimizedTableViewer } from "@/components/OptimizedTableViewer";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
