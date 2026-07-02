@@ -1,14 +1,11 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Table,
   Database,
   Loader2,
   RefreshCw,
   Plus,
   MoreVertical,
-  Trash2,
-  Edit,
   FileCode,
   Link2,
   Search,
