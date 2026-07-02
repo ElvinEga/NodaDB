@@ -8,7 +8,6 @@ import {
   History,
   Network,
   Shapes,
-  LogOut,
   Trash2,
   MoreVertical,
   Pencil,
