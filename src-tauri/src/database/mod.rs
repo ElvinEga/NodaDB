@@ -6,6 +6,7 @@ use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_t
 use anyhow::{anyhow, Result};
 use base64::Engine;
 use sqlx::{Row, TypeInfo, Column};
+use sqlx::types::BigDecimal;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
@@ -18,8 +19,36 @@ pub enum DatabasePool {
     MySql(sqlx::MySqlPool),
 }
 
+macro_rules! decimal_json_value {
+    (postgres, $row:expr, $idx:expr) => {
+        $row.try_get::<Option<BigDecimal>, _>($idx)
+            .map(|v| {
+                v.map(|decimal| serde_json::Value::String(decimal.to_string()))
+                    .unwrap_or(serde_json::Value::Null)
+            })
+            .or_else(|_| {
+                $row.try_get::<Option<f64>, _>($idx).map(|v| {
+                    v.map(|n| serde_json::json!(n))
+                        .unwrap_or(serde_json::Value::Null)
+                })
+            })
+            .unwrap_or(serde_json::Value::Null)
+    };
+    (common, $row:expr, $idx:expr) => {
+        $row.try_get::<Option<String>, _>($idx)
+            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
+            .or_else(|_| {
+                $row.try_get::<Option<f64>, _>($idx).map(|v| {
+                    v.map(|n| serde_json::json!(n))
+                        .unwrap_or(serde_json::Value::Null)
+                })
+            })
+            .unwrap_or(serde_json::Value::Null)
+    };
+}
+
 macro_rules! process_rows {
-    ($rows:expr) => {{
+    ($rows:expr, $decimal_mode:ident) => {{
         if $rows.is_empty() {
             return Ok(QueryResult {
                 columns: vec![],
@@ -57,16 +86,7 @@ macro_rules! process_rows {
                             .try_get::<Option<f64>, _>(idx)
                             .map(|v| v.map(|n| serde_json::json!(n)).unwrap_or(serde_json::Value::Null))
                             .unwrap_or(serde_json::Value::Null),
-                        "NUMERIC" | "DECIMAL" | "MONEY" => row
-                            .try_get::<Option<String>, _>(idx)
-                            .map(|v| v.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null))
-                            .or_else(|_| {
-                                row.try_get::<Option<f64>, _>(idx).map(|v| {
-                                    v.map(|n| serde_json::json!(n))
-                                        .unwrap_or(serde_json::Value::Null)
-                                })
-                            })
-                            .unwrap_or(serde_json::Value::Null),
+                        "NUMERIC" | "DECIMAL" | "MONEY" => decimal_json_value!($decimal_mode, row, idx),
                         "BOOLEAN" | "BOOL" => row
                             .try_get::<Option<bool>, _>(idx)
                             .map(|v| v.map(serde_json::Value::Bool).unwrap_or(serde_json::Value::Null))
@@ -983,21 +1003,21 @@ impl ConnectionManager {
                     .fetch_all(pool)
                     .await
                     .map_err(Self::format_sqlx_error)?;
-                Ok(process_rows!(rows))
+                Ok(process_rows!(rows, common))
             }
             DatabasePool::Postgres(pool) => {
                 let rows = sqlx::query(query)
                     .fetch_all(pool)
                     .await
                     .map_err(Self::format_sqlx_error)?;
-                Ok(process_rows!(rows))
+                Ok(process_rows!(rows, postgres))
             }
             DatabasePool::MySql(pool) => {
                 let rows = sqlx::query(query)
                     .fetch_all(pool)
                     .await
                     .map_err(Self::format_sqlx_error)?;
-                Ok(process_rows!(rows))
+                Ok(process_rows!(rows, common))
             }
         }
     }
