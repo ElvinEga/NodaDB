@@ -478,7 +478,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         )}
 
         {/* Editor and Results */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="flex-1 flex flex-col overflow-hidden">
         {/* Editor */}
         <div className="h-64 border-b">
           <Editor
@@ -568,7 +568,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         </div>
 
         {/* Results */}
-        <div className="flex-1 overflow-hidden min-w-0">
+        <div className="flex-1 overflow-hidden">
           <Tabs defaultValue="results" className="h-full flex flex-col">
             <TabsList className="mx-4 mt-2 justify-start">
               <TabsTrigger className="!text-sm" value="results">Results</TabsTrigger>
@@ -577,7 +577,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
               <TabsTrigger className="!text-sm" value="messages">Messages</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="results" className="flex-1 overflow-hidden mt-2 min-w-0">
+            <TabsContent value="results" className="flex-1 overflow-hidden mt-2">
               {error ? (
                 <div className="p-4">
                   <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
@@ -588,7 +588,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   </div>
                 </div>
               ) : result ? (
-                <div className="h-full flex flex-col min-w-0">
+                <div className="h-full flex flex-col">
                   <div className="px-4 py-2 text-sm border-b flex items-center justify-between">
                     <span className="text-muted-foreground">
                       {result.rows.length} row{result.rows.length !== 1 ? 's' : ''} returned
