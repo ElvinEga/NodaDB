@@ -634,61 +634,78 @@ function App() {
               />
               <main className="flex-1 overflow-hidden bg-secondary/20 flex">
                 <div className="flex-1 overflow-hidden">
-                  {activeTab ? (
-                    <>
-                      {activeTab.type === "table" && activeTab.table ? (
-                        activeTab.columns === undefined ? (
-                          <TableSkeleton />
+                  {/* Render all tabs but only show the active one via CSS.
+                      Query tabs are kept mounted to preserve their state (query text,
+                      results, execution history). Table/schema tabs unmount normally
+                      since they always reload fresh data. */}
+                  {tabs.map((tab) => {
+                    const isActive = tab.id === activeTabId;
+                    return (
+                      <div
+                        key={tab.id}
+                        className={`h-full w-full ${isActive ? "block" : "hidden"}`}
+                      >
+                        {tab.type === "table" && tab.table ? (
+                          // Only render table content when this tab is active (avoids
+                          // fetching data for background table tabs unnecessarily).
+                          isActive ? (
+                            tab.columns === undefined ? (
+                              <TableSkeleton />
+                            ) : (
+                              <TanStackTableViewer
+                                connection={activeConnection}
+                                table={tab.table}
+                                columns={tab.columns}
+                                onRefresh={async () => {
+                                  try {
+                                    const columns = await invoke<TableColumn[]>(
+                                      "get_table_structure",
+                                      {
+                                        connectionId: activeConnection.id,
+                                        tableName: tab.table!.name,
+                                        dbType: activeConnection.db_type,
+                                      },
+                                    );
+                                    setTabs(
+                                      tabs.map((t) =>
+                                        t.id === tab.id
+                                          ? { ...t, columns }
+                                          : t,
+                                      ),
+                                    );
+                                  } catch (error) {
+                                    console.error(
+                                      "Failed to reload columns:",
+                                      error,
+                                    );
+                                  }
+                                }}
+                              />
+                            )
+                          ) : null
+                        ) : tab.type === "query-builder" ? (
+                          isActive ? (
+                            <VisualQueryBuilder connection={activeConnection} />
+                          ) : null
+                        ) : tab.type === "schema" ? (
+                          isActive ? (
+                            <SchemaDesigner connection={activeConnection} />
+                          ) : null
                         ) : (
-                          // <OptimizedTableViewer
-                          //   connection={activeConnection}
-                          //   table={activeTab.table}
-                          // />
-                          <TanStackTableViewer
-                            connection={activeConnection}
-                            table={activeTab.table}
-                            columns={activeTab.columns}
-                            onRefresh={async () => {
-                              // Reload columns
-                              try {
-                                const columns = await invoke<TableColumn[]>(
-                                  "get_table_structure",
-                                  {
-                                    connectionId: activeConnection.id,
-                                    tableName: activeTab.table!.name,
-                                    dbType: activeConnection.db_type,
-                                  },
-                                );
-                                setTabs(
-                                  tabs.map((t) =>
-                                    t.id === activeTab.id
-                                      ? { ...t, columns }
-                                      : t,
-                                  ),
-                                );
-                              } catch (error) {
-                                console.error(
-                                  "Failed to reload columns:",
-                                  error,
-                                );
-                              }
-                            }}
-                          />
-                        )
-                      ) : activeTab.type === "query-builder" ? (
-                        <VisualQueryBuilder connection={activeConnection} />
-                      ) : activeTab.type === "schema" ? (
-                        <SchemaDesigner connection={activeConnection} />
-                      ) : (
-                        <QueryEditor connection={activeConnection} />
-                      )}
-                    </>
-                  ) : (
+                          // "query" tabs: always keep mounted to preserve state
+                          <QueryEditor connection={activeConnection} />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty state when no tabs are open */}
+                  {tabs.length === 0 && (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
                         <h2 className="text-xl font-semibold mb-2">
-                          Welcome to {activeConnection.name}
+                          Welcome to {activeConnection?.name}
                         </h2>
                         <p className="text-sm text-muted-foreground mb-6">
                           Select a table from the sidebar or open a new query
