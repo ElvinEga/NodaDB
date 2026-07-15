@@ -326,7 +326,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   return (
     <div className="h-full flex bg-background">
       {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -478,7 +478,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         )}
 
         {/* Editor and Results */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Editor */}
         <div className="h-64 border-b">
           <Editor
@@ -568,7 +568,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         </div>
 
         {/* Results */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden min-w-0">
           <Tabs defaultValue="results" className="h-full flex flex-col">
             <TabsList className="mx-4 mt-2 justify-start">
               <TabsTrigger className="!text-sm" value="results">Results</TabsTrigger>
@@ -577,7 +577,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
               <TabsTrigger className="!text-sm" value="messages">Messages</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="results" className="flex-1 overflow-hidden mt-2">
+            <TabsContent value="results" className="flex-1 overflow-hidden mt-2 min-w-0">
               {error ? (
                 <div className="p-4">
                   <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
@@ -588,7 +588,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   </div>
                 </div>
               ) : result ? (
-                <div className="h-full flex flex-col">
+                <div className="h-full flex flex-col min-w-0">
                   <div className="px-4 py-2 text-sm border-b flex items-center justify-between">
                     <span className="text-muted-foreground">
                       {result.rows.length} row{result.rows.length !== 1 ? 's' : ''} returned
@@ -651,7 +651,8 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                  <div className="flex-1 overflow-auto">
+                  <div className="flex-1 overflow-auto min-w-0">
+                    <div className="w-max min-w-full">
                     <Table>
                       <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
@@ -689,6 +690,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                   </div>
                 </div>
               ) : (
