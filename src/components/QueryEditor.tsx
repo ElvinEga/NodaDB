@@ -4,7 +4,6 @@ import Editor from '@monaco-editor/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
 import { Play, Loader2, Copy, Download, History, Activity, BarChart3, Wand2, ChevronDown, Info, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Table,
   TableBody,
@@ -63,12 +62,12 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         connectionId: connection.id,
         query: query.trim(),
       });
-      
+
       const endTime = Date.now();
       const execTime = endTime - startTime;
       setExecutionTime(execTime);
       setResult(result);
-      
+
       // Add to history
       addQueryToHistory({
         query: query.trim(),
@@ -79,13 +78,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'success',
         rowsAffected: result.rows_affected,
       });
-      
+
       toast.success(`Query executed successfully in ${execTime}ms`);
     } catch (err) {
       const errorMsg = String(err);
       const execTime = Date.now() - startTime;
       setError(errorMsg);
-      
+
       // Add failed query to history
       addQueryToHistory({
         query: query.trim(),
@@ -96,7 +95,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'error',
         error: errorMsg,
       });
-      
+
       toast.error('Query failed');
       console.error('Query execution error:', err);
     } finally {
@@ -120,7 +119,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         analyze: true,
         dbType: connection.db_type,
       });
-      
+
       setExecutionPlan(plan);
       toast.success('Query analyzed successfully');
     } catch (err) {
@@ -153,9 +152,9 @@ export function QueryEditor({ connection }: QueryEditorProps) {
 
     const selection = editor.getSelection();
     const selectedText = selection ? editor.getModel()?.getValueInRange(selection) : '';
-    
+
     const queryToExecute = selectedText?.trim() || query.trim();
-    
+
     if (!queryToExecute) {
       toast.error('Please enter a query');
       return;
@@ -170,12 +169,12 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         connectionId: connection.id,
         query: queryToExecute,
       });
-      
+
       const endTime = Date.now();
       const execTime = endTime - startTime;
       setExecutionTime(execTime);
       setResult(result);
-      
+
       addQueryToHistory({
         query: queryToExecute,
         connectionId: connection.id,
@@ -185,13 +184,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'success',
         rowsAffected: result.rows_affected,
       });
-      
+
       toast.success(`Query executed successfully in ${execTime}ms`);
     } catch (err) {
       const errorMsg = String(err);
       const execTime = Date.now() - startTime;
       setError(errorMsg);
-      
+
       addQueryToHistory({
         query: queryToExecute,
         connectionId: connection.id,
@@ -201,7 +200,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'error',
         error: errorMsg,
       });
-      
+
       toast.error('Query failed');
       console.error('Query execution error:', err);
     } finally {
@@ -280,28 +279,28 @@ export function QueryEditor({ connection }: QueryEditorProps) {
 
   const handleCopyResults = () => {
     if (!result) return;
-    
+
     const csv = [
       result.columns.join(','),
-      ...result.rows.map(row => 
+      ...result.rows.map(row =>
         result.columns.map(col => JSON.stringify(row[col])).join(',')
       ),
     ].join('\n');
-    
+
     navigator.clipboard.writeText(csv);
     toast.success('Results copied to clipboard as CSV');
   };
 
   const handleDownloadResults = () => {
     if (!result) return;
-    
+
     const csv = [
       result.columns.join(','),
-      ...result.rows.map(row => 
+      ...result.rows.map(row =>
         result.columns.map(col => JSON.stringify(row[col])).join(',')
       ),
     ].join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -499,7 +498,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             }}
             onMount={(editor, monaco) => {
               editorRef.current = editor;
-              
+
               // Ctrl+Enter - Execute Query
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
@@ -507,7 +506,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleExecuteQuery();
                 }
               );
-              
+
               // Ctrl+Shift+Enter - Execute Selection
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
@@ -515,7 +514,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleExecuteSelection();
                 }
               );
-              
+
               // Shift+Alt+F - Format SQL
               editor.addCommand(
                 monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
@@ -523,7 +522,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleFormatSQL();
                 }
               );
-              
+
               // Ctrl+/ - Toggle Comment
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash,
@@ -531,7 +530,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleToggleComment();
                 }
               );
-              
+
               // SQL Autocomplete
               monaco.languages.registerCompletionItemProvider('sql', {
                 provideCompletionItems: (model, position) => {
@@ -571,11 +570,11 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         {/* Results */}
         <div className="flex-1 overflow-hidden">
           <Tabs defaultValue="results" className="h-full flex flex-col">
-            <TabsList className="mx-4 mt-2">
-              <TabsTrigger value="results">Results</TabsTrigger>
-              <TabsTrigger value="chart" disabled={!result || result.rows.length === 0}>Chart</TabsTrigger>
-              <TabsTrigger value="plan" disabled={!executionPlan}>Execution Plan</TabsTrigger>
-              <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsList className="mx-4 mt-2 justify-start">
+              <TabsTrigger className="!text-sm" value="results">Results</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="chart" disabled={!result || result.rows.length === 0}>Chart</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="plan" disabled={!executionPlan}>Execution Plan</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="messages">Messages</TabsTrigger>
             </TabsList>
 
             <TabsContent value="results" className="flex-1 overflow-hidden mt-2">
@@ -652,13 +651,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                  <ScrollArea className="flex-1">
+                  <div className="flex-1 overflow-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead className="w-12 text-center shrink-0">#</TableHead>
                           {result.columns.map((column) => (
-                            <TableHead key={column}>{column}</TableHead>
+                            <TableHead key={column} className="whitespace-nowrap">{column}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -674,13 +673,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                           </TableRow>
                         ) : (
                           result.rows.map((row, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="text-center text-muted-foreground font-mono text-xs">
+                            <TableRow key={index} className="hover:bg-muted/40 transition-colors">
+                              <TableCell className="text-center text-muted-foreground font-mono text-xs shrink-0">
                                 {index + 1}
                               </TableCell>
                               {result.columns.map((column) => (
                                 <TableCell key={column} className="font-mono text-sm">
-                                  <div className="max-w-xs truncate">
+                                  <div className="max-w-xs truncate" title={formatValue(row[column])}>
                                     {formatValue(row[column])}
                                   </div>
                                 </TableCell>
@@ -690,7 +689,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                         )}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                  </div>
                 </div>
               ) : (
                 <div className="h-full flex items-center justify-center">
