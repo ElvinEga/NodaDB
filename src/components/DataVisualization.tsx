@@ -250,59 +250,60 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background">
-      {/* Toolbar */}
-      <div className="shrink-0 h-11 border-b border-border bg-secondary/50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold">Data Visualization</h2>
-          {config.title && (
-            <span className="text-sm text-muted-foreground">• {config.title}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowConfig(!showConfig)}
-            className="h-7 text-xs"
-          >
-            <Settings className="h-3.5 w-3.5 mr-1.5" />
-            Config
-            {showConfig ? (
-              <ChevronUp className="h-3 w-3 ml-1" />
-            ) : (
-              <ChevronDown className="h-3 w-3 ml-1" />
-            )}
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPNG}>
-            <Image className="h-3.5 w-3.5 mr-1.5" />
-            PNG
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportData}>
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            CSV
-          </Button>
-        </div>
-      </div>
-
-      {/* Config Panel - collapsible at top */}
+    <div className="h-full flex overflow-hidden bg-background">
+      {/* Config Panel - left vertical sidebar */}
       {showConfig && (
-        <div className="shrink-0 border-b border-border bg-muted/20">
-          <ChartConfigPanel
-            queryResult={queryResult}
-            config={config}
-            onConfigChange={setConfig}
-          />
-        </div>
+        <ChartConfigPanel
+          queryResult={queryResult}
+          config={config}
+          onConfigChange={setConfig}
+        />
       )}
 
-      {/* Chart Area - constrained, scrollable if needed */}
-      <div className="flex-1 overflow-auto p-4">
-        {config.title && (
-          <h3 className="text-base font-semibold text-center mb-3">{config.title}</h3>
-        )}
-        <div ref={chartRef} className="w-full" style={{ height: 320 }}>
-          {renderChart()}
+      {/* Chart Area */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Toolbar */}
+        <div className="shrink-0 h-11 border-b border-border bg-secondary/50 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold">Data Visualization</h2>
+            {config.title && (
+              <span className="text-sm text-muted-foreground">• {config.title}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfig(!showConfig)}
+              className="h-7 text-xs"
+            >
+              <Settings className="h-3.5 w-3.5 mr-1.5" />
+              Config
+              {showConfig ? (
+                <ChevronUp className="h-3 w-3 ml-1" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPNG}>
+              <Image className="h-3.5 w-3.5 mr-1.5" />
+              PNG
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportData}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              CSV
+            </Button>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="flex-1 overflow-auto p-4">
+          {config.title && (
+            <h3 className="text-base font-semibold text-center mb-3">{config.title}</h3>
+          )}
+          <div ref={chartRef} className="w-full" style={{ height: 320 }}>
+            {renderChart()}
+          </div>
         </div>
       </div>
     </div>
