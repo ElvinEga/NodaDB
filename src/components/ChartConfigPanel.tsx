@@ -65,7 +65,7 @@ export function ChartConfigPanel({
         <div className="p-4 space-y-4">
           {/* Chart Type */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Chart Type</Label>
+            <Label className="!text-sm text-muted-foreground">Chart Type</Label>
             <Select
               value={config.chartType}
               onValueChange={(value) => updateConfig({ chartType: value as ChartType })}
@@ -87,7 +87,7 @@ export function ChartConfigPanel({
 
           {/* X Axis */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">X-Axis Column</Label>
+            <Label className="!text-sm text-muted-foreground">X-Axis Column</Label>
             <Select
               value={config.xAxis}
               onValueChange={(value) => updateConfig({ xAxis: value })}
@@ -108,7 +108,7 @@ export function ChartConfigPanel({
           {/* Y Axis - Multiple Selection */}
           {config.chartType !== 'pie' && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Y-Axis Columns</Label>
+              <Label className="!text-sm text-muted-foreground">Y-Axis Columns</Label>
               <div className="border rounded-md p-2.5 space-y-2 max-h-40 overflow-y-auto bg-background">
                 {numericColumns.length > 0 ? (
                   numericColumns.map((col) => (
@@ -121,7 +121,7 @@ export function ChartConfigPanel({
                       />
                       <label
                         htmlFor={`y-${col}`}
-                        className="text-xs font-medium leading-none cursor-pointer"
+                        className="!text-sm font-medium leading-none cursor-pointer"
                       >
                         {col}
                       </label>
@@ -137,7 +137,7 @@ export function ChartConfigPanel({
           {/* Pie Chart Value Column */}
           {config.chartType === 'pie' && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Value Column</Label>
+              <Label className="!text-sm text-muted-foreground">Value Column</Label>
               <Select
                 value={config.yAxis[0] || ''}
                 onValueChange={(value) => updateConfig({ yAxis: [value] })}
@@ -160,7 +160,7 @@ export function ChartConfigPanel({
 
           {/* Group By */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Group By</Label>
+            <Label className="!text-sm  text-muted-foreground">Group By</Label>
             <Select
               value={config.groupBy || 'none'}
               onValueChange={(value) =>
