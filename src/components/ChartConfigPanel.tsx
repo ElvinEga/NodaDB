@@ -8,7 +8,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
 import { getNumericColumns, getCategoricalColumns } from '@/lib/chartDataTransformer';
 
 interface ChartConfigPanelProps {
@@ -54,134 +56,25 @@ export function ChartConfigPanel({
   ];
 
   return (
-    <div className="w-full px-4 py-3">
-      <div className="flex flex-wrap items-start gap-4">
-        {/* Chart Type */}
-        <div className="flex flex-col gap-1 min-w-[140px]">
-          <Label className="text-xs text-muted-foreground">Chart Type</Label>
-          <Select
-            value={config.chartType}
-            onValueChange={(value) => updateConfig({ chartType: value as ChartType })}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {chartTypes.map((type) => (
-                <SelectItem key={type.value} value={type.value} className="text-xs">
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div className="w-64 shrink-0 border-r border-border bg-secondary/20 flex flex-col">
+      <div className="h-11 border-b border-border flex items-center px-4">
+        <h3 className="font-semibold text-sm">Chart Config</h3>
+      </div>
 
-        {/* X Axis */}
-        <div className="flex flex-col gap-1 min-w-[140px]">
-          <Label className="text-xs text-muted-foreground">X-Axis</Label>
-          <Select
-            value={config.xAxis}
-            onValueChange={(value) => updateConfig({ xAxis: value })}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {allColumns.map((col) => (
-                <SelectItem key={col} value={col} className="text-xs">
-                  {col}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Y Axis / Value Column */}
-        {config.chartType === 'pie' ? (
-          <div className="flex flex-col gap-1 min-w-[140px]">
-            <Label className="text-xs text-muted-foreground">Value Column</Label>
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          {/* Chart Type */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Chart Type</Label>
             <Select
-              value={config.yAxis[0] || ''}
-              onValueChange={(value) => updateConfig({ yAxis: [value] })}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select column" />
-              </SelectTrigger>
-              <SelectContent>
-                {numericColumns.map((col) => (
-                  <SelectItem key={col} value={col} className="text-xs">
-                    {col}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Y-Axis Columns</Label>
-            <div className="flex flex-wrap gap-2 border rounded-md px-3 py-2 min-w-[160px] max-w-xs bg-background">
-              {numericColumns.length > 0 ? (
-                numericColumns.map((col) => (
-                  <div key={col} className="flex items-center gap-1.5">
-                    <Checkbox
-                      id={`y-${col}`}
-                      checked={config.yAxis.includes(col)}
-                      onCheckedChange={() => toggleYAxis(col)}
-                      className="h-3 w-3"
-                    />
-                    <label
-                      htmlFor={`y-${col}`}
-                      className="text-xs font-medium cursor-pointer leading-none"
-                    >
-                      {col}
-                    </label>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground">No numeric columns</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Group By */}
-        <div className="flex flex-col gap-1 min-w-[140px]">
-          <Label className="text-xs text-muted-foreground">Group By</Label>
-          <Select
-            value={config.groupBy || 'none'}
-            onValueChange={(value) =>
-              updateConfig({ groupBy: value === 'none' ? undefined : value })
-            }
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none" className="text-xs">None</SelectItem>
-              {categoricalColumns.map((col) => (
-                <SelectItem key={col} value={col} className="text-xs">
-                  {col}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Aggregation */}
-        {config.groupBy && (
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <Label className="text-xs text-muted-foreground">Aggregation</Label>
-            <Select
-              value={config.aggregation || 'sum'}
-              onValueChange={(value) =>
-                updateConfig({ aggregation: value as AggregationType })
-              }
+              value={config.chartType}
+              onValueChange={(value) => updateConfig({ chartType: value as ChartType })}
             >
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {aggregationTypes.map((type) => (
+                {chartTypes.map((type) => (
                   <SelectItem key={type.value} value={type.value} className="text-xs">
                     {type.label}
                   </SelectItem>
@@ -189,19 +82,143 @@ export function ChartConfigPanel({
               </SelectContent>
             </Select>
           </div>
-        )}
 
-        {/* Chart Title */}
-        <div className="flex flex-col gap-1 min-w-[160px] flex-1">
-          <Label className="text-xs text-muted-foreground">Chart Title</Label>
-          <Input
-            value={config.title || ''}
-            onChange={(e) => updateConfig({ title: e.target.value })}
-            placeholder="Optional title…"
-            className="h-8 text-xs"
-          />
+          <Separator />
+
+          {/* X Axis */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">X-Axis Column</Label>
+            <Select
+              value={config.xAxis}
+              onValueChange={(value) => updateConfig({ xAxis: value })}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allColumns.map((col) => (
+                  <SelectItem key={col} value={col} className="text-xs">
+                    {col}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Y Axis - Multiple Selection */}
+          {config.chartType !== 'pie' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Y-Axis Columns</Label>
+              <div className="border rounded-md p-2.5 space-y-2 max-h-40 overflow-y-auto bg-background">
+                {numericColumns.length > 0 ? (
+                  numericColumns.map((col) => (
+                    <div key={col} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`y-${col}`}
+                        checked={config.yAxis.includes(col)}
+                        onCheckedChange={() => toggleYAxis(col)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <label
+                        htmlFor={`y-${col}`}
+                        className="text-xs font-medium leading-none cursor-pointer"
+                      >
+                        {col}
+                      </label>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">No numeric columns</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pie Chart Value Column */}
+          {config.chartType === 'pie' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Value Column</Label>
+              <Select
+                value={config.yAxis[0] || ''}
+                onValueChange={(value) => updateConfig({ yAxis: [value] })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select column" />
+                </SelectTrigger>
+                <SelectContent>
+                  {numericColumns.map((col) => (
+                    <SelectItem key={col} value={col} className="text-xs">
+                      {col}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Group By */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Group By</Label>
+            <Select
+              value={config.groupBy || 'none'}
+              onValueChange={(value) =>
+                updateConfig({ groupBy: value === 'none' ? undefined : value })
+              }
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs">None</SelectItem>
+                {categoricalColumns.map((col) => (
+                  <SelectItem key={col} value={col} className="text-xs">
+                    {col}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Aggregation */}
+          {config.groupBy && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Aggregation</Label>
+              <Select
+                value={config.aggregation || 'sum'}
+                onValueChange={(value) =>
+                  updateConfig({ aggregation: value as AggregationType })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {aggregationTypes.map((type) => (
+                    <SelectItem key={type.value} value={type.value} className="text-xs">
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Chart Title */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Chart Title</Label>
+            <Input
+              value={config.title || ''}
+              onChange={(e) => updateConfig({ title: e.target.value })}
+              placeholder="Optional title…"
+              className="h-8 text-xs"
+            />
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }
