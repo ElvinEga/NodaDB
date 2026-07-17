@@ -1,6 +1,6 @@
 [package]
 name = "nodadb"
-version = "0.3.1"
+version = "0.3.2"
 description = "A modern database management desktop application"
 authors = ["Elvin Ega"]
 edition = "2021"
