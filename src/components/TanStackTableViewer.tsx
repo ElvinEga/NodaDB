@@ -81,6 +81,7 @@ import { DataGeneratorDialog } from "@/components/DataGeneratorDialog";
 import { ExportDataDialog } from "@/components/ExportDataDialog";
 import { BatchOperationsDialog } from "@/components/BatchOperationsDialog";
 import { TransactionHistoryPanel } from "@/components/TransactionHistoryPanel";
+import { RelationExplorerDialog } from "@/components/RelationExplorerDialog";
 import { ColumnHeaderContextMenu } from "@/components/ColumnHeaderContextMenu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -101,6 +102,7 @@ import {
   TableColumn,
   QueryResult,
   SQLiteBooleanSuggestion,
+  TabFilter,
 } from "@/types";
 import { toast } from "sonner";
 import { getCellRenderer } from "@/lib/cellRenderers";
@@ -129,13 +131,38 @@ interface TanStackTableViewerProps {
   connection: ConnectionConfig;
   table: DatabaseTable;
   columns: TableColumn[];
+  initialFilters?: TabFilter[];
+  onNavigateToTable?: (tableName: string, columnName: string, value: string) => void;
   onRefresh: () => void;
 }
+
+const isIdLike = (column: TableColumn, value: any): boolean => {
+  if (value === null || value === undefined) return false;
+  const strVal = String(value).trim();
+  if (!strVal) return false;
+
+  const nameLower = column.name.toLowerCase();
+  const isIdColumnName =
+    nameLower === "id" ||
+    nameLower === "uuid" ||
+    nameLower.endsWith("_id") ||
+    nameLower.endsWith("_uuid") ||
+    nameLower.endsWith("id");
+
+  if (isIdColumnName) return true;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(strVal)) return true;
+
+  return false;
+};
 
 export function TanStackTableViewer({
   connection,
   table,
   columns: tableColumns,
+  initialFilters,
+  onNavigateToTable,
 }: TanStackTableViewerProps) {
   const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
   const overrides = useColumnDisplayStore((state) => state.overrides);
@@ -144,7 +171,9 @@ export function TanStackTableViewer({
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
+    initialFilters || []
+  );
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [rowSelection, setRowSelection] = useState({});
@@ -195,6 +224,8 @@ export function TanStackTableViewer({
     columnName: string;
     value: any;
   } | null>(null);
+  const [relationSearchOpen, setRelationSearchOpen] = useState(false);
+  const [relationSearchValue, setRelationSearchValue] = useState("");
   const [pendingAlert, setPendingAlert] = useState<{
     title: string;
     description: ReactNode;
@@ -821,10 +852,36 @@ Sum: ${stats.sum}`
 
           // Primary key styling (not editable)
           if (col.is_primary_key) {
+            const hasIdRelations = isIdLike(col, value);
             return (
-              <span className="font-mono text-xs text-muted-foreground">
-                {String(value)}
-              </span>
+              <div
+                className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-1 px-1 py-0.5 rounded h-full w-full"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenuCell({
+                    row: row.original,
+                    columnName: col.name,
+                    value: value,
+                  });
+                }}
+              >
+                <span className="font-mono text-xs text-muted-foreground truncate flex-1 min-w-0">
+                  {String(value)}
+                </span>
+                {hasIdRelations && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRelationSearchValue(String(value));
+                      setRelationSearchOpen(true);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity shrink-0 ml-1"
+                    title="View related data"
+                  >
+                    <Workflow className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             );
           }
 
@@ -842,6 +899,7 @@ Sum: ${stats.sum}`
           };
 
           // Display mode with custom renderer
+          const hasIdRelations = isIdLike(col, value);
           return (
             <div
               className="group flex items-center justify-between cursor-pointer hover:bg-accent/50 -mx-1 px-1 py-0.5 rounded h-full"
@@ -858,13 +916,28 @@ Sum: ${stats.sum}`
               <div className="flex-1 min-w-0">
                 {getCellRenderer(col, value)}
               </div>
-              <button
-                onClick={handleEditClick}
-                className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
-                title="Click to edit"
-              >
-                <Edit2 className="h-3 w-3 ml-1 shrink-0" />
-              </button>
+              <div className="flex items-center gap-1 shrink-0 ml-1">
+                {hasIdRelations && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRelationSearchValue(String(value));
+                      setRelationSearchOpen(true);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                    title="View related data"
+                  >
+                    <Workflow className="h-3 w-3" />
+                  </button>
+                )}
+                <button
+                  onClick={handleEditClick}
+                  className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                  title="Click to edit"
+                >
+                  <Edit2 className="h-3 w-3" />
+                </button>
+              </div>
             </div>
           );
         },
@@ -1844,6 +1917,18 @@ Sum: ${stats.sum}`
                 Filter by Value
               </ContextMenuItem>
 
+              <ContextMenuItem
+                onClick={() => {
+                  if (contextMenuCell.value !== null && contextMenuCell.value !== undefined) {
+                    setRelationSearchValue(String(contextMenuCell.value));
+                    setRelationSearchOpen(true);
+                  }
+                }}
+              >
+                <Workflow className="h-3.5 w-3.5 mr-2" />
+                Find Relations
+              </ContextMenuItem>
+
               <ContextMenuSeparator />
 
               <ContextMenuItem
@@ -2142,6 +2227,14 @@ Sum: ${stats.sum}`
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <RelationExplorerDialog
+          open={relationSearchOpen}
+          onOpenChange={setRelationSearchOpen}
+          connection={connection}
+          value={relationSearchValue}
+          onNavigateToTable={onNavigateToTable}
+        />
 
       </div>
 
