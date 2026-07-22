@@ -362,7 +362,7 @@ export default function RelationFlow({
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-background overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-background overflow-hidden relative">
       {/* Header controls bar */}
       <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-4 shrink-0 bg-muted/10">
         <div className="flex items-center gap-2">
@@ -416,7 +416,7 @@ export default function RelationFlow({
       </div>
 
       {/* Main body area */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 relative pb-12">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -569,7 +569,7 @@ export default function RelationFlow({
 
       {/* Footer */}
       {!isLoading && !error && matches.length > 0 && (
-        <div className="sticky bottom-0 z-10 h-12 border-t border-border bg-card/95 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shrink-0 shadow-sm">
+        <div className="absolute bottom-0 left-0 right-0 z-10 h-12 border-t border-border bg-card/95 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shadow-sm">
           <div className="flex items-center gap-4 flex-shrink-0">
             <Button
               variant="ghost"
