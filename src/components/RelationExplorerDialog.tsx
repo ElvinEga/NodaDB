@@ -206,7 +206,7 @@ export function RelationExplorerDialog({
 
                     {/* Table View */}
                     <div className="w-full overflow-auto max-h-[300px]">
-                      <Table className="border-t-0">
+                      <Table className="border-t-0 min-w-max">
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
                             {match.sample_rows.columns.map((col) => {
@@ -214,7 +214,7 @@ export function RelationExplorerDialog({
                               return (
                                 <TableHead
                                   key={col}
-                                  className={`text-[10px] font-medium py-1 px-3 ${
+                                  className={`text-[10px] font-medium py-1 px-3 whitespace-nowrap ${
                                     isMatchedCol
                                       ? "bg-primary/10 text-primary font-semibold border-r border-primary/20"
                                       : ""
@@ -235,7 +235,7 @@ export function RelationExplorerDialog({
                                 return (
                                   <TableCell
                                     key={col}
-                                    className={`py-1.5 px-3 border-b border-border ${
+                                    className={`py-1.5 px-3 border-b border-border whitespace-nowrap ${
                                       isMatchedCol
                                         ? "bg-primary/5 font-semibold text-primary border-r border-primary/10"
                                         : ""
