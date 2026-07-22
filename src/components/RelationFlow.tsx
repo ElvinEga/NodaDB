@@ -569,7 +569,7 @@ export default function RelationFlow({
 
       {/* Footer */}
       {!isLoading && !error && matches.length > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 z-10 h-12 border-t border-border bg-card/95 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shadow-sm">
+        <div className="absolute bottom-0 left-0 right-0 z-10 h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shadow-sm">
           <div className="flex items-center gap-4 flex-shrink-0">
             <Button
               variant="ghost"
