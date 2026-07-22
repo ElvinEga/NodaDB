@@ -27,6 +27,7 @@ import {
   ArrowRight,
   RefreshCw,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { ConnectionConfig, RelationMatch } from "@/types";
 
@@ -72,13 +73,13 @@ const TableNode = ({
     <Card className="border border-border bg-card shadow-md rounded-xl overflow-hidden min-w-[320px] max-w-[450px] flex flex-col">
       <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 bg-muted border-border" />
       <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 bg-primary border-primary" />
-      
+
       {/* Node Header */}
       <div className="px-3.5 py-2.5 bg-muted/20 border-b border-border flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 min-w-0">
           <Table2 className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="font-bold text-xs truncate">{data.tableName}</span>
-          <Badge variant={data.isPrimaryKey ? "default" : "secondary"} className="text-[9px] h-4.5 px-1 py-0.1 font-medium shrink-0">
+          <Badge variant={data.isPrimaryKey ? "default" : "secondary"} className="!text-sm h-4.5 px-1 py-0.1 font-medium shrink-0">
             {data.isPrimaryKey ? "PK" : "FK / Ref"}
           </Badge>
         </div>
@@ -106,7 +107,7 @@ const TableNode = ({
         <div className="text-[9px] text-muted-foreground mb-1.5 font-medium px-1 flex items-center gap-1">
           Matched Field: <span className="font-mono font-semibold bg-muted px-1 py-0.2 rounded text-foreground">{data.columnName}</span>
         </div>
-        
+
         {data.sampleRows.rows.length > 0 ? (
           <div className="border border-border/70 rounded-lg overflow-hidden w-full">
             <table className="w-full text-[10px] border-collapse min-w-max">
@@ -424,7 +425,7 @@ export default function RelationFlow({
                       <span className="font-semibold text-xs">{match.table_name}</span>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
                       <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{match.column_name}</span>
-                      <Badge variant={match.is_primary_key ? "default" : "secondary"} className="text-[9px] h-4.5 px-1.5 font-medium">
+                      <Badge variant={match.is_primary_key ? "default" : "secondary"} className="!text-xs h-4.5 px-1.5 font-medium">
                         {match.is_primary_key ? "Primary Key" : "Foreign Key / Ref"}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground">({match.count} match{match.count === 1 ? "" : "es"})</span>
@@ -445,35 +446,57 @@ export default function RelationFlow({
 
                   {/* Table View */}
                   <div className="w-full overflow-x-auto overflow-y-auto max-h-[250px] min-w-0">
-                    <table className="w-full min-w-max text-sm text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/30">
-                          {match.sample_rows.columns.map((col) => {
-                            const isMatchedCol = col === match.column_name;
-                            return (
-                              <th key={col} className={`text-[10px] font-normal py-2 px-3 whitespace-nowrap border-r border-border text-muted-foreground align-middle ${isMatchedCol ? "bg-primary/10 text-primary font-semibold border-r border-primary/20" : ""}`}>
-                                {col}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {match.sample_rows.rows.map((row, rIdx) => (
-                          <tr key={rIdx} className="border-b border-border hover:bg-muted/30 last:border-b-0">
-                            {match.sample_rows.columns.map((col) => {
-                              const isMatchedCol = col === match.column_name;
-                              const cellValue = row[col];
+                    {(() => {
+                      const hasDeletedAtColumn = match.sample_rows.columns.includes("deleted_at");
+                      return (
+                        <table className="w-full min-w-max text-sm text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/30">
+                              {hasDeletedAtColumn && (
+                                <th className="text-[10px] font-normal py-2 px-3 whitespace-nowrap border-r border-border text-muted-foreground align-middle w-12 text-center bg-muted/20">
+                                  Status
+                                </th>
+                              )}
+                              {match.sample_rows.columns.map((col) => {
+                                const isMatchedCol = col === match.column_name;
+                                return (
+                                  <th key={col} className={`text-[10px] font-normal py-2 px-3 whitespace-nowrap border-r border-border text-muted-foreground align-middle ${isMatchedCol ? "bg-primary/10 text-primary font-semibold border-r border-primary/20" : ""}`}>
+                                    {col}
+                                  </th>
+                                );
+                              })}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {match.sample_rows.rows.map((row, rIdx) => {
+                              const isDeleted = hasDeletedAtColumn && row["deleted_at"] !== null && row["deleted_at"] !== undefined;
                               return (
-                                <td key={col} className={`py-1.5 px-3 border-r border-border text-xs align-middle ${isMatchedCol ? "bg-primary/5 font-semibold text-primary border-r border-primary/10" : ""}`}>
-                                  {renderValue(cellValue)}
-                                </td>
+                                <tr key={rIdx} className={`border-b border-border hover:bg-muted/30 last:border-b-0 ${isDeleted ? "bg-destructive/5 text-destructive/95" : ""}`}>
+                                  {hasDeletedAtColumn && (
+                                    <td className="py-1.5 px-3 border-r border-border text-xs align-middle text-center w-12 bg-muted/5" title={isDeleted ? `Deleted at: ${String(row["deleted_at"])}` : undefined}>
+                                      {isDeleted ? (
+                                        <XCircle className="h-4 w-4 text-destructive inline-block align-middle" />
+                                      ) : (
+                                        <span className="text-[10px] text-muted-foreground/45 font-medium">-</span>
+                                      )}
+                                    </td>
+                                  )}
+                                  {match.sample_rows.columns.map((col) => {
+                                    const isMatchedCol = col === match.column_name;
+                                    const cellValue = row[col];
+                                    return (
+                                      <td key={col} className={`py-1.5 px-3 border-r border-border text-xs align-middle ${isMatchedCol ? "bg-primary/5 font-semibold text-primary border-r border-primary/10" : ""}`}>
+                                        {renderValue(cellValue)}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
                               );
                             })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
