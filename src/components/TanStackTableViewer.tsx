@@ -133,6 +133,7 @@ interface TanStackTableViewerProps {
   columns: TableColumn[];
   initialFilters?: TabFilter[];
   onNavigateToTable?: (tableName: string, columnName: string, value: string) => void;
+  onViewFlow?: (value: string) => void;
   onRefresh: () => void;
 }
 
@@ -163,6 +164,7 @@ export function TanStackTableViewer({
   columns: tableColumns,
   initialFilters,
   onNavigateToTable,
+  onViewFlow,
 }: TanStackTableViewerProps) {
   const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
   const overrides = useColumnDisplayStore((state) => state.overrides);
@@ -2234,6 +2236,7 @@ Sum: ${stats.sum}`
           connection={connection}
           value={relationSearchValue}
           onNavigateToTable={onNavigateToTable}
+          onViewFlow={onViewFlow}
         />
 
       </div>
