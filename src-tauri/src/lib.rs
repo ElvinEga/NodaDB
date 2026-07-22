@@ -49,6 +49,7 @@ pub fn run() {
             commands::create_window_from_label,
             commands::save_export_file,
             commands::create_export_archive,
+            commands::trace_id_relations,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
