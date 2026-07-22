@@ -81,7 +81,6 @@ import { DataGeneratorDialog } from "@/components/DataGeneratorDialog";
 import { ExportDataDialog } from "@/components/ExportDataDialog";
 import { BatchOperationsDialog } from "@/components/BatchOperationsDialog";
 import { TransactionHistoryPanel } from "@/components/TransactionHistoryPanel";
-import { RelationExplorerDialog } from "@/components/RelationExplorerDialog";
 import { ColumnHeaderContextMenu } from "@/components/ColumnHeaderContextMenu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -226,8 +225,6 @@ export function TanStackTableViewer({
     columnName: string;
     value: any;
   } | null>(null);
-  const [relationSearchOpen, setRelationSearchOpen] = useState(false);
-  const [relationSearchValue, setRelationSearchValue] = useState("");
   const [pendingAlert, setPendingAlert] = useState<{
     title: string;
     description: ReactNode;
@@ -874,8 +871,7 @@ Sum: ${stats.sum}`
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setRelationSearchValue(String(value));
-                      setRelationSearchOpen(true);
+                      if (onViewFlow) onViewFlow(String(value));
                     }}
                     className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity shrink-0 ml-1"
                     title="View related data"
@@ -923,8 +919,7 @@ Sum: ${stats.sum}`
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setRelationSearchValue(String(value));
-                      setRelationSearchOpen(true);
+                      if (onViewFlow) onViewFlow(String(value));
                     }}
                     className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
                     title="View related data"
@@ -1922,8 +1917,7 @@ Sum: ${stats.sum}`
               <ContextMenuItem
                 onClick={() => {
                   if (contextMenuCell.value !== null && contextMenuCell.value !== undefined) {
-                    setRelationSearchValue(String(contextMenuCell.value));
-                    setRelationSearchOpen(true);
+                    if (onViewFlow) onViewFlow(String(contextMenuCell.value));
                   }
                 }}
               >
@@ -2229,15 +2223,6 @@ Sum: ${stats.sum}`
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        <RelationExplorerDialog
-          open={relationSearchOpen}
-          onOpenChange={setRelationSearchOpen}
-          connection={connection}
-          value={relationSearchValue}
-          onNavigateToTable={onNavigateToTable}
-          onViewFlow={onViewFlow}
-        />
 
       </div>
 
