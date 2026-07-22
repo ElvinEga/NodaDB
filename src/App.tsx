@@ -720,26 +720,24 @@ function App() {
                             <SchemaDesigner connection={activeConnection} />
                           ) : null
                         ) : tab.type === "relation-flow" ? (
-                          isActive ? (
-                            <RelationFlow
-                              connection={activeConnection}
-                              value={tab.relationFlowValue || ""}
-                              onNavigateToTable={(tableName, columnName, val) => {
-                                const newTab: TabType = {
-                                  id: `table-${tableName}-filtered-${Date.now()}`,
-                                  type: "table",
-                                  title: `${tableName} (${columnName}=${val})`,
-                                  table: { name: tableName },
-                                  columns: undefined,
-                                  isPinned: false,
-                                  isDirty: false,
-                                  initialFilters: [{ id: columnName, value: val }],
-                                };
-                                setTabs([...tabs, newTab]);
-                                setActiveTabId(newTab.id);
-                              }}
-                            />
-                          ) : null
+                          <RelationFlow
+                            connection={activeConnection}
+                            value={tab.relationFlowValue || ""}
+                            onNavigateToTable={(tableName, columnName, val) => {
+                              const newTab: TabType = {
+                                id: `table-${tableName}-filtered-${Date.now()}`,
+                                type: "table",
+                                title: `${tableName} (${columnName}=${val})`,
+                                table: { name: tableName },
+                                columns: undefined,
+                                isPinned: false,
+                                isDirty: false,
+                                initialFilters: [{ id: columnName, value: val }],
+                              };
+                              setTabs([...tabs, newTab]);
+                              setActiveTabId(newTab.id);
+                            }}
+                          />
                         ) : (
                           // "query" tabs: always keep mounted to preserve state
                           <QueryEditor connection={activeConnection} />
