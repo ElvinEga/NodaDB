@@ -461,7 +461,7 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className={`pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
+                className={`py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
@@ -476,7 +476,7 @@ function App() {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 text-sm transition-colors hover:bg-secondary/80"
+                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 mt-0.5 text-sm transition-colors hover:bg-secondary/80"
                       >
                         <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
                         <span className="text-sm">{activeConnection.name}</span>
@@ -788,7 +788,7 @@ function App() {
           <div className="flex-1 flex flex-col">
             <header
               data-tauri-drag-region
-              className="pl-24 md:pl-0 h-9 pb-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+              className="pl-24 md:pl-0 h-9 py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
             ></header>
             {/* Back button when switching connections */}
             {previousConnectionId && (
