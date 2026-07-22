@@ -108,7 +108,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "NodaDB ${{ github.ref_name }}"
-          releaseBody: "NodaDB desktop builds for macOS, Windows, and Linux."
+          generateReleaseNotes: true
           releaseDraft: false
           prerelease: false
 
