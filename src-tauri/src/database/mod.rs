@@ -1,6 +1,6 @@
 pub mod types;
 
-use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex};
+use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch};
 use crate::ssh_tunnel::SshTunnel;
 use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
@@ -2899,4 +2899,270 @@ impl ConnectionManager {
 
         Ok(indexes)
     }
+
+    pub async fn trace_id_relations(
+        &self,
+        connection_id: &str,
+        value: &str,
+        _db_type: &DatabaseType,
+    ) -> Result<Vec<RelationMatch>> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let mut matches = Vec::new();
+
+        // 1. Detect if the value is a UUID or numeric ID
+        let clean_value = value.trim();
+        if clean_value.is_empty() {
+            return Ok(matches);
+        }
+
+        let is_uuid = clean_value.len() == 36 && clean_value.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+        let is_numeric = clean_value.chars().all(|c| c.is_ascii_digit());
+
+        // Helper to check if column matches naming conventions
+        let is_id_column_name = |name: &str| {
+            let n = name.to_lowercase();
+            n == "id" || n == "uuid" || n.ends_with("_id") || n.ends_with("_uuid") || n.ends_with("id")
+        };
+
+        // 2. Fetch all columns of all tables and check candidates
+        match pool {
+            DatabasePool::Sqlite(pool) => {
+                // Fetch tables
+                let tables_query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
+                let table_rows = sqlx::query(tables_query).fetch_all(pool).await?;
+                
+                for t_row in table_rows {
+                    let table_name: String = t_row.try_get(0).unwrap_or_default();
+                    
+                    // Fetch table column info
+                    let col_query = format!("PRAGMA table_info(\"{}\")", table_name.replace('"', "\"\""));
+                    let col_rows = sqlx::query(&col_query).fetch_all(pool).await?;
+                    
+                    for c_row in col_rows {
+                        let col_name: String = c_row.try_get(1).unwrap_or_default();
+                        let col_type: String = c_row.try_get(2).unwrap_or_default();
+                        let is_pk: i64 = c_row.try_get(5).unwrap_or(0);
+                        
+                        let col_type_lower = col_type.to_lowercase();
+                        
+                        // Decide if column is a candidate
+                        let is_candidate = if is_uuid {
+                            col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("uuid") || col_type_lower.is_empty() || is_id_column_name(&col_name)
+                        } else if is_numeric {
+                            col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.is_empty() || is_id_column_name(&col_name)
+                        } else {
+                            col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.is_empty()
+                        };
+                        
+                        if is_candidate {
+                            // Check count
+                            let count_query = format!(
+                                "SELECT COUNT(*) FROM \"{}\" WHERE \"{}\" = ?",
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            );
+                            
+                            if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
+                                let count: i64 = count_row.try_get(0).unwrap_or(0);
+                                if count > 0 {
+                                    // Fetch sample rows
+                                    let sample_query = format!(
+                                        "SELECT * FROM \"{}\" WHERE \"{}\" = ? LIMIT 10",
+                                        table_name.replace('"', "\"\""),
+                                        col_name.replace('"', "\"\"")
+                                    );
+                                    if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
+                                        let sample_rows = {
+                                            let converter = |r: Vec<sqlx::sqlite::SqliteRow>| -> Result<QueryResult> {
+                                                Ok(process_rows!(r, common))
+                                            };
+                                            converter(rows).unwrap_or(QueryResult {
+                                                columns: vec![],
+                                                rows: vec![],
+                                                rows_affected: 0,
+                                            })
+                                        };
+                                        matches.push(RelationMatch {
+                                            table_name: table_name.clone(),
+                                            column_name: col_name.clone(),
+                                            is_primary_key: is_pk > 0,
+                                            count: count as u64,
+                                            sample_rows,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            DatabasePool::Postgres(pool) => {
+                // Fetch columns of all user tables in postgres in a single query
+                let cols_query = r#"
+                    SELECT
+                      cls.relname AS table_name,
+                      a.attname AS column_name,
+                      pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
+                      CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_pk,
+                      ns.nspname AS schema_name
+                    FROM pg_attribute a
+                    JOIN pg_class cls ON cls.oid = a.attrelid
+                    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+                    LEFT JOIN (
+                      SELECT co.conrelid, att.attname
+                      FROM pg_constraint co
+                      JOIN pg_attribute att ON att.attrelid = co.conrelid AND att.attnum = ANY(co.conkey)
+                      WHERE co.contype = 'p'
+                    ) pk ON pk.conrelid = a.attrelid AND pk.attname = a.attname
+                    WHERE a.attnum > 0
+                      AND NOT a.attisdropped
+                      AND cls.relkind = 'r'
+                      AND ns.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND ns.nspname NOT LIKE 'pg_toast%'
+                    ORDER BY cls.relname, a.attnum
+                "#;
+                
+                let col_rows = sqlx::query(cols_query).fetch_all(pool).await?;
+                for row in col_rows {
+                    let table_name: String = row.try_get(0).unwrap_or_default();
+                    let col_name: String = row.try_get(1).unwrap_or_default();
+                    let col_type: String = row.try_get(2).unwrap_or_default();
+                    let is_pk: bool = row.try_get(3).unwrap_or(false);
+                    let schema_name: String = row.try_get(4).unwrap_or_default();
+                    
+                    let col_type_lower = col_type.to_lowercase();
+                    
+                    // Postgres type safety: only query compatible columns
+                    let is_candidate = if is_uuid {
+                        col_type_lower.contains("uuid") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                    } else if is_numeric {
+                        col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("double") || col_type_lower.contains("real") || col_type_lower.contains("serial") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                    } else {
+                        col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                    };
+                    
+                    if is_candidate {
+                        // Check count
+                        let count_query = format!(
+                            "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE \"{}\" = $1",
+                            schema_name.replace('"', "\"\""),
+                            table_name.replace('"', "\"\""),
+                            col_name.replace('"', "\"\"")
+                        );
+                        
+                        // Ignore potential type casting errors in search by wrapping in Ok
+                        if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
+                            let count: i64 = count_row.try_get(0).unwrap_or(0);
+                            if count > 0 {
+                                // Fetch sample rows
+                                let sample_query = format!(
+                                    "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1 LIMIT 10",
+                                    schema_name.replace('"', "\"\""),
+                                    table_name.replace('"', "\"\""),
+                                    col_name.replace('"', "\"\"")
+                                );
+                                if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
+                                    let sample_rows = {
+                                        let converter = |r: Vec<sqlx::postgres::PgRow>| -> Result<QueryResult> {
+                                            Ok(process_rows!(r, postgres))
+                                        };
+                                        converter(rows).unwrap_or(QueryResult {
+                                            columns: vec![],
+                                            rows: vec![],
+                                            rows_affected: 0,
+                                        })
+                                    };
+                                    matches.push(RelationMatch {
+                                        table_name: format!("{}.{}", schema_name, table_name),
+                                        column_name: col_name.clone(),
+                                        is_primary_key: is_pk,
+                                        count: count as u64,
+                                        sample_rows,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            DatabasePool::MySql(pool) => {
+                // Fetch columns for MySQL
+                let cols_query = r#"
+                    SELECT
+                      TABLE_NAME,
+                      COLUMN_NAME,
+                      DATA_TYPE,
+                      IF(COLUMN_KEY = 'PRI', 1, 0) as is_pk
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    ORDER BY TABLE_NAME, ORDINAL_POSITION
+                "#;
+                
+                let col_rows = sqlx::query(cols_query).fetch_all(pool).await?;
+                for row in col_rows {
+                    let table_name: String = row.try_get(0).unwrap_or_default();
+                    let col_name: String = row.try_get(1).unwrap_or_default();
+                    let col_type: String = row.try_get(2).unwrap_or_default();
+                    let is_pk: i64 = row.try_get(3).unwrap_or(0);
+                    
+                    let col_type_lower = col_type.to_lowercase();
+                    
+                    let is_candidate = if is_uuid {
+                        col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
+                    } else if is_numeric {
+                        col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("decimal") || col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
+                    } else {
+                        col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
+                    };
+                    
+                    if is_candidate {
+                        // Check count using backticks for MySQL identifiers
+                        let count_query = format!(
+                            "SELECT COUNT(*) FROM `{}` WHERE `{}` = ?",
+                            table_name.replace('`', "``"),
+                            col_name.replace('`', "``")
+                        );
+                        
+                        if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
+                            let count: i64 = count_row.try_get(0).unwrap_or(0);
+                            if count > 0 {
+                                // Fetch sample rows
+                                let sample_query = format!(
+                                    "SELECT * FROM `{}` WHERE `{}` = ? LIMIT 10",
+                                    table_name.replace('`', "``"),
+                                    col_name.replace('`', "``")
+                                );
+                                if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
+                                    let sample_rows = {
+                                        let converter = |r: Vec<sqlx::mysql::MySqlRow>| -> Result<QueryResult> {
+                                            Ok(process_rows!(r, common))
+                                        };
+                                        converter(rows).unwrap_or(QueryResult {
+                                            columns: vec![],
+                                            rows: vec![],
+                                            rows_affected: 0,
+                                        })
+                                    };
+                                    matches.push(RelationMatch {
+                                        table_name: table_name.clone(),
+                                        column_name: col_name.clone(),
+                                        is_primary_key: is_pk > 0,
+                                        count: count as u64,
+                                        sample_rows,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(matches)
+    }
 }
+
