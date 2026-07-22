@@ -155,15 +155,15 @@ export function RelationExplorerDialog({
               </p>
             </div>
           ) : (
-            <ScrollArea className="h-full pr-4">
+            <div className="h-full overflow-y-auto overflow-x-hidden pr-2">
               <div className="space-y-6 pb-6">
                 {matches.map((match) => (
                   <div
                     key={`${match.table_name}-${match.column_name}`}
-                    className="border border-border rounded-lg bg-card overflow-hidden shadow-sm"
+                    className="border border-border rounded-lg bg-card overflow-hidden shadow-sm flex flex-col min-w-0"
                   >
                     {/* Header */}
-                    <div className="px-4 py-3 bg-muted/20 border-b border-border flex items-center justify-between gap-4">
+                    <div className="px-4 py-3 bg-muted/20 border-b border-border flex items-center justify-between gap-4 shrink-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Table2 className="h-4 w-4 text-muted-foreground" />
                         <span className="font-semibold text-sm">
@@ -205,55 +205,55 @@ export function RelationExplorerDialog({
                     </div>
 
                     {/* Table View */}
-                    <div className="w-full overflow-auto max-h-[300px]">
-                      <Table className="border-t-0 min-w-max">
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
+                    <div className="w-full overflow-x-auto overflow-y-auto max-h-[300px] border-t border-border min-w-0">
+                      <table className="w-full min-w-max text-sm text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30">
                             {match.sample_rows.columns.map((col) => {
                               const isMatchedCol = col === match.column_name;
                               return (
-                                <TableHead
+                                <th
                                   key={col}
-                                  className={`text-[10px] font-medium py-1 px-3 whitespace-nowrap ${
+                                  className={`text-[10px] font-normal py-2 px-3 whitespace-nowrap border-r border-border text-muted-foreground align-middle ${
                                     isMatchedCol
                                       ? "bg-primary/10 text-primary font-semibold border-r border-primary/20"
                                       : ""
                                   }`}
                                 >
                                   {col}
-                                </TableHead>
+                                </th>
                               );
                             })}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                          </tr>
+                        </thead>
+                        <tbody>
                           {match.sample_rows.rows.map((row, rIdx) => (
-                            <TableRow key={rIdx} className="hover:bg-muted/30">
+                            <tr key={rIdx} className="border-b border-border hover:bg-muted/30 last:border-b-0">
                               {match.sample_rows.columns.map((col) => {
                                 const isMatchedCol = col === match.column_name;
                                 const cellValue = row[col];
                                 return (
-                                  <TableCell
+                                  <td
                                     key={col}
-                                    className={`py-1.5 px-3 border-b border-border whitespace-nowrap ${
+                                    className={`py-1.5 px-3 border-r border-border text-xs align-middle ${
                                       isMatchedCol
                                         ? "bg-primary/5 font-semibold text-primary border-r border-primary/10"
                                         : ""
                                     }`}
                                   >
                                     {renderValue(cellValue)}
-                                  </TableCell>
+                                  </td>
                                 );
                               })}
-                            </TableRow>
+                            </tr>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </div>
       </DialogContent>
