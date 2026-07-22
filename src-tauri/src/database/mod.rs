@@ -2923,9 +2923,12 @@ impl ConnectionManager {
         let is_numeric = clean_value.chars().all(|c| c.is_ascii_digit());
 
         // Helper to check if column matches naming conventions
-        let is_id_column_name = |name: &str| {
+        let is_identifier_name = |name: &str| {
             let n = name.to_lowercase();
-            n == "id" || n == "uuid" || n.ends_with("_id") || n.ends_with("_uuid") || n.ends_with("id")
+            n == "id" || n == "uuid" || n == "key" || n == "code" || n == "ref" ||
+            n.ends_with("_id") || n.ends_with("_uuid") || n.ends_with("_key") || n.ends_with("_code") || n.ends_with("_ref") ||
+            n.ends_with("id") || n.ends_with("uuid") || n.ends_with("key") ||
+            n.starts_with("id_") || n.starts_with("uuid_") || n.starts_with("key_")
         };
 
         // 2. Fetch all columns of all tables and check candidates
@@ -2935,9 +2938,15 @@ impl ConnectionManager {
                 let tables_query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name";
                 let table_rows = sqlx::query(tables_query).fetch_all(pool).await?;
                 
-                for t_row in table_rows {
+                let mut table_names = std::collections::HashSet::new();
+                for t_row in &table_rows {
                     let table_name: String = t_row.try_get(0).unwrap_or_default();
-                    
+                    table_names.insert(table_name);
+                }
+
+                let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
+
+                for table_name in &table_names {
                     // Fetch table column info
                     let col_query = format!("PRAGMA table_info(\"{}\")", table_name.replace('"', "\"\""));
                     let col_rows = sqlx::query(&col_query).fetch_all(pool).await?;
@@ -2948,55 +2957,88 @@ impl ConnectionManager {
                         let is_pk: i64 = c_row.try_get(5).unwrap_or(0);
                         
                         let col_type_lower = col_type.to_lowercase();
+                        let col_name_lower = col_name.to_lowercase();
                         
-                        // Decide if column is a candidate
-                        let is_candidate = if is_uuid {
-                            col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("uuid") || col_type_lower.is_empty() || is_id_column_name(&col_name)
+                        // Check table names matching (including singular/plural)
+                        let mut matches_table_name = false;
+                        for t_name in &table_names {
+                            let t_name_lower = t_name.to_lowercase();
+                            if col_name_lower == t_name_lower || 
+                               col_name_lower == format!("{}s", t_name_lower) ||
+                               t_name_lower == format!("{}s", col_name_lower) {
+                                matches_table_name = true;
+                                break;
+                            }
+                        }
+
+                        // Decide if column is a candidate based on primary key or identifier naming conventions
+                        let is_candidate = if is_pk > 0 {
+                            true
+                        } else if matches_table_name {
+                            true
+                        } else if is_uuid {
+                            col_type_lower.contains("uuid") || 
+                            ((col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.is_empty()) && is_identifier_name(&col_name))
                         } else if is_numeric {
-                            col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.is_empty() || is_id_column_name(&col_name)
+                            ((col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.is_empty()) && (is_identifier_name(&col_name) || col_name_lower == "id" || col_name_lower.ends_with("id"))) ||
+                            ((col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")) && is_identifier_name(&col_name))
                         } else {
-                            col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.is_empty()
+                            (col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.is_empty()) && is_identifier_name(&col_name)
                         };
                         
                         if is_candidate {
-                            // Check count
-                            let count_query = format!(
-                                "SELECT COUNT(*) FROM \"{}\" WHERE \"{}\" = ?",
-                                table_name.replace('"', "\"\""),
-                                col_name.replace('"', "\"\"")
-                            );
+                            let pool_clone = pool.clone();
+                            let table_name_clone = table_name.clone();
+                            let col_name_clone = col_name.clone();
+                            let clean_value_clone = clean_value.to_string();
                             
-                            if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
-                                let count: i64 = count_row.try_get(0).unwrap_or(0);
-                                if count > 0 {
-                                    // Fetch sample rows
-                                    let sample_query = format!(
-                                        "SELECT * FROM \"{}\" WHERE \"{}\" = ? LIMIT 10",
-                                        table_name.replace('"', "\"\""),
-                                        col_name.replace('"', "\"\"")
-                                    );
-                                    if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
-                                        let sample_rows = {
-                                            let converter = |r: Vec<sqlx::sqlite::SqliteRow>| -> Result<QueryResult> {
-                                                Ok(process_rows!(r, common))
+                            set.spawn(async move {
+                                // Check count
+                                let count_query = format!(
+                                    "SELECT COUNT(*) FROM \"{}\" WHERE \"{}\" = ?",
+                                    table_name_clone.replace('"', "\"\""),
+                                    col_name_clone.replace('"', "\"\"")
+                                );
+                                
+                                if let Ok(count_row) = sqlx::query(&count_query).bind(&clean_value_clone).fetch_one(&pool_clone).await {
+                                    let count: i64 = count_row.try_get(0).unwrap_or(0);
+                                    if count > 0 {
+                                        // Fetch sample rows
+                                        let sample_query = format!(
+                                            "SELECT * FROM \"{}\" WHERE \"{}\" = ? LIMIT 10",
+                                            table_name_clone.replace('"', "\"\""),
+                                            col_name_clone.replace('"', "\"\"")
+                                        );
+                                        if let Ok(rows) = sqlx::query(&sample_query).bind(&clean_value_clone).fetch_all(&pool_clone).await {
+                                            let sample_rows = {
+                                                let converter = |r: Vec<sqlx::sqlite::SqliteRow>| -> Result<QueryResult> {
+                                                    Ok(process_rows!(r, common))
+                                                };
+                                                converter(rows).unwrap_or(QueryResult {
+                                                    columns: vec![],
+                                                    rows: vec![],
+                                                    rows_affected: 0,
+                                                })
                                             };
-                                            converter(rows).unwrap_or(QueryResult {
-                                                columns: vec![],
-                                                rows: vec![],
-                                                rows_affected: 0,
-                                            })
-                                        };
-                                        matches.push(RelationMatch {
-                                            table_name: table_name.clone(),
-                                            column_name: col_name.clone(),
-                                            is_primary_key: is_pk > 0,
-                                            count: count as u64,
-                                            sample_rows,
-                                        });
+                                            return Ok(Some(RelationMatch {
+                                                table_name: table_name_clone,
+                                                column_name: col_name_clone,
+                                                is_primary_key: is_pk > 0,
+                                                count: count as u64,
+                                                sample_rows,
+                                            }));
+                                        }
                                     }
                                 }
-                            }
+                                Ok(None)
+                            });
                         }
+                    }
+                }
+
+                while let Some(res) = set.join_next().await {
+                    if let Ok(Ok(Some(relation_match))) = res {
+                        matches.push(relation_match);
                     }
                 }
             }
@@ -3027,6 +3069,15 @@ impl ConnectionManager {
                 "#;
                 
                 let col_rows = sqlx::query(cols_query).fetch_all(pool).await?;
+
+                let mut table_names = std::collections::HashSet::new();
+                for row in &col_rows {
+                    let table_name: String = row.try_get(0).unwrap_or_default();
+                    table_names.insert(table_name);
+                }
+
+                let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
+
                 for row in col_rows {
                     let table_name: String = row.try_get(0).unwrap_or_default();
                     let col_name: String = row.try_get(1).unwrap_or_default();
@@ -3035,57 +3086,123 @@ impl ConnectionManager {
                     let schema_name: String = row.try_get(4).unwrap_or_default();
                     
                     let col_type_lower = col_type.to_lowercase();
+                    let col_name_lower = col_name.to_lowercase();
+
+                    // Check table names matching (including singular/plural)
+                    let mut matches_table_name = false;
+                    for t_name in &table_names {
+                        let t_name_lower = t_name.to_lowercase();
+                        if col_name_lower == t_name_lower || 
+                           col_name_lower == format!("{}s", t_name_lower) ||
+                           t_name_lower == format!("{}s", col_name_lower) {
+                            matches_table_name = true;
+                            break;
+                        }
+                    }
                     
                     // Postgres type safety: only query compatible columns
-                    let is_candidate = if is_uuid {
-                        col_type_lower.contains("uuid") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                    let is_candidate = if is_pk {
+                        true
+                    } else if matches_table_name {
+                        true
+                    } else if is_uuid {
+                        col_type_lower.contains("uuid") || 
+                        ((col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")) && is_identifier_name(&col_name))
                     } else if is_numeric {
-                        col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("double") || col_type_lower.contains("real") || col_type_lower.contains("serial") || col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                        ((col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("double") || col_type_lower.contains("real") || col_type_lower.contains("serial")) && (is_identifier_name(&col_name) || col_name_lower == "id" || col_name_lower.ends_with("id"))) ||
+                        ((col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")) && is_identifier_name(&col_name))
                     } else {
-                        col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")
+                        (col_type_lower.contains("text") || col_type_lower.contains("char") || col_type_lower.contains("varchar")) && is_identifier_name(&col_name)
                     };
                     
                     if is_candidate {
-                        // Check count
-                        let count_query = format!(
-                            "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE \"{}\" = $1",
-                            schema_name.replace('"', "\"\""),
-                            table_name.replace('"', "\"\""),
-                            col_name.replace('"', "\"\"")
-                        );
-                        
-                        // Ignore potential type casting errors in search by wrapping in Ok
-                        if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
-                            let count: i64 = count_row.try_get(0).unwrap_or(0);
-                            if count > 0 {
-                                // Fetch sample rows
-                                let sample_query = format!(
-                                    "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1 LIMIT 10",
-                                    schema_name.replace('"', "\"\""),
-                                    table_name.replace('"', "\"\""),
-                                    col_name.replace('"', "\"\"")
-                                );
-                                if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
-                                    let sample_rows = {
-                                        let converter = |r: Vec<sqlx::postgres::PgRow>| -> Result<QueryResult> {
-                                            Ok(process_rows!(r, postgres))
+                        let pool_clone = pool.clone();
+                        let schema_name_clone = schema_name.clone();
+                        let table_name_clone = table_name.clone();
+                        let col_name_clone = col_name.clone();
+                        let clean_value_clone = clean_value.to_string();
+
+                        let count_query = if col_type_lower.contains("uuid") {
+                            format!(
+                                "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE \"{}\" = $1::uuid",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        } else if col_type_lower.contains("int") || col_type_lower.contains("serial") {
+                            format!(
+                                "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE \"{}\" = $1::bigint",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        } else {
+                            format!(
+                                "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE \"{}\" = $1",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        };
+
+                        let sample_query = if col_type_lower.contains("uuid") {
+                            format!(
+                                "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1::uuid LIMIT 10",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        } else if col_type_lower.contains("int") || col_type_lower.contains("serial") {
+                            format!(
+                                "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1::bigint LIMIT 10",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        } else {
+                            format!(
+                                "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1 LIMIT 10",
+                                schema_name.replace('"', "\"\""),
+                                table_name.replace('"', "\"\""),
+                                col_name.replace('"', "\"\"")
+                            )
+                        };
+
+                        set.spawn(async move {
+                            // Check count
+                            if let Ok(count_row) = sqlx::query(&count_query).bind(&clean_value_clone).fetch_one(&pool_clone).await {
+                                let count: i64 = count_row.try_get(0).unwrap_or(0);
+                                if count > 0 {
+                                    // Fetch sample rows
+                                    if let Ok(rows) = sqlx::query(&sample_query).bind(&clean_value_clone).fetch_all(&pool_clone).await {
+                                        let sample_rows = {
+                                            let converter = |r: Vec<sqlx::postgres::PgRow>| -> Result<QueryResult> {
+                                                Ok(process_rows!(r, postgres))
+                                            };
+                                            converter(rows).unwrap_or(QueryResult {
+                                                columns: vec![],
+                                                rows: vec![],
+                                                rows_affected: 0,
+                                            })
                                         };
-                                        converter(rows).unwrap_or(QueryResult {
-                                            columns: vec![],
-                                            rows: vec![],
-                                            rows_affected: 0,
-                                        })
-                                    };
-                                    matches.push(RelationMatch {
-                                        table_name: format!("{}.{}", schema_name, table_name),
-                                        column_name: col_name.clone(),
-                                        is_primary_key: is_pk,
-                                        count: count as u64,
-                                        sample_rows,
-                                    });
+                                        return Ok(Some(RelationMatch {
+                                            table_name: format!("{}.{}", schema_name_clone, table_name_clone),
+                                            column_name: col_name_clone,
+                                            is_primary_key: is_pk,
+                                            count: count as u64,
+                                            sample_rows,
+                                        }));
+                                    }
                                 }
                             }
-                        }
+                            Ok(None)
+                        });
+                    }
+                }
+
+                while let Some(res) = set.join_next().await {
+                    if let Ok(Ok(Some(relation_match))) = res {
+                        matches.push(relation_match);
                     }
                 }
             }
@@ -3103,6 +3220,15 @@ impl ConnectionManager {
                 "#;
                 
                 let col_rows = sqlx::query(cols_query).fetch_all(pool).await?;
+
+                let mut table_names = std::collections::HashSet::new();
+                for row in &col_rows {
+                    let table_name: String = row.try_get(0).unwrap_or_default();
+                    table_names.insert(table_name);
+                }
+
+                let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
+
                 for row in col_rows {
                     let table_name: String = row.try_get(0).unwrap_or_default();
                     let col_name: String = row.try_get(1).unwrap_or_default();
@@ -3110,53 +3236,85 @@ impl ConnectionManager {
                     let is_pk: i64 = row.try_get(3).unwrap_or(0);
                     
                     let col_type_lower = col_type.to_lowercase();
+                    let col_name_lower = col_name.to_lowercase();
+
+                    // Check table names matching (including singular/plural)
+                    let mut matches_table_name = false;
+                    for t_name in &table_names {
+                        let t_name_lower = t_name.to_lowercase();
+                        if col_name_lower == t_name_lower || 
+                           col_name_lower == format!("{}s", t_name_lower) ||
+                           t_name_lower == format!("{}s", col_name_lower) {
+                            matches_table_name = true;
+                            break;
+                        }
+                    }
                     
-                    let is_candidate = if is_uuid {
+                    let is_candidate = if is_pk > 0 {
+                        true
+                    } else if matches_table_name {
+                        true
+                    } else if is_uuid {
                         col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
                     } else if is_numeric {
-                        col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("decimal") || col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
+                        ((col_type_lower.contains("int") || col_type_lower.contains("num") || col_type_lower.contains("decimal")) && (is_identifier_name(&col_name) || col_name_lower == "id" || col_name_lower.ends_with("id"))) ||
+                        ((col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")) && is_identifier_name(&col_name))
                     } else {
-                        col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")
+                        (col_type_lower.contains("char") || col_type_lower.contains("varchar") || col_type_lower.contains("text")) && is_identifier_name(&col_name)
                     };
                     
                     if is_candidate {
-                        // Check count using backticks for MySQL identifiers
-                        let count_query = format!(
-                            "SELECT COUNT(*) FROM `{}` WHERE `{}` = ?",
-                            table_name.replace('`', "``"),
-                            col_name.replace('`', "``")
-                        );
-                        
-                        if let Ok(count_row) = sqlx::query(&count_query).bind(clean_value).fetch_one(pool).await {
-                            let count: i64 = count_row.try_get(0).unwrap_or(0);
-                            if count > 0 {
-                                // Fetch sample rows
-                                let sample_query = format!(
-                                    "SELECT * FROM `{}` WHERE `{}` = ? LIMIT 10",
-                                    table_name.replace('`', "``"),
-                                    col_name.replace('`', "``")
-                                );
-                                if let Ok(rows) = sqlx::query(&sample_query).bind(clean_value).fetch_all(pool).await {
-                                    let sample_rows = {
-                                        let converter = |r: Vec<sqlx::mysql::MySqlRow>| -> Result<QueryResult> {
-                                            Ok(process_rows!(r, common))
+                        let pool_clone = pool.clone();
+                        let table_name_clone = table_name.clone();
+                        let col_name_clone = col_name.clone();
+                        let clean_value_clone = clean_value.to_string();
+
+                        set.spawn(async move {
+                            // Check count using backticks for MySQL identifiers
+                            let count_query = format!(
+                                "SELECT COUNT(*) FROM `{}` WHERE `{}` = ?",
+                                table_name_clone.replace('`', "``"),
+                                col_name_clone.replace('`', "``")
+                            );
+                            
+                            if let Ok(count_row) = sqlx::query(&count_query).bind(&clean_value_clone).fetch_one(&pool_clone).await {
+                                let count: i64 = count_row.try_get(0).unwrap_or(0);
+                                if count > 0 {
+                                    // Fetch sample rows
+                                    let sample_query = format!(
+                                        "SELECT * FROM `{}` WHERE `{}` = ? LIMIT 10",
+                                        table_name_clone.replace('`', "``"),
+                                        col_name_clone.replace('`', "``")
+                                    );
+                                    if let Ok(rows) = sqlx::query(&sample_query).bind(&clean_value_clone).fetch_all(&pool_clone).await {
+                                        let sample_rows = {
+                                            let converter = |r: Vec<sqlx::mysql::MySqlRow>| -> Result<QueryResult> {
+                                                Ok(process_rows!(r, common))
+                                            };
+                                            converter(rows).unwrap_or(QueryResult {
+                                                columns: vec![],
+                                                rows: vec![],
+                                                rows_affected: 0,
+                                            })
                                         };
-                                        converter(rows).unwrap_or(QueryResult {
-                                            columns: vec![],
-                                            rows: vec![],
-                                            rows_affected: 0,
-                                        })
-                                    };
-                                    matches.push(RelationMatch {
-                                        table_name: table_name.clone(),
-                                        column_name: col_name.clone(),
-                                        is_primary_key: is_pk > 0,
-                                        count: count as u64,
-                                        sample_rows,
-                                    });
+                                        return Ok(Some(RelationMatch {
+                                            table_name: table_name_clone,
+                                            column_name: col_name_clone,
+                                            is_primary_key: is_pk > 0,
+                                            count: count as u64,
+                                            sample_rows,
+                                        }));
+                                    }
                                 }
                             }
-                        }
+                            Ok(None)
+                        });
+                    }
+                }
+
+                while let Some(res) = set.join_next().await {
+                    if let Ok(Ok(Some(relation_match))) = res {
+                        matches.push(relation_match);
                     }
                 }
             }
