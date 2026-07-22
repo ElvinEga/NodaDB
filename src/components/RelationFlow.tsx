@@ -416,7 +416,7 @@ export default function RelationFlow({
       </div>
 
       {/* Main body area */}
-      <div className="flex-1 min-h-0 relative pb-12">
+      <div className="flex-1 min-h-0 relative pb-6">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -569,7 +569,7 @@ export default function RelationFlow({
 
       {/* Footer */}
       {!isLoading && !error && matches.length > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 z-10 h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shadow-sm">
+        <div className="fixed bottom-0 right-0 left-0 z-10 h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shadow-sm">
           <div className="flex items-center gap-4 flex-shrink-0">
             <Button
               variant="ghost"
@@ -592,7 +592,7 @@ export default function RelationFlow({
           </div>
 
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span>Origin:</span>
+            <span className="text-sm">Origin:</span>
             <span className="font-mono text-xs bg-muted/60 border border-border/80 px-1.5 py-0.5 rounded text-foreground font-semibold">{value}</span>
           </div>
         </div>
