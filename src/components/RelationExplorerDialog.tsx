@@ -33,6 +33,7 @@ interface RelationExplorerDialogProps {
   connection: ConnectionConfig;
   value: string;
   onNavigateToTable?: (tableName: string, columnName: string, value: string) => void;
+  onViewFlow?: (value: string) => void;
 }
 
 export function RelationExplorerDialog({
@@ -41,6 +42,7 @@ export function RelationExplorerDialog({
   connection,
   value,
   onNavigateToTable,
+  onViewFlow,
 }: RelationExplorerDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function RelationExplorerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-6 gap-4">
-        <DialogHeader className="border-b border-border pb-3 shrink-0">
+        <DialogHeader className="border-b border-border pb-3 shrink-0 flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
               <Workflow className="h-5 w-5" />
@@ -124,6 +126,19 @@ export function RelationExplorerDialog({
               </DialogDescription>
             </div>
           </div>
+          {onViewFlow && matches.length > 0 && (
+            <Button
+              onClick={() => {
+                onViewFlow(value);
+                onOpenChange(false);
+              }}
+              className="gap-1.5 h-8 text-xs font-semibold mr-8"
+              variant="outline"
+            >
+              <Workflow className="h-3.5 w-3.5" />
+              View Flow
+            </Button>
+          )}
         </DialogHeader>
 
         <div className="flex-1 min-h-0 relative">
