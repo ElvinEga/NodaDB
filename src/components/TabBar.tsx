@@ -19,7 +19,7 @@ import { DatabaseTable, TableColumn, TabFilter } from "@/types";
 
 export type TabType = {
   id: string;
-  type: "table" | "query" | "query-builder" | "schema";
+  type: "table" | "query" | "query-builder" | "schema" | "relation-flow";
   title: string;
   table?: DatabaseTable;
   columns?: TableColumn[];
@@ -28,6 +28,7 @@ export type TabType = {
   queryContent?: string;
   lastModified?: Date;
   initialFilters?: TabFilter[];
+  relationFlowValue?: string;
 };
 
 interface TabBarProps {
