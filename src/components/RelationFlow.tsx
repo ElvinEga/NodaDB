@@ -156,7 +156,7 @@ export default function RelationFlow({
   value,
   onNavigateToTable,
 }: RelationFlowProps) {
-  const [viewMode, setViewMode] = useState<"flow" | "comparison">("flow");
+  const [viewMode, setViewMode] = useState<"flow" | "comparison">("comparison");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [matches, setMatches] = useState<RelationMatch[]>([]);
@@ -336,15 +336,6 @@ export default function RelationFlow({
           {/* Toggles */}
           <div className="flex items-center border border-border rounded-lg p-0.5 bg-muted/40 shadow-sm shrink-0">
             <Button
-              variant={viewMode === "flow" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 text-xs px-3 font-semibold rounded-md gap-1"
-              onClick={() => setViewMode("flow")}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Flow Graph
-            </Button>
-            <Button
               variant={viewMode === "comparison" ? "secondary" : "ghost"}
               size="sm"
               className="h-7 text-xs px-3 font-semibold rounded-md gap-1"
@@ -352,6 +343,15 @@ export default function RelationFlow({
             >
               <TableProperties className="h-3.5 w-3.5" />
               Table Grid
+            </Button>
+            <Button
+              variant={viewMode === "flow" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs px-3 font-semibold rounded-md gap-1"
+              onClick={() => setViewMode("flow")}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Flow Graph
             </Button>
           </div>
 
