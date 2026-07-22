@@ -1,4 +1,4 @@
-import { QueryResult } from '@/types';
+import { QueryResult, RelationMatch } from '@/types';
 import * as XLSX from 'xlsx';
 
 export type ExportFormat = 'csv' | 'json' | 'sql' | 'excel' | 'markdown' | 'html';
@@ -360,4 +360,91 @@ export function getMimeType(format: ExportFormat): string {
     html: 'text/html',
   };
   return mimeTypes[format];
+}
+
+/**
+ * Export all relation flow matches together
+ */
+export function exportAllMatches(
+  matches: RelationMatch[],
+  format: ExportFormat,
+  options: ExportOptions = {}
+): string | Uint8Array {
+  const { tableName = 'relation_flow' } = options;
+
+  if (format === 'excel') {
+    const wb = XLSX.utils.book_new();
+    matches.forEach((match) => {
+      const wsData: any[][] = [];
+      wsData.push(match.sample_rows.columns);
+      match.sample_rows.rows.forEach((row) => {
+        wsData.push(match.sample_rows.columns.map((col) => row[col]));
+      });
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      
+      const colWidths = match.sample_rows.columns.map((col) => ({
+        wch: Math.max(col.length, 10),
+      }));
+      ws['!cols'] = colWidths;
+      
+      // Sheet names in Excel cannot exceed 31 characters
+      const sheetName = match.table_name.substring(0, 30);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Uint8Array(excelBuffer);
+  }
+
+  if (format === 'json') {
+    const jsonObj: Record<string, any> = {};
+    matches.forEach((match) => {
+      jsonObj[match.table_name] = match.sample_rows.rows;
+    });
+    return JSON.stringify(jsonObj, null, 2);
+  }
+
+  if (format === 'csv') {
+    const blocks: string[] = [];
+    matches.forEach((match) => {
+      blocks.push(`# Table: ${match.table_name} (linked via ${match.column_name})`);
+      blocks.push(exportToCSV(match.sample_rows, options));
+      blocks.push(''); // spacing
+    });
+    return blocks.join('\n');
+  }
+
+  if (format === 'sql') {
+    const blocks: string[] = [];
+    matches.forEach((match) => {
+      blocks.push(exportToSQL(match.sample_rows, { sqlTableName: match.table_name }));
+      blocks.push('');
+    });
+    return blocks.join('\n');
+  }
+
+  if (format === 'markdown') {
+    const blocks: string[] = [];
+    blocks.push(`# Relation Flow Export (Traced value: ${tableName})\n`);
+    matches.forEach((match) => {
+      blocks.push(`## Table: ${match.table_name} (${match.count} matches, linked via ${match.column_name})\n`);
+      blocks.push(exportToMarkdown(match.sample_rows, options));
+      blocks.push('');
+    });
+    return blocks.join('\n');
+  }
+
+  if (format === 'html') {
+    const blocks: string[] = [];
+    blocks.push(`<!DOCTYPE html><html><head><title>Relation Flow Export</title><style>body { font-family: sans-serif; margin: 24px; color: #1f2937; } h2 { margin-top: 32px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; } table { border-collapse: collapse; width: 100%; margin-top: 12px; } th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; } th { background-color: #f3f4f6; }</style></head><body>`);
+    blocks.push(`<h1>Relation Flow Export (Traced value: ${tableName})</h1>`);
+    matches.forEach((match) => {
+      blocks.push(`<h2>Table: ${match.table_name} (${match.count} matches, linked via ${match.column_name})</h2>`);
+      blocks.push(exportToHTML(match.sample_rows, options));
+    });
+    blocks.push(`</body></html>`);
+    return blocks.join('\n');
+  }
+
+  throw new Error(`Unsupported format: ${format}`);
 }
