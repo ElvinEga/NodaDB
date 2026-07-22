@@ -28,8 +28,11 @@ import {
   RefreshCw,
   Loader2,
   XCircle,
+  Download,
 } from "lucide-react";
 import { ConnectionConfig, RelationMatch } from "@/types";
+import { ExportDataDialog } from "@/components/ExportDataDialog";
+import { ExportAllFlowDialog } from "./ExportAllFlowDialog";
 
 interface RelationFlowProps {
   connection: ConnectionConfig;
@@ -85,6 +88,20 @@ const TableNode = ({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-[10px] text-muted-foreground font-semibold">({data.count} match{data.count === 1 ? "" : "es"})</span>
+          {data.onExport && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-md"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onExport();
+              }}
+              title="Export Table Data"
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+          )}
           {data.onNavigate && (
             <Button
               variant="ghost"
@@ -162,6 +179,11 @@ export default function RelationFlow({
   const [error, setError] = useState<string | null>(null);
   const [matches, setMatches] = useState<RelationMatch[]>([]);
 
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportData, setExportData] = useState<any>(null);
+  const [exportTableName, setExportTableName] = useState("");
+  const [exportAllDialogOpen, setExportAllDialogOpen] = useState(false);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -204,50 +226,70 @@ export default function RelationFlow({
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
-    // 1. Create Origin search node
-    newNodes.push({
-      id: "search-origin",
-      type: "searchNode",
-      position: { x: 50, y: 250 },
-      data: { label: value },
-    });
-
-    // 2. Identify if there is a primary key table node
+    // 1. Identify if there is a primary key table node
     const primaryKeyMatch = relationMatches.find((m) => m.is_primary_key);
     const hasPrimaryKey = primaryKeyMatch !== undefined;
 
+    const centerX = 500;
+    const centerY = 350;
+    const radius = 380;
+
+    // 2. Place Origin search node
+    if (hasPrimaryKey) {
+      newNodes.push({
+        id: "search-origin",
+        type: "searchNode",
+        position: { x: 100, y: centerY },
+        data: { label: value },
+      });
+    } else {
+      newNodes.push({
+        id: "search-origin",
+        type: "searchNode",
+        position: { x: centerX, y: centerY },
+        data: { label: value },
+      });
+    }
+
     // 3. Render table nodes and connect edges
-    let foreignKeyIndex = 0;
+    const nonPkMatches = relationMatches.filter((m) => !m.is_primary_key);
+    const numNonPk = nonPkMatches.length;
+
+    let nonPkIndex = 0;
 
     relationMatches.forEach((match) => {
       const isPk = match.is_primary_key;
       const nodeId = `table-${match.table_name}`;
 
-      // Calculate node positions based on relationship hierarchy
-      let xPos = 400;
-      let yPos = 250;
+      let xPos = centerX;
+      let yPos = centerY;
 
       if (hasPrimaryKey) {
         if (isPk) {
-          xPos = 400;
-          yPos = 250;
+          xPos = centerX;
+          yPos = centerY;
         } else {
-          // Place reference tables on the right side of the PK hub
-          xPos = 820;
-          yPos = 150 * foreignKeyIndex + 100;
-          foreignKeyIndex++;
+          // Distribute along an arc of 270 degrees (from -135 to +135 deg) on the right
+          const angle = numNonPk > 1 
+            ? -2.356 + (4.712 * nonPkIndex) / (numNonPk - 1)
+            : 0; // if only 1 node, put it on the right (0 rad)
+          
+          xPos = centerX + radius * Math.cos(angle);
+          yPos = centerY + radius * Math.sin(angle);
+          nonPkIndex++;
         }
       } else {
-        // Fallback layout: just lay out tables in a stack on the right
-        xPos = 500;
-        yPos = 150 * foreignKeyIndex + 100;
-        foreignKeyIndex++;
+        // Distribute in a full circle around the search-origin center
+        const angle = (2 * Math.PI * nonPkIndex) / relationMatches.length;
+        xPos = centerX + radius * Math.cos(angle);
+        yPos = centerY + radius * Math.sin(angle);
+        nonPkIndex++;
       }
 
       newNodes.push({
         id: nodeId,
         type: "tableNode",
-        position: { x: xPos, y: yPos },
+        position: { x: Math.round(xPos), y: Math.round(yPos) },
         data: {
           tableName: match.table_name,
           columnName: match.column_name,
@@ -257,6 +299,11 @@ export default function RelationFlow({
           onNavigate: onNavigateToTable
             ? () => onNavigateToTable(match.table_name, match.column_name, value)
             : undefined,
+          onExport: () => {
+            setExportData(match.sample_rows);
+            setExportTableName(match.table_name);
+            setExportDialogOpen(true);
+          },
         },
       });
 
@@ -431,17 +478,32 @@ export default function RelationFlow({
                       <span className="text-[10px] text-muted-foreground">({match.count} match{match.count === 1 ? "" : "es"})</span>
                     </div>
 
-                    {onNavigateToTable && (
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 text-[10px] px-2.5 hover:bg-primary/5 hover:text-primary gap-1"
-                        onClick={() => onNavigateToTable(match.table_name, match.column_name, value)}
+                        onClick={() => {
+                          setExportData(match.sample_rows);
+                          setExportTableName(match.table_name);
+                          setExportDialogOpen(true);
+                        }}
                       >
-                        Go to Table
-                        <ExternalLink className="h-3 w-3" />
+                        <Download className="h-3 w-3" />
+                        Export
                       </Button>
-                    )}
+                      {onNavigateToTable && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[10px] px-2.5 hover:bg-primary/5 hover:text-primary gap-1"
+                          onClick={() => onNavigateToTable(match.table_name, match.column_name, value)}
+                        >
+                          Go to Table
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Table View */}
@@ -504,6 +566,55 @@ export default function RelationFlow({
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      {!isLoading && !error && matches.length > 0 && (
+        <div className="sticky bottom-0 z-10 h-12 border-t border-border bg-card/95 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shrink-0 shadow-sm">
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExportAllDialogOpen(true)}
+              className="h-8 text-xs font-semibold gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export All
+            </Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              Tables Scanned: <span className="font-semibold text-foreground">{matches.length}</span>
+            </span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              Total Relations Traced:{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {matches.reduce((acc, curr) => acc + curr.sample_rows.rows.length, 0)}
+              </span>
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="font-medium">Origin:</span>
+            <span className="font-mono bg-muted/60 border border-border/80 px-1.5 py-0.5 rounded text-foreground font-semibold">{value}</span>
+          </div>
+        </div>
+      )}
+
+      {exportData && (
+        <ExportDataDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          data={exportData}
+          tableName={exportTableName}
+        />
+      )}
+
+      {exportAllDialogOpen && (
+        <ExportAllFlowDialog
+          open={exportAllDialogOpen}
+          onOpenChange={setExportAllDialogOpen}
+          matches={matches}
+          value={value}
+        />
+      )}
     </div>
   );
 }
