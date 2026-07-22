@@ -270,10 +270,10 @@ export default function RelationFlow({
           yPos = centerY;
         } else {
           // Distribute along an arc of 270 degrees (from -135 to +135 deg) on the right
-          const angle = numNonPk > 1 
+          const angle = numNonPk > 1
             ? -2.356 + (4.712 * nonPkIndex) / (numNonPk - 1)
             : 0; // if only 1 node, put it on the right (0 rad)
-          
+
           xPos = centerX + radius * Math.cos(angle);
           yPos = centerY + radius * Math.sin(angle);
           nonPkIndex++;
@@ -590,10 +590,10 @@ export default function RelationFlow({
               </span>
             </span>
           </div>
-          
+
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span className="font-medium">Origin:</span>
-            <span className="font-mono bg-muted/60 border border-border/80 px-1.5 py-0.5 rounded text-foreground font-semibold">{value}</span>
+            <span>Origin:</span>
+            <span className="font-mono text-xs bg-muted/60 border border-border/80 px-1.5 py-0.5 rounded text-foreground font-semibold">{value}</span>
           </div>
         </div>
       )}
