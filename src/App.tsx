@@ -656,6 +656,21 @@ function App() {
                                 connection={activeConnection}
                                 table={tab.table}
                                 columns={tab.columns}
+                                initialFilters={tab.initialFilters}
+                                onNavigateToTable={(tableName, columnName, val) => {
+                                  const newTab: TabType = {
+                                    id: `table-${tableName}-filtered-${Date.now()}`,
+                                    type: "table",
+                                    title: `${tableName} (${columnName}=${val})`,
+                                    table: { name: tableName },
+                                    columns: undefined,
+                                    isPinned: false,
+                                    isDirty: false,
+                                    initialFilters: [{ id: columnName, value: val }],
+                                  };
+                                  setTabs([...tabs, newTab]);
+                                  setActiveTabId(newTab.id);
+                                }}
                                 onRefresh={async () => {
                                   try {
                                     const columns = await invoke<TableColumn[]>(
