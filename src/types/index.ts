@@ -339,3 +339,17 @@ export interface TableTagAssignment {
   tagId: string;
   connectionId: string;
 }
+
+export interface RelationMatch {
+  table_name: string;
+  column_name: string;
+  is_primary_key: boolean;
+  count: number;
+  sample_rows: QueryResult;
+}
+
+export interface TabFilter {
+  id: string;
+  value: unknown;
+}
+
