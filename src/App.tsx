@@ -61,6 +61,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TanStackTableViewer } from "./components/TanStackTableViewer";
+import RelationFlow from "./components/RelationFlow";
 import { OPEN_ABOUT_EVENT } from "@/lib/appEvents";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
 
@@ -671,6 +672,18 @@ function App() {
                                   setTabs([...tabs, newTab]);
                                   setActiveTabId(newTab.id);
                                 }}
+                                onViewFlow={(val) => {
+                                  const newTab: TabType = {
+                                    id: `relation-flow-${val}-${Date.now()}`,
+                                    type: "relation-flow",
+                                    title: `Flow: ${val.substring(0, 8)}...`,
+                                    isPinned: false,
+                                    isDirty: false,
+                                    relationFlowValue: val,
+                                  };
+                                  setTabs([...tabs, newTab]);
+                                  setActiveTabId(newTab.id);
+                                }}
                                 onRefresh={async () => {
                                   try {
                                     const columns = await invoke<TableColumn[]>(
@@ -705,6 +718,27 @@ function App() {
                         ) : tab.type === "schema" ? (
                           isActive ? (
                             <SchemaDesigner connection={activeConnection} />
+                          ) : null
+                        ) : tab.type === "relation-flow" ? (
+                          isActive ? (
+                            <RelationFlow
+                              connection={activeConnection}
+                              value={tab.relationFlowValue || ""}
+                              onNavigateToTable={(tableName, columnName, val) => {
+                                const newTab: TabType = {
+                                  id: `table-${tableName}-filtered-${Date.now()}`,
+                                  type: "table",
+                                  title: `${tableName} (${columnName}=${val})`,
+                                  table: { name: tableName },
+                                  columns: undefined,
+                                  isPinned: false,
+                                  isDirty: false,
+                                  initialFilters: [{ id: columnName, value: val }],
+                                };
+                                setTabs([...tabs, newTab]);
+                                setActiveTabId(newTab.id);
+                              }}
+                            />
                           ) : null
                         ) : (
                           // "query" tabs: always keep mounted to preserve state
