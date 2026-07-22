@@ -129,7 +129,7 @@ pub struct ExportArchiveEntry {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryResult {
     pub columns: Vec<String>,
     pub rows: Vec<serde_json::Value>,
@@ -219,3 +219,13 @@ pub struct PostgresTablePrivileges {
     pub can_references: bool,
     pub can_trigger: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationMatch {
+    pub table_name: String,
+    pub column_name: String,
+    pub is_primary_key: bool,
+    pub count: u64,
+    pub sample_rows: QueryResult,
+}
+
