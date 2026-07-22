@@ -1944,7 +1944,7 @@ Sum: ${stats.sum}`
         </ContextMenu>
 
         {/* Footer / Pagination */}
-        <div className="h-14 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4">
+        <div className="h-12 border-t border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4">
           <div className="flex items-center gap-4 flex-shrink-0">
             <Button
               variant="ghost"
