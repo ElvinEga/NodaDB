@@ -2,7 +2,7 @@ use crate::database::ConnectionManager;
 use crate::models::{
     AppliedMigration, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType,
     ExecutionPlan, ExportArchiveEntry, ForeignKeyDefinition, PostgresConnectionInfo, PostgresExtension,
-    PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex,
+    PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch,
 };
 use chrono::Utc;
 use tauri::State;
@@ -490,3 +490,17 @@ pub async fn create_export_archive(entries: Vec<ExportArchiveEntry>) -> Result<V
 
     Ok(cursor.into_inner())
 }
+
+#[tauri::command]
+pub async fn trace_id_relations(
+    connection_id: String,
+    value: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<RelationMatch>, String> {
+    manager
+        .trace_id_relations(&connection_id, &value, &db_type)
+        .await
+        .map_err(|e| format!("Relation search failed: {}", e))
+}
+
