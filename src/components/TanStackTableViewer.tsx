@@ -1844,39 +1844,35 @@ Sum: ${stats.sum}`
                               }
                             }
 
-                            const selectedDate = !isBetween && filterValue ? new Date(filterValue) : undefined;
+                            const selectedDate = !isBetween && filterValue ? new Date(filterValue.includes(" ") ? filterValue.split(" ")[0] : filterValue) : undefined;
                             const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
 
-                            const getButtonText = () => {
-                              if (isBetween) {
+                            if (isBetween) {
+                              const getButtonText = () => {
                                 if (selectedRange?.from) {
                                   const fromStr = format(selectedRange.from, "yyyy-MM-dd");
                                   const toStr = selectedRange.to ? format(selectedRange.to, "yyyy-MM-dd") : "Pick end date";
                                   return `${fromStr} - ${toStr}`;
                                 }
                                 return "Pick date range...";
-                              } else {
-                                return isValidDate ? format(selectedDate!, "yyyy-MM-dd HH:mm:ss") : "Pick date/time...";
-                              }
-                            };
+                              };
 
-                            return (
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className={cn(
-                                      "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
-                                      !filterValue && "text-muted-foreground"
-                                    )}
-                                  >
-                                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                                    <span>{getButtonText()}</span>
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0 z-[120]" align="start">
-                                  {isBetween ? (
+                              return (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className={cn(
+                                        "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                        !filterValue && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                      <span>{getButtonText()}</span>
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0 z-[120]" align="start">
                                     <Calendar
                                       mode="range"
                                       selected={selectedRange}
@@ -1890,19 +1886,87 @@ Sum: ${stats.sum}`
                                         }
                                       }}
                                     />
-                                  ) : (
-                                    <Calendar
-                                      mode="single"
-                                      selected={isValidDate ? selectedDate : undefined}
-                                      onSelect={(date) => {
-                                        if (date) {
-                                          setFilterValue(format(date, "yyyy-MM-dd HH:mm:ss"));
-                                        } else {
-                                          setFilterValue("");
-                                        }
-                                      }}
-                                    />
-                                  )}
+                                  </PopoverContent>
+                                </Popover>
+                              );
+                            }
+
+                            // Single Date / Datetime
+                            if (typeFamily === "date_time") {
+                              const timeVal = filterValue && filterValue.includes(" ") ? filterValue.split(" ")[1] : "12:00:00";
+                              return (
+                                <div className="flex gap-1.5 w-full">
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={cn(
+                                          "h-8 text-xs flex-1 justify-start text-left font-normal bg-background border-border",
+                                          !filterValue && "text-muted-foreground"
+                                        )}
+                                      >
+                                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                                        <span className="truncate">{isValidDate ? format(selectedDate!, "yyyy-MM-dd") : "Pick date..."}</span>
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                                      <Calendar
+                                        mode="single"
+                                        selected={isValidDate ? selectedDate : undefined}
+                                        onSelect={(date) => {
+                                          if (date) {
+                                            setFilterValue(`${format(date, "yyyy-MM-dd")} ${timeVal}`);
+                                          } else {
+                                            setFilterValue("");
+                                          }
+                                        }}
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                  <Input
+                                    type="time"
+                                    step="1"
+                                    value={timeVal}
+                                    onChange={(e) => {
+                                      const newTime = e.target.value || "12:00:00";
+                                      const dateStr = isValidDate ? format(selectedDate!, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+                                      setFilterValue(`${dateStr} ${newTime}`);
+                                    }}
+                                    className="h-8 text-xs w-[90px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                                  />
+                                </div>
+                              );
+                            }
+
+                            // Pure Date
+                            return (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(
+                                      "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                      !filterValue && "text-muted-foreground"
+                                    )}
+                                  >
+                                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                    <span>{isValidDate ? format(selectedDate!, "yyyy-MM-dd") : "Pick date..."}</span>
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={isValidDate ? selectedDate : undefined}
+                                    onSelect={(date) => {
+                                      if (date) {
+                                        setFilterValue(format(date, "yyyy-MM-dd"));
+                                      } else {
+                                        setFilterValue("");
+                                      }
+                                    }}
+                                  />
                                 </PopoverContent>
                               </Popover>
                             );
