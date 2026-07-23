@@ -1729,7 +1729,7 @@ Sum: ${stats.sum}`
                   {/* Add Filter Form */}
                   <div className="space-y-3 pt-3 border-t border-border">
                     <div className="text-xs font-medium text-muted-foreground">Add New Filter</div>
-                    
+
                     {/* Column Select */}
                     <div className="space-y-1">
                       <label className="text-[10px] text-muted-foreground font-medium">Column</label>
@@ -1762,7 +1762,7 @@ Sum: ${stats.sum}`
                     {(() => {
                       const col = effectiveTableColumns.find((c) => c.name === selectedFilterColumn);
                       const operators = col ? getOperatorsForDataType(col.data_type) : [];
-                      
+
                       return (
                         <div className="space-y-1">
                           <label className="text-[10px] text-muted-foreground font-medium">Operator</label>
@@ -1895,7 +1895,7 @@ Sum: ${stats.sum}`
                             if (typeFamily === "date_time") {
                               const timeVal = filterValue && filterValue.includes(" ") ? filterValue.split(" ")[1] : "12:00:00";
                               return (
-                                <div className="flex gap-1.5 w-full">
+                                <div className="flex gap-1.5 justify-between w-full">
                                   <Popover>
                                     <PopoverTrigger asChild>
                                       <Button
@@ -1933,7 +1933,7 @@ Sum: ${stats.sum}`
                                       const dateStr = isValidDate ? format(selectedDate!, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
                                       setFilterValue(`${dateStr} ${newTime}`);
                                     }}
-                                    className="h-8 text-xs w-[90px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                                    className="h-8 text-xs w-[108px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                                   />
                                 </div>
                               );
@@ -1992,13 +1992,13 @@ Sum: ${stats.sum}`
                         // Avoid duplicates: remove previous filter for this column first
                         setColumnFilters((prev) => [
                           ...prev.filter((f) => f.id !== selectedFilterColumn),
-                          { 
-                            id: selectedFilterColumn, 
-                            value: { 
-                              operator: selectedFilterOperator, 
+                          {
+                            id: selectedFilterColumn,
+                            value: {
+                              operator: selectedFilterOperator,
                               value: filterValue,
                               dataType: col?.data_type || ""
-                            } 
+                            }
                           },
                         ]);
                         setFilterValue("");
