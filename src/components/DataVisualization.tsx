@@ -22,7 +22,7 @@ import { toPng } from 'html-to-image';
 import { ChartConfig, QueryResult } from '@/types';
 import { ChartConfigPanel } from '@/components/ChartConfigPanel';
 import { Button } from '@/components/ui/button';
-import { Download, Settings, Image } from 'lucide-react';
+import { Download, Settings, Image, ChevronDown, ChevronUp } from 'lucide-react';
 import { transformQueryResultToChartData, DEFAULT_CHART_COLORS } from '@/lib/chartDataTransformer';
 import { toast } from 'sonner';
 
@@ -99,17 +99,25 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData.data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chartData.xAxisKey} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
+            <BarChart data={chartData.data} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey={chartData.xAxisKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               {chartData.yAxisKeys.map((key, index) => (
                 <Bar
                   key={key}
                   dataKey={key}
                   fill={colors[index % colors.length]}
+                  radius={[3, 3, 0, 0]}
                 />
               ))}
             </BarChart>
@@ -119,12 +127,19 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
       case 'line':
         return (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData.data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chartData.xAxisKey} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
+            <LineChart data={chartData.data} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey={chartData.xAxisKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               {chartData.yAxisKeys.map((key, index) => (
                 <Line
                   key={key}
@@ -132,6 +147,7 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
                   dataKey={key}
                   stroke={colors[index % colors.length]}
                   strokeWidth={2}
+                  dot={{ r: 3 }}
                 />
               ))}
             </LineChart>
@@ -141,12 +157,19 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
       case 'area':
         return (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData.data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chartData.xAxisKey} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
+            <AreaChart data={chartData.data} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey={chartData.xAxisKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               {chartData.yAxisKeys.map((key, index) => (
                 <Area
                   key={key}
@@ -154,6 +177,7 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
                   dataKey={key}
                   fill={colors[index % colors.length]}
                   stroke={colors[index % colors.length]}
+                  fillOpacity={0.3}
                 />
               ))}
             </AreaChart>
@@ -170,15 +194,22 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
                 nameKey={chartData.xAxisKey}
                 cx="50%"
                 cy="50%"
-                outerRadius={150}
+                outerRadius={110}
                 label
               >
                 {chartData.data.map((_entry, index) => (
                   <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                 ))}
               </Pie>
-              <Tooltip />
-              <Legend />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
             </PieChart>
           </ResponsiveContainer>
         );
@@ -186,12 +217,20 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
       case 'scatter':
         return (
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={chartData.xAxisKey} />
-              <YAxis />
-              <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-              <Legend />
+            <ScatterChart margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey={chartData.xAxisKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               {chartData.yAxisKeys.map((key, index) => (
                 <Scatter
                   key={key}
@@ -211,11 +250,20 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
   };
 
   return (
-    <div className="h-full flex bg-background">
+    <div className="h-full flex overflow-hidden bg-background">
+      {/* Config Panel - left vertical sidebar */}
+      {showConfig && (
+        <ChartConfigPanel
+          queryResult={queryResult}
+          config={config}
+          onConfigChange={setConfig}
+        />
+      )}
+
       {/* Chart Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Toolbar */}
-        <div className="h-12 border-b border-border bg-secondary/50 flex items-center justify-between px-4">
+        <div className="shrink-0 h-11 border-b border-border bg-secondary/50 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold">Data Visualization</h2>
             {config.title && (
@@ -227,38 +275,37 @@ export function DataVisualization({ queryResult }: DataVisualizationProps) {
               variant="outline"
               size="sm"
               onClick={() => setShowConfig(!showConfig)}
+              className="h-7 text-xs"
             >
-              <Settings className="h-4 w-4 mr-2" />
-              {showConfig ? 'Hide' : 'Show'} Config
+              <Settings className="h-3.5 w-3.5 mr-1.5" />
+              Config
+              {showConfig ? (
+                <ChevronUp className="h-3 w-3 ml-1" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-1" />
+              )}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportPNG}>
-              <Image className="h-4 w-4 mr-2" />
-              Export PNG
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportPNG}>
+              <Image className="h-3.5 w-3.5 mr-1.5" />
+              PNG
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportData}>
-              <Download className="h-4 w-4 mr-2" />
-              Export Data
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleExportData}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              CSV
             </Button>
           </div>
         </div>
 
         {/* Chart */}
-        <div className="flex-1 p-8" ref={chartRef}>
+        <div className="flex-1 overflow-auto p-4">
           {config.title && (
-            <h3 className="text-xl font-semibold text-center mb-6">{config.title}</h3>
+            <h3 className="text-base font-semibold text-center mb-3">{config.title}</h3>
           )}
-          <div className="h-full">{renderChart()}</div>
+          <div ref={chartRef} className="w-full" style={{ height: 320 }}>
+            {renderChart()}
+          </div>
         </div>
       </div>
-
-      {/* Config Panel */}
-      {showConfig && (
-        <ChartConfigPanel
-          queryResult={queryResult}
-          config={config}
-          onConfigChange={setConfig}
-        />
-      )}
     </div>
   );
 }

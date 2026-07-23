@@ -23,7 +23,7 @@ import {
   FileCode,
   Loader2,
 } from "lucide-react";
-import { ConnectionConfig, DatabaseTable, TableColumn } from "@/types";
+import { ConnectionConfig, DatabaseTable, TableColumn, TableConstraint } from "@/types";
 import { toast } from "sonner";
 import "@xyflow/react/dist/style.css";
 
@@ -63,7 +63,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           type: "schemaNode",
           position: { x: 0, y: 0 }, // Will be calculated
           data: {
-            tableName: table.name,
+            tableName: table.full_name ?? table.name,
             columns: columns.map((col: any) => ({
               name: col.name,
               type: col.data_type,
@@ -143,15 +143,25 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
 
       // Get columns for each table
       const columnsMap = new Map<string, TableColumn[]>();
+      const constraintsMap = new Map<string, TableConstraint[]>();
       await Promise.all(
         tables.map(async (table) => {
           try {
-            const columns = await invoke<TableColumn[]>("get_table_structure", {
-              connectionId: connection.id,
-              tableName: table.name,
-              dbType: connection.db_type,
-            });
+            const tableRef = table.full_name ?? table.name;
+            const [columns, constraints] = await Promise.all([
+              invoke<TableColumn[]>("get_table_structure", {
+                connectionId: connection.id,
+                tableName: tableRef,
+                dbType: connection.db_type,
+              }),
+              invoke<TableConstraint[]>("get_table_constraints", {
+                connectionId: connection.id,
+                tableName: tableRef,
+                dbType: connection.db_type,
+              }).catch(() => []),
+            ]);
             columnsMap.set(table.name, columns);
+            constraintsMap.set(table.name, constraints);
           } catch (error) {
             console.error(`Failed to load columns for ${table.name}:`, error);
           }
@@ -162,11 +172,85 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
       const layoutedNodes = autoLayout(tables, columnsMap);
       setNodes(layoutedNodes);
 
-      // Enhanced foreign key relationship detection
+      // Prefer real foreign key metadata; fall back to name heuristics only when needed
       const detectedEdges: Edge[] = [];
       const foreignKeyColumns = new Set<string>();
 
       layoutedNodes.forEach((sourceNode) => {
+        const tableConstraints =
+          constraintsMap.get(sourceNode.id)?.filter(
+            (constraint) =>
+              constraint.constraint_type === "FOREIGN KEY" &&
+              constraint.foreign_table_name &&
+              constraint.foreign_column_names?.length,
+          ) ?? [];
+
+        tableConstraints.forEach((constraint) => {
+          const foreignTableName =
+            constraint.foreign_table_schema && connection.db_type === "postgresql"
+              ? `${constraint.foreign_table_schema}.${constraint.foreign_table_name}`
+              : constraint.foreign_table_name!;
+
+          const targetNode = layoutedNodes.find(
+            (node) =>
+              node.id === foreignTableName ||
+              node.data.tableName === foreignTableName ||
+              node.data.tableName.toLowerCase() === foreignTableName.toLowerCase(),
+          );
+
+          if (!targetNode) {
+            return;
+          }
+
+          constraint.column_names.forEach((sourceColumnName, index) => {
+            const targetColumnName =
+              constraint.foreign_column_names?.[index] ??
+              constraint.foreign_column_names?.[0];
+            if (!targetColumnName) {
+              return;
+            }
+
+            const edgeId = `${sourceNode.id}-${sourceColumnName}-${targetNode.id}-${targetColumnName}`;
+            if (detectedEdges.some((edge) => edge.id === edgeId)) {
+              return;
+            }
+
+            detectedEdges.push({
+              id: edgeId,
+              source: targetNode.id,
+              target: sourceNode.id,
+              sourceHandle: `${targetNode.data.tableName}-${targetColumnName}-source`,
+              targetHandle: `${sourceNode.data.tableName}-${sourceColumnName}-target`,
+              type: "smoothstep",
+              animated: false,
+              style: { stroke: "#f97316", strokeWidth: 2.5 },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: "#f97316",
+                width: 20,
+                height: 20,
+              },
+              label: sourceColumnName,
+              labelStyle: {
+                fontSize: 12,
+                fill: "#ffffff",
+                fontWeight: 600,
+              },
+              labelBgStyle: {
+                fill: "#f97316",
+                fillOpacity: 0.95,
+              },
+              labelBgPadding: [6, 8] as [number, number],
+              labelBgBorderRadius: 4,
+            });
+            foreignKeyColumns.add(`${sourceNode.id}-${sourceColumnName}`);
+          });
+        });
+
+        if (tableConstraints.length > 0) {
+          return;
+        }
+
         sourceNode.data.columns.forEach((sourceCol) => {
           const colNameLower = sourceCol.name.toLowerCase();
 
@@ -369,7 +453,7 @@ export function SchemaDesigner({ connection }: SchemaDesignerProps) {
           try {
             const columns = await invoke<TableColumn[]>("get_table_structure", {
               connectionId: connection.id,
-              tableName: table.name,
+              tableName: table.full_name ?? table.name,
               dbType: connection.db_type,
             });
             columnsMap.set(table.name, columns);

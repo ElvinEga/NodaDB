@@ -2,9 +2,8 @@ import { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor from '@monaco-editor/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
-import { Play, Loader2, Copy, Download, History, Activity, BarChart3, Wand2, ChevronDown } from 'lucide-react';
+import { Play, Loader2, Copy, Download, History, Activity, BarChart3, Wand2, ChevronDown, Info, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Table,
   TableBody,
@@ -14,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ConnectionConfig, QueryResult, ExecutionPlan } from '@/types';
+import { ConnectionConfig, ExecutionPlan, PostgresConnectionInfo, PostgresExtension, QueryResult } from '@/types';
 import { QueryHistory } from '@/components/QueryHistory';
 import { QueryAnalyzer } from '@/components/QueryAnalyzer';
 import { DataVisualization } from '@/components/DataVisualization';
@@ -43,6 +42,8 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   const [executionTime, setExecutionTime] = useState<number>(0);
   const [showHistory, setShowHistory] = useState(false);
   const [executionPlan, setExecutionPlan] = useState<ExecutionPlan | null>(null);
+  const [pgInfo, setPgInfo] = useState<PostgresConnectionInfo | null>(null);
+  const [pgExtensions, setPgExtensions] = useState<PostgresExtension[]>([]);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const addQueryToHistory = useQueryHistoryStore((state) => state.addQuery);
 
@@ -61,12 +62,12 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         connectionId: connection.id,
         query: query.trim(),
       });
-      
+
       const endTime = Date.now();
       const execTime = endTime - startTime;
       setExecutionTime(execTime);
       setResult(result);
-      
+
       // Add to history
       addQueryToHistory({
         query: query.trim(),
@@ -77,13 +78,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'success',
         rowsAffected: result.rows_affected,
       });
-      
+
       toast.success(`Query executed successfully in ${execTime}ms`);
     } catch (err) {
       const errorMsg = String(err);
       const execTime = Date.now() - startTime;
       setError(errorMsg);
-      
+
       // Add failed query to history
       addQueryToHistory({
         query: query.trim(),
@@ -94,7 +95,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'error',
         error: errorMsg,
       });
-      
+
       toast.error('Query failed');
       console.error('Query execution error:', err);
     } finally {
@@ -118,7 +119,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         analyze: true,
         dbType: connection.db_type,
       });
-      
+
       setExecutionPlan(plan);
       toast.success('Query analyzed successfully');
     } catch (err) {
@@ -151,9 +152,9 @@ export function QueryEditor({ connection }: QueryEditorProps) {
 
     const selection = editor.getSelection();
     const selectedText = selection ? editor.getModel()?.getValueInRange(selection) : '';
-    
+
     const queryToExecute = selectedText?.trim() || query.trim();
-    
+
     if (!queryToExecute) {
       toast.error('Please enter a query');
       return;
@@ -168,12 +169,12 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         connectionId: connection.id,
         query: queryToExecute,
       });
-      
+
       const endTime = Date.now();
       const execTime = endTime - startTime;
       setExecutionTime(execTime);
       setResult(result);
-      
+
       addQueryToHistory({
         query: queryToExecute,
         connectionId: connection.id,
@@ -183,13 +184,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'success',
         rowsAffected: result.rows_affected,
       });
-      
+
       toast.success(`Query executed successfully in ${execTime}ms`);
     } catch (err) {
       const errorMsg = String(err);
       const execTime = Date.now() - startTime;
       setError(errorMsg);
-      
+
       addQueryToHistory({
         query: queryToExecute,
         connectionId: connection.id,
@@ -199,7 +200,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         status: 'error',
         error: errorMsg,
       });
-      
+
       toast.error('Query failed');
       console.error('Query execution error:', err);
     } finally {
@@ -234,30 +235,72 @@ export function QueryEditor({ connection }: QueryEditorProps) {
     toast.success('Query loaded from history');
   };
 
+  const handleLoadPostgresInfo = async () => {
+    if (connection.db_type !== 'postgresql') return;
+    try {
+      const [info, extensions] = await Promise.all([
+        invoke<PostgresConnectionInfo>('get_postgres_connection_info', {
+          connectionId: connection.id,
+        }),
+        invoke<PostgresExtension[]>('get_postgres_extensions', {
+          connectionId: connection.id,
+        }),
+      ]);
+      setPgInfo(info);
+      setPgExtensions(extensions);
+      toast.success('PostgreSQL info loaded');
+    } catch (err) {
+      toast.error(`Failed to load PostgreSQL info: ${err}`);
+      console.error('PostgreSQL info error:', err);
+    }
+  };
+
+  const handleCancelBackend = async () => {
+    if (!pgInfo) {
+      toast.error('Load PG info first');
+      return;
+    }
+
+    try {
+      const cancelled = await invoke<boolean>('cancel_postgres_backend_query', {
+        connectionId: connection.id,
+        backendPid: pgInfo.backend_pid,
+      });
+      if (cancelled) {
+        toast.success(`Cancel sent to backend pid ${pgInfo.backend_pid}`);
+      } else {
+        toast.error('Cancel request was not accepted');
+      }
+    } catch (err) {
+      toast.error(`Failed to cancel backend query: ${err}`);
+      console.error('Cancel backend error:', err);
+    }
+  };
+
   const handleCopyResults = () => {
     if (!result) return;
-    
+
     const csv = [
       result.columns.join(','),
-      ...result.rows.map(row => 
+      ...result.rows.map(row =>
         result.columns.map(col => JSON.stringify(row[col])).join(',')
       ),
     ].join('\n');
-    
+
     navigator.clipboard.writeText(csv);
     toast.success('Results copied to clipboard as CSV');
   };
 
   const handleDownloadResults = () => {
     if (!result) return;
-    
+
     const csv = [
       result.columns.join(','),
-      ...result.rows.map(row => 
+      ...result.rows.map(row =>
         result.columns.map(col => JSON.stringify(row[col])).join(',')
       ),
     ].join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -283,7 +326,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   return (
     <div className="h-full flex bg-background">
       {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -303,6 +346,28 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {connection.db_type === 'postgresql' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadPostgresInfo}
+                  title="Load PostgreSQL server info, current backend PID, and installed extensions"
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  PG Info
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelBackend}
+                  title="Send pg_cancel_backend() to the loaded backend PID"
+                >
+                  <Ban className="h-4 w-4 mr-2" />
+                  Cancel PID
+                </Button>
+              </>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -397,6 +462,21 @@ export function QueryEditor({ connection }: QueryEditorProps) {
           </div>
         </div>
 
+        {connection.db_type === 'postgresql' && pgInfo && (
+          <div className="px-4 py-2 border-b border-border text-xs bg-muted/20">
+            <div className="font-mono">
+              db={pgInfo.current_database} user={pgInfo.current_user} server={pgInfo.server_version} timezone={pgInfo.timezone} pid={pgInfo.backend_pid}
+            </div>
+            <div className="text-muted-foreground truncate">search_path: {pgInfo.search_path}</div>
+            <div className="text-muted-foreground truncate">
+              extensions: {pgExtensions.map((ext) => `${ext.extname}@${ext.extversion}`).join(', ') || 'none'}
+            </div>
+            <div className="text-muted-foreground">
+              Tip: run a long query, then use <span className="font-mono">Cancel PID</span> to request cancellation.
+            </div>
+          </div>
+        )}
+
         {/* Editor and Results */}
         <div className="flex-1 flex flex-col overflow-hidden">
         {/* Editor */}
@@ -418,7 +498,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             }}
             onMount={(editor, monaco) => {
               editorRef.current = editor;
-              
+
               // Ctrl+Enter - Execute Query
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
@@ -426,7 +506,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleExecuteQuery();
                 }
               );
-              
+
               // Ctrl+Shift+Enter - Execute Selection
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
@@ -434,7 +514,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleExecuteSelection();
                 }
               );
-              
+
               // Shift+Alt+F - Format SQL
               editor.addCommand(
                 monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
@@ -442,7 +522,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleFormatSQL();
                 }
               );
-              
+
               // Ctrl+/ - Toggle Comment
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash,
@@ -450,7 +530,7 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                   handleToggleComment();
                 }
               );
-              
+
               // SQL Autocomplete
               monaco.languages.registerCompletionItemProvider('sql', {
                 provideCompletionItems: (model, position) => {
@@ -490,11 +570,11 @@ export function QueryEditor({ connection }: QueryEditorProps) {
         {/* Results */}
         <div className="flex-1 overflow-hidden">
           <Tabs defaultValue="results" className="h-full flex flex-col">
-            <TabsList className="mx-4 mt-2">
-              <TabsTrigger value="results">Results</TabsTrigger>
-              <TabsTrigger value="chart" disabled={!result || result.rows.length === 0}>Chart</TabsTrigger>
-              <TabsTrigger value="plan" disabled={!executionPlan}>Execution Plan</TabsTrigger>
-              <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsList className="mx-4 mt-2 justify-start">
+              <TabsTrigger className="!text-sm" value="results">Results</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="chart" disabled={!result || result.rows.length === 0}>Chart</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="plan" disabled={!executionPlan}>Execution Plan</TabsTrigger>
+              <TabsTrigger className="!text-sm" value="messages">Messages</TabsTrigger>
             </TabsList>
 
             <TabsContent value="results" className="flex-1 overflow-hidden mt-2">
@@ -571,13 +651,14 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                  <ScrollArea className="flex-1">
+                  <div className="flex-1 overflow-auto min-w-0">
+                    <div className="w-max min-w-full">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
-                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead className="w-12 text-center shrink-0">#</TableHead>
                           {result.columns.map((column) => (
-                            <TableHead key={column}>{column}</TableHead>
+                            <TableHead key={column} className="whitespace-nowrap">{column}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -593,13 +674,13 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                           </TableRow>
                         ) : (
                           result.rows.map((row, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="text-center text-muted-foreground font-mono text-xs">
+                            <TableRow key={index} className="hover:bg-muted/40 transition-colors">
+                              <TableCell className="text-center text-muted-foreground font-mono text-xs shrink-0">
                                 {index + 1}
                               </TableCell>
                               {result.columns.map((column) => (
                                 <TableCell key={column} className="font-mono text-sm">
-                                  <div className="max-w-xs truncate">
+                                  <div className="max-w-xs truncate" title={formatValue(row[column])}>
                                     {formatValue(row[column])}
                                   </div>
                                 </TableCell>
@@ -609,7 +690,8 @@ export function QueryEditor({ connection }: QueryEditorProps) {
                         )}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="h-full flex items-center justify-center">

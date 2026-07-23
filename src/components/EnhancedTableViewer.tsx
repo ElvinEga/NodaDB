@@ -68,7 +68,7 @@ export function EnhancedTableViewer({
     try {
       const result = await invoke<TableColumn[]>("get_table_structure", {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         dbType: connection.db_type,
       });
       setColumns(result);

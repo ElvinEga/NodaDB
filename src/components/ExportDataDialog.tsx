@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { Download, Copy, FileText, FileJson, Database, Sheet, FileCode, Globe } from 'lucide-react';
 import {
   Dialog,
@@ -29,10 +31,10 @@ import {
   exportToExcel,
   exportToMarkdown,
   exportToHTML,
-  downloadFile,
   copyToClipboard,
   getFileExtension,
   getMimeType,
+  serializeExportContent,
 } from '@/lib/exportFormats';
 
 interface ExportDataDialogProps {
@@ -80,9 +82,9 @@ export function ExportDataDialog({
   const [includeHeaders, setIncludeHeaders] = useState(true);
   const [delimiter, setDelimiter] = useState(',');
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      let content: string | Blob;
+      let content: string | Uint8Array;
       const options = {
         tableName: filename,
         includeHeaders,
@@ -115,9 +117,27 @@ export function ExportDataDialog({
 
       const extension = getFileExtension(format);
       const mimeType = getMimeType(format);
-      downloadFile(content, `${filename}.${extension}`, mimeType);
+      const selectedPath = await save({
+        title: "Export Data",
+        defaultPath: `${filename}.${extension}`,
+        filters: [
+          {
+            name: formatNames[format],
+            extensions: [extension],
+          },
+        ],
+      });
 
-      toast.success(`Exported ${data.rows.length} rows as ${formatNames[format]}`);
+      if (!selectedPath) {
+        return;
+      }
+
+      await invoke("save_export_file", {
+        path: selectedPath,
+        bytes: serializeExportContent(content),
+      });
+
+      toast.success(`Saved ${data.rows.length} rows as ${formatNames[format]}`);
       onOpenChange(false);
     } catch (error) {
       toast.error(`Export failed: ${error}`);
@@ -297,7 +317,7 @@ export function ExportDataDialog({
             <Copy className="h-4 w-4 mr-2" />
             Copy to Clipboard
           </Button>
-          <Button onClick={handleExport}>
+          <Button onClick={() => void handleExport()}>
             <Download className="h-4 w-4 mr-2" />
             Download File
           </Button>

@@ -1,5 +1,7 @@
 import { Check, X } from "lucide-react";
 import { ReactNode, memo } from "react";
+import { TableColumn } from "@/types";
+import { isInvalidBooleanValue, isNullValue } from "@/lib/db-types";
 
 /**
  * Format a date value with relative or absolute display
@@ -72,10 +74,29 @@ export function formatNumber(value: any, dataType: string): string {
   return String(value);
 }
 
+export const NullCell = memo(() => (
+  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+    NULL
+  </span>
+));
+NullCell.displayName = "NullCell";
+
 /**
  * Render a boolean value as a visual indicator
  */
-export const BooleanCell = memo(({ value }: { value: any }) => {
+export const BooleanCell = memo(({ value, column }: { value: any; column: TableColumn }) => {
+  if (isNullValue(value)) {
+    return <NullCell />;
+  }
+
+  if (isInvalidBooleanValue(column, value)) {
+    return (
+      <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">
+        Invalid boolean: {String(value)}
+      </span>
+    );
+  }
+
   const normalizedValue =
     typeof value === "string" ? value.trim().toLowerCase() : value;
 
@@ -91,10 +112,6 @@ export const BooleanCell = memo(({ value }: { value: any }) => {
     normalizedValue === "0" ||
     normalizedValue === "false" ||
     normalizedValue === "f";
-
-  if (!isTrue && !isFalse) {
-    return <span className="text-muted-foreground italic">NULL</span>;
-  }
 
   return (
     <div className="flex items-center gap-1.5">
@@ -118,7 +135,7 @@ BooleanCell.displayName = 'BooleanCell';
  * Render JSON data with pretty formatting
  */
 export const JsonCell = memo(({ value }: { value: any }) => {
-  if (!value) return <span className="text-muted-foreground italic">NULL</span>;
+  if (isNullValue(value)) return <NullCell />;
 
   try {
     let jsonObj = value;
@@ -152,7 +169,7 @@ JsonCell.displayName = 'JsonCell';
  * Render a date cell with formatted display
  */
 export const DateCell = memo(({ value }: { value: any }) => {
-  if (!value) return <span className="text-muted-foreground italic">NULL</span>;
+  if (isNullValue(value) || value === "") return <NullCell />;
 
   const formatted = formatDate(value);
   const fullDate = new Date(value).toLocaleString("en-US", {
@@ -185,7 +202,7 @@ export const NumberCell = memo(({
   dataType: string;
 }) => {
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground italic">NULL</span>;
+    return <NullCell />;
   }
 
   const formatted = formatNumber(value, dataType);
@@ -209,7 +226,7 @@ export const TextCell = memo(({
   maxLength?: number;
 }) => {
   if (value === null || value === undefined) {
-    return <span className="text-muted-foreground italic">NULL</span>;
+    return <NullCell />;
   }
 
   const text = String(value);
@@ -231,40 +248,64 @@ export const TextCell = memo(({
 });
 TextCell.displayName = 'TextCell';
 
+export const ArrayCell = memo(({ value }: { value: any }) => {
+  if (isNullValue(value)) return <NullCell />;
+
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+    ? value.replace(/^\{|\}$/g, "").split(",").filter(Boolean)
+    : [];
+  const preview = values.slice(0, 3).join(", ");
+
+  return (
+    <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
+      Array({values.length}){preview ? ` ${preview}` : ""}
+    </span>
+  );
+});
+ArrayCell.displayName = "ArrayCell";
+
+export const BinaryCell = memo(({ value }: { value: any }) => {
+  if (isNullValue(value)) return <NullCell />;
+
+  const size =
+    typeof value === "string"
+      ? Math.ceil((value.length * 3) / 4)
+      : value instanceof Uint8Array
+      ? value.byteLength
+      : undefined;
+
+  return (
+    <span className="font-mono text-xs text-muted-foreground">
+      {size !== undefined ? `binary ${size} B` : "binary"}
+    </span>
+  );
+});
+BinaryCell.displayName = "BinaryCell";
+
 /**
  * Get appropriate cell renderer based on data type
  */
-export function getCellRenderer(dataType: string, value: any): ReactNode {
-  const type = dataType.toUpperCase();
-
-  // Boolean types
-  if (type.includes("BOOL") || type === "BIT") {
-    return <BooleanCell value={value} />;
+export function getCellRenderer(column: TableColumn, value: any): ReactNode {
+  switch (column.type_family) {
+    case "boolean":
+      return <BooleanCell value={value} column={column} />;
+    case "date":
+    case "date_time":
+    case "time":
+      return <DateCell value={value} />;
+    case "integer":
+    case "float":
+    case "decimal":
+      return <NumberCell value={value} dataType={column.data_type} />;
+    case "json":
+      return <JsonCell value={value} />;
+    case "array":
+      return <ArrayCell value={value} />;
+    case "binary":
+      return <BinaryCell value={value} />;
+    default:
+      return <TextCell value={value} />;
   }
-
-  // Date/Time types
-  if (type.includes("DATE") || type.includes("TIME")) {
-    return <DateCell value={value} />;
-  }
-
-  // Number types
-  if (
-    type.includes("INT") ||
-    type.includes("SERIAL") ||
-    type.includes("FLOAT") ||
-    type.includes("REAL") ||
-    type.includes("DOUBLE") ||
-    type.includes("NUMERIC") ||
-    type.includes("DECIMAL")
-  ) {
-    return <NumberCell value={value} dataType={dataType} />;
-  }
-
-  // JSON types
-  if (type.includes("JSON")) {
-    return <JsonCell value={value} />;
-  }
-
-  // Default text rendering
-  return <TextCell value={value} />;
 }

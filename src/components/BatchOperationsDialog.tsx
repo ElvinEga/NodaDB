@@ -23,6 +23,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TableColumn } from '@/types';
 
 interface BatchOperationsDialogProps {
@@ -53,8 +63,9 @@ export function BatchOperationsDialog({
   const [updateValue, setUpdateValue] = useState('');
   const [setToNull, setSetToNull] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const handleExecute = async () => {
+  const executeOperation = async () => {
     setIsProcessing(true);
     try {
       switch (operationType) {
@@ -74,12 +85,22 @@ export function BatchOperationsDialog({
           await onBatchDuplicate();
           break;
       }
+      setConfirmOpen(false);
       onOpenChange(false);
     } catch (error) {
       console.error('Batch operation failed:', error);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleExecute = async () => {
+    if (operationType === 'delete' || operationType === 'update') {
+      setConfirmOpen(true);
+      return;
+    }
+
+    await executeOperation();
   };
 
   const isExecuteDisabled = () => {
@@ -116,10 +137,18 @@ export function BatchOperationsDialog({
   };
 
   const isDangerousOperation = operationType === 'delete';
+  const confirmTitle =
+    operationType === 'delete' ? 'Confirm bulk delete' : 'Confirm bulk update';
+  const confirmDescription =
+    operationType === 'delete'
+      ? `Delete ${selectedRowCount} selected row${selectedRowCount === 1 ? '' : 's'}? This action cannot be undone.`
+      : `Update column ${updateColumn || 'selected column'} for ${selectedRowCount} selected row${selectedRowCount === 1 ? '' : 's'} to ${setToNull ? 'NULL' : updateValue}?`;
+  const confirmActionLabel = operationType === 'delete' ? 'Delete rows' : 'Update rows';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Batch Operations
@@ -281,7 +310,29 @@ export function BatchOperationsDialog({
             )}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isProcessing}
+              onClick={(event) => {
+                event.preventDefault();
+                void executeOperation();
+              }}
+            >
+              {isProcessing ? 'Processing...' : confirmActionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

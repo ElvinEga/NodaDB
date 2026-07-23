@@ -33,6 +33,7 @@ interface TableRowProps {
   handleDropTable: (name: string) => void;
   formatRowCount: (count?: number) => string;
   formatSize: (sizeKb?: number) => string;
+  showSize: boolean;
 }
 
 export function TableRow({
@@ -47,6 +48,7 @@ export function TableRow({
   handleDropTable,
   formatRowCount,
   formatSize,
+  showSize,
 }: TableRowProps) {
   return (
     <div className="flex items-center gap-1 group">
@@ -78,7 +80,7 @@ export function TableRow({
             <div className="text-muted-foreground">
               Rows: {formatRowCount(table.row_count)}
             </div>
-            {table.size_kb !== undefined && (
+            {showSize && table.size_kb !== undefined && (
               <div className="text-muted-foreground">
                 Size: {formatSize(table.size_kb)}
               </div>

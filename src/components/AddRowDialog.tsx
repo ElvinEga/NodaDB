@@ -12,7 +12,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConnectionConfig, TableColumn, DatabaseTable } from "@/types";
+import { coerceValueForDatabase, parseInputValue, resolveColumnInputType } from "@/lib/db-types";
 import { toast } from "sonner";
 import { TableAction } from "@/stores/undoRedoStore";
 
@@ -38,7 +46,11 @@ export function AddRowDialog({
   onAddAction,
 }: AddRowDialogProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [valueMode, setValueMode] = useState<
+    Record<string, "value" | "null" | "default" | "empty">
+  >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const tableRef = table.full_name ?? table.name;
 
   useEffect(() => {
     // Initialize form with empty values or defaults
@@ -51,6 +63,12 @@ export function AddRowDialog({
       }
     });
     setFormData(initialData);
+    const initialModes: Record<string, "value" | "null" | "default" | "empty"> =
+      {};
+    columns.forEach((col) => {
+      initialModes[col.name] = col.default_value ? "default" : "value";
+    });
+    setValueMode(initialModes);
   }, [columns, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,6 +81,24 @@ export function AddRowDialog({
 
       columns.forEach((col) => {
         const value = formData[col.name];
+        const mode = valueMode[col.name] ?? "value";
+
+        // Skip generated columns and identity-always columns
+        if ((col.generated_kind ?? "") !== "" || col.identity_kind === "a") {
+          return;
+        }
+
+        if (mode === "default") {
+          return;
+        }
+        if (mode === "null") {
+          data[col.name] = null;
+          return;
+        }
+        if (mode === "empty") {
+          data[col.name] = "";
+          return;
+        }
 
         // Skip primary key if it's auto-increment
         if (col.is_primary_key && !value) {
@@ -83,22 +119,11 @@ export function AddRowDialog({
           return;
         }
 
-        // Type conversion based on data type
-        const dataType = col.data_type.toUpperCase();
-        if (dataType.includes("INT") || dataType.includes("SERIAL")) {
-          data[col.name] = parseInt(value);
-        } else if (
-          dataType.includes("FLOAT") ||
-          dataType.includes("REAL") ||
-          dataType.includes("DOUBLE") ||
-          dataType.includes("NUMERIC")
-        ) {
-          data[col.name] = parseFloat(value);
-        } else if (dataType.includes("BOOL")) {
-          data[col.name] = value.toLowerCase() === "true" || value === "1";
-        } else {
-          data[col.name] = value;
-        }
+        data[col.name] = coerceValueForDatabase(
+          col,
+          parseInputValue(col, value),
+          connection.db_type,
+        );
       });
 
       // Generate INSERT SQL for tracking
@@ -110,11 +135,11 @@ export function AddRowDialog({
           return v;
         })
         .join(", ");
-      const insertSql = `INSERT INTO ${table.name} (${columns_list}) VALUES (${values_list})`;
+      const insertSql = `INSERT INTO ${tableRef} (${columns_list}) VALUES (${values_list})`;
 
       const result = await invoke<string>("insert_row", {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: tableRef,
         data,
         dbType: connection.db_type,
       });
@@ -125,7 +150,7 @@ export function AddRowDialog({
           id: `insert-${Date.now()}`,
           type: "insert",
           timestamp: new Date(),
-          tableName: table.name,
+          tableName: tableRef,
           connectionId: connection.id,
           dbType: connection.db_type,
           data: {
@@ -154,21 +179,6 @@ export function AddRowDialog({
     }));
   };
 
-  const getInputType = (dataType: string): string => {
-    const type = dataType.toUpperCase();
-    if (type.includes("INT") || type.includes("SERIAL")) return "number";
-    if (
-      type.includes("FLOAT") ||
-      type.includes("REAL") ||
-      type.includes("DOUBLE") ||
-      type.includes("NUMERIC")
-    )
-      return "number";
-    if (type.includes("BOOL")) return "checkbox";
-    if (type.includes("DATE") || type.includes("TIME")) return "datetime-local";
-    return "text";
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
@@ -194,9 +204,12 @@ export function AddRowDialog({
                       className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
                     >
                       {column.name}
-                      {!column.is_nullable && !column.is_primary_key && (
-                        <span className="ml-1 text-destructive">*</span>
-                      )}
+                      {!column.is_nullable &&
+                        !column.is_primary_key &&
+                        (column.generated_kind ?? "") === "" &&
+                        column.identity_kind !== "a" && (
+                          <span className="ml-1 text-destructive">*</span>
+                        )}
                     </label>
                     {column.is_primary_key && (
                       <span className="px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary font-mono">
@@ -206,35 +219,123 @@ export function AddRowDialog({
                     <span className="px-1.5 py-0.5 text-[10px] rounded bg-secondary border border-border font-mono">
                       {column.data_type}
                     </span>
+                    {column.identity_kind === "a" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-600 font-mono">
+                        IDENTITY ALWAYS
+                      </span>
+                    )}
+                    {column.identity_kind === "d" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-600 font-mono">
+                        IDENTITY BY DEFAULT
+                      </span>
+                    )}
+                    {(column.generated_kind ?? "") !== "" && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-600 font-mono">
+                        GENERATED
+                      </span>
+                    )}
                   </div>
                   {(column.is_nullable || column.default_value) && (
-                    <div className="text-[10px] text-muted-foreground -mt-1">
-                      {column.is_nullable && "Optional"}
-                      {column.is_nullable && column.default_value && " • "}
-                      {column.default_value &&
-                        `Default: ${column.default_value}`}
+                    <div className="space-y-1 -mt-1">
+                      <div className="text-[10px] text-muted-foreground">
+                        {column.is_nullable && "Optional"}
+                        {column.is_nullable && column.default_value && " • "}
+                        {column.default_value &&
+                          `Default: ${column.default_value}`}
+                      </div>
+                      <Select
+                        value={valueMode[column.name] ?? "value"}
+                        onValueChange={(val) =>
+                          setValueMode((prev) => ({
+                            ...prev,
+                            [column.name]: val as
+                              | "value"
+                              | "null"
+                              | "default"
+                              | "empty",
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-7 text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="value">Set Value</SelectItem>
+                          {column.is_nullable && (
+                            <SelectItem value="null">Set NULL</SelectItem>
+                          )}
+                          {column.default_value && (
+                            <SelectItem value="default">Use DEFAULT</SelectItem>
+                          )}
+                          <SelectItem value="empty">
+                            Set Empty String
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="text-[10px] text-muted-foreground">
+                        Choose how to write this field: value, SQL NULL, SQL
+                        DEFAULT, or empty string.
+                      </div>
                     </div>
                   )}
-                  <Input
-                    id={column.name}
-                    type={getInputType(column.data_type)}
-                    value={formData[column.name] || ""}
-                    onChange={(e) =>
-                      handleInputChange(column.name, e.target.value)
-                    }
-                    placeholder={
-                      column.is_primary_key
-                        ? "Auto-generated (leave empty)"
-                        : column.is_nullable
-                        ? "NULL (optional)"
-                        : "Required"
-                    }
-                    disabled={
-                      column.is_primary_key &&
-                      column.data_type.toUpperCase().includes("SERIAL")
-                    }
-                    className="h-9 text-sm"
-                  />
+                  {(valueMode[column.name] ?? "value") !==
+                  "value" ? null : column.type_family === "boolean" ? (
+                    <div className="flex items-center gap-2 rounded-md border border-input px-3 py-2">
+                      <input
+                        id={column.name}
+                        type="checkbox"
+                        checked={formData[column.name] === "true"}
+                        onChange={(e) =>
+                          handleInputChange(
+                            column.name,
+                            e.target.checked ? "true" : "false",
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {formData[column.name] === "true" ? "true" : "false"}
+                      </span>
+                    </div>
+                  ) : column.type_family === "json" ? (
+                    <textarea
+                      id={column.name}
+                      value={formData[column.name] || ""}
+                      onChange={(e) =>
+                        handleInputChange(column.name, e.target.value)
+                      }
+                      placeholder={
+                        column.is_nullable ? "NULL (optional)" : "Valid JSON"
+                      }
+                      className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                    />
+                  ) : (
+                    <Input
+                      id={column.name}
+                      type={resolveColumnInputType(column)}
+                      value={formData[column.name] || ""}
+                      onChange={(e) =>
+                        handleInputChange(column.name, e.target.value)
+                      }
+                      placeholder={
+                        column.is_primary_key
+                          ? "Auto-generated (leave empty)"
+                          : column.is_nullable
+                            ? "NULL (optional)"
+                            : "Required"
+                      }
+                      disabled={
+                        (column.generated_kind ?? "") !== "" ||
+                        column.identity_kind === "a" ||
+                        (column.is_primary_key &&
+                          (column.data_type.toUpperCase().includes("SERIAL") ||
+                            column.default_value
+                              ?.toLowerCase()
+                              .includes("identity")))
+                      }
+                      className="h-9 text-sm"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -257,7 +358,7 @@ export function AddRowDialog({
                 </>
               ) : (
                 <>
-                  <Plus className="h-3.5 w-3.5 mr-2" />
+                  <Plus className="h-3.5 w-3.5" />
                   Insert Row
                 </>
               )}

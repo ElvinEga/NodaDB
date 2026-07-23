@@ -1,12 +1,14 @@
 use crate::database::ConnectionManager;
-use crate::models::{ConnectionConfig, DatabaseTable, DatabaseType, QueryResult, TableColumn, ExecutionPlan, ConnectionTestResult};
-use tauri::State;
+use crate::models::{
+    AppliedMigration, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType,
+    ExecutionPlan, ExportArchiveEntry, ForeignKeyDefinition, PostgresConnectionInfo, PostgresExtension,
+    PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch,
+};
 use chrono::Utc;
+use tauri::State;
 
 #[tauri::command]
-pub async fn test_connection(
-    config: ConnectionConfig,
-) -> Result<ConnectionTestResult, String> {
+pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult, String> {
     ConnectionManager::test_connection(config)
         .await
         .map_err(|e| format!("Connection test failed: {}", e))
@@ -21,7 +23,7 @@ pub async fn connect_database(
         .connect(config.clone())
         .await
         .map_err(|e| format!("Failed to connect: {}", e))?;
-    
+
     Ok(format!("Successfully connected to {}", config.name))
 }
 
@@ -34,7 +36,7 @@ pub async fn disconnect_database(
         .disconnect(&connection_id)
         .await
         .map_err(|e| format!("Failed to disconnect: {}", e))?;
-    
+
     Ok("Successfully disconnected".to_string())
 }
 
@@ -182,7 +184,14 @@ pub async fn alter_table_add_column(
     manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
     manager
-        .alter_table_add_column(&connection_id, &table_name, &column_name, &data_type, nullable, &db_type)
+        .alter_table_add_column(
+            &connection_id,
+            &table_name,
+            &column_name,
+            &data_type,
+            nullable,
+            &db_type,
+        )
         .await
         .map_err(|e| format!("Failed to add column: {}", e))
 }
@@ -208,13 +217,14 @@ pub async fn execute_transaction(
     manager: State<'_, ConnectionManager>,
 ) -> Result<String, String> {
     let count = queries.len();
-    for query in &queries {
-        manager
-            .execute_query(&connection_id, query)
-            .await
-            .map_err(|e| format!("Transaction failed: {}", e))?;
-    }
-    Ok(format!("Successfully executed {} queries", count))
+    let rows_affected = manager
+        .execute_transaction(&connection_id, &queries)
+        .await
+        .map_err(|e| format!("Transaction failed (rolled back): {}", e))?;
+    Ok(format!(
+        "Successfully executed {} queries in a transaction ({} row(s) affected)",
+        count, rows_affected
+    ))
 }
 
 #[tauri::command]
@@ -245,29 +255,177 @@ pub async fn export_table_structure(
 }
 
 #[tauri::command]
+pub async fn get_table_constraints(
+    connection_id: String,
+    table_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<TableConstraint>, String> {
+    manager
+        .get_table_constraints(&connection_id, &table_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to get table constraints: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_table_indexes(
+    connection_id: String,
+    table_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<TableIndex>, String> {
+    manager
+        .get_table_indexes(&connection_id, &table_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to get table indexes: {}", e))
+}
+
+#[tauri::command]
+pub async fn create_foreign_key(
+    connection_id: String,
+    foreign_key: ForeignKeyDefinition,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .create_foreign_key(&connection_id, foreign_key, &db_type)
+        .await
+        .map_err(|e| format!("Failed to create foreign key: {}", e))
+}
+
+#[tauri::command]
+pub async fn drop_foreign_key(
+    connection_id: String,
+    table_name: String,
+    constraint_name: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .drop_foreign_key(&connection_id, &table_name, &constraint_name, &db_type)
+        .await
+        .map_err(|e| format!("Failed to drop foreign key: {}", e))
+}
+
+#[tauri::command]
+pub async fn list_applied_migrations(
+    connection_id: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<AppliedMigration>, String> {
+    manager
+        .list_applied_migrations(&connection_id, &db_type)
+        .await
+        .map_err(|e| format!("Failed to list applied migrations: {}", e))
+}
+
+#[tauri::command]
+pub async fn apply_migration(
+    connection_id: String,
+    migration_id: String,
+    migration_name: String,
+    up_sql: String,
+    checksum: Option<String>,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .apply_migration(
+            &connection_id,
+            &migration_id,
+            &migration_name,
+            &up_sql,
+            checksum.as_deref(),
+            &db_type,
+        )
+        .await
+        .map_err(|e| format!("Failed to apply migration: {}", e))
+}
+
+#[tauri::command]
+pub async fn rollback_migration(
+    connection_id: String,
+    migration_id: String,
+    down_sql: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<String, String> {
+    manager
+        .rollback_migration(&connection_id, &migration_id, &down_sql, &db_type)
+        .await
+        .map_err(|e| format!("Failed to rollback migration: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_connection_info(
+    connection_id: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<PostgresConnectionInfo, String> {
+    manager
+        .get_postgres_connection_info(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL connection info: {}", e))
+}
+
+#[tauri::command]
+pub async fn cancel_postgres_backend_query(
+    connection_id: String,
+    backend_pid: i32,
+    manager: State<'_, ConnectionManager>,
+) -> Result<bool, String> {
+    manager
+        .cancel_postgres_backend_query(&connection_id, backend_pid)
+        .await
+        .map_err(|e| format!("Failed to cancel PostgreSQL query: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_extensions(
+    connection_id: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<PostgresExtension>, String> {
+    manager
+        .get_postgres_extensions(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL extensions: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_postgres_table_privileges(
+    connection_id: String,
+    table_name: String,
+    manager: State<'_, ConnectionManager>,
+) -> Result<PostgresTablePrivileges, String> {
+    manager
+        .get_postgres_table_privileges(&connection_id, &table_name)
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL table privileges: {}", e))
+}
+
+#[tauri::command]
 pub async fn create_new_window(app: tauri::AppHandle) -> Result<(), String> {
     let label = format!("nodadb-window-{}", Utc::now().timestamp_millis());
-    
-    let webview_window = tauri::WebviewWindowBuilder::new(
-        &app,
-        label,
-        tauri::WebviewUrl::App("index.html".into())
-    )
-    .title("NodaDB")
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .center()
-    .resizable(true)
-    .fullscreen(false)
-    .decorations(true)
-    .always_on_top(false)
-    .visible(true)
-    .build()
-    .map_err(|e| format!("Failed to create new window: {}", e))?;
-    
-    webview_window.show().map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
-    
+
+    let webview_window =
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("index.html".into()))
+            .title("NodaDB")
+            .inner_size(1200.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .center()
+            .resizable(true)
+            .fullscreen(false)
+            .always_on_top(false)
+            .visible(true)
+            .build()
+            .map_err(|e| format!("Failed to create new window: {}", e))?;
+
+    webview_window
+        .show()
+        .map_err(|e| format!("Failed to show window: {}", e))?;
+    webview_window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus window: {}", e))?;
+
     Ok(())
 }
 
@@ -276,7 +434,7 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     let webview_window = tauri::WebviewWindowBuilder::new(
         &app,
         label.clone(),
-        tauri::WebviewUrl::App("index.html".into())
+        tauri::WebviewUrl::App("index.html".into()),
     )
     .title("NodaDB")
     .inner_size(1200.0, 800.0)
@@ -284,14 +442,65 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     .center()
     .resizable(true)
     .fullscreen(false)
-    .decorations(true)
     .always_on_top(false)
     .visible(true)
     .build()
     .map_err(|e| format!("Failed to create window {}: {}", label, e))?;
-    
-    webview_window.show().map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
-    
+
+    webview_window
+        .show()
+        .map_err(|e| format!("Failed to show window: {}", e))?;
+    webview_window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus window: {}", e))?;
+
     Ok(())
 }
+
+#[tauri::command]
+pub async fn save_export_file(path: String, bytes: Vec<u8>) -> Result<String, String> {
+    std::fs::write(&path, bytes)
+        .map_err(|e| format!("Failed to save export file: {}", e))?;
+
+    Ok(format!("Successfully saved file to {}", path))
+}
+
+#[tauri::command]
+pub async fn create_export_archive(entries: Vec<ExportArchiveEntry>) -> Result<Vec<u8>, String> {
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+
+    let cursor = Cursor::new(Vec::<u8>::new());
+    let mut archive = zip::ZipWriter::new(cursor);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+
+    for entry in entries {
+        archive
+            .start_file(entry.path, options)
+            .map_err(|e| format!("Failed to add file to archive: {}", e))?;
+        archive
+            .write_all(&entry.bytes)
+            .map_err(|e| format!("Failed to write archive entry: {}", e))?;
+    }
+
+    let cursor = archive
+        .finish()
+        .map_err(|e| format!("Failed to finalize archive: {}", e))?;
+
+    Ok(cursor.into_inner())
+}
+
+#[tauri::command]
+pub async fn trace_id_relations(
+    connection_id: String,
+    value: String,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<Vec<RelationMatch>, String> {
+    manager
+        .trace_id_relations(&connection_id, &value, &db_type)
+        .await
+        .map_err(|e| format!("Relation search failed: {}", e))
+}
+

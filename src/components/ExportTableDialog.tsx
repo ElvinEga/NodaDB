@@ -41,7 +41,7 @@ export function ExportTableDialog({
     try {
       const result = await invoke<string>('export_table_structure', {
         connectionId: connection.id,
-        tableName: table.name,
+        tableName: table.full_name ?? table.name,
         dbType: connection.db_type,
       });
       setSql(result);

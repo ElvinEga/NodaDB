@@ -1,17 +1,17 @@
-import * as React from 'react';
+import * as React from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 interface KeyboardTooltipProps {
   children: React.ReactNode;
   description: string;
   keys?: string[];
-  side?: 'top' | 'right' | 'bottom' | 'left';
+  side?: "top" | "right" | "bottom" | "left";
   disabled?: boolean;
 }
 
@@ -19,20 +19,22 @@ export function KeyboardTooltip({
   children,
   description,
   keys,
-  side = 'bottom',
+  side = "bottom",
   disabled = false,
 }: KeyboardTooltipProps) {
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+  const isMac =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 
   const modifierMap: Record<string, string> = isMac
-    ? { Ctrl: '⌘', Alt: '⌥', Shift: '⇧', Enter: '⏎' }
-    : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Enter: 'Enter' };
+    ? { Ctrl: "⌘", Alt: "⌥", Shift: "⇧", Enter: "⏎" }
+    : { Ctrl: "Ctrl", Alt: "Alt", Shift: "Shift", Enter: "Enter" };
 
   const renderKeys = () => {
     if (!keys || keys.length === 0) return null;
 
     return (
-      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50">
+      <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border">
         {keys.map((key, i) => (
           <React.Fragment key={i}>
             <Badge

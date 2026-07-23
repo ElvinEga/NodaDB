@@ -8,18 +8,20 @@ import {
   History,
   Network,
   Shapes,
-  LogOut,
-  DatabaseZap,
   Trash2,
   MoreVertical,
   Pencil,
   ArrowLeft,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -37,17 +39,17 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { OptimizedTableViewer } from "@/components/OptimizedTableViewer";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
 import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { toast, Toaster } from "sonner";
+import { Toaster } from "sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
 import { KeyboardTooltip } from "@/components/ui/keyboard-tooltip";
@@ -59,41 +61,72 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TanStackTableViewer } from "./components/TanStackTableViewer";
+import RelationFlow from "./components/RelationFlow";
+import { OPEN_ABOUT_EVENT } from "@/lib/appEvents";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 function App() {
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(
-    null
+    null,
   );
   const [renameConnectionId, setRenameConnectionId] = useState<string | null>(
-    null
+    null,
   );
   const [renameValue, setRenameValue] = useState("");
   const { fontFamily, fontSize } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tabs, setTabs] = useState<TabType[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const connections = useConnectionStore((state) => state.connections);
   const activeConnectionId = useConnectionStore(
-    (state) => state.activeConnectionId
+    (state) => state.activeConnectionId,
   );
   const setActiveConnection = useConnectionStore(
-    (state) => state.setActiveConnection
+    (state) => state.setActiveConnection,
+  );
+  const previousConnectionId = useConnectionStore(
+    (state) => state.previousConnectionId,
+  );
+  const recentConnectionIds = useConnectionStore(
+    (state) => state.recentConnectionIds,
+  );
+  const openConnectionSwitcher = useConnectionStore(
+    (state) => state.openConnectionSwitcher,
+  );
+  const restorePreviousConnection = useConnectionStore(
+    (state) => state.restorePreviousConnection,
   );
   const getActiveConnection = useConnectionStore(
-    (state) => state.getActiveConnection
+    (state) => state.getActiveConnection,
   );
   const removeConnection = useConnectionStore(
-    (state) => state.removeConnection
+    (state) => state.removeConnection,
   );
   const updateConnection = useConnectionStore(
-    (state) => state.updateConnection
+    (state) => state.updateConnection,
   );
+  const setAutoCheckForUpdates = useSettingsStore(
+    (state) => state.setAutoCheckForUpdates,
+  );
+  const autoCheckForUpdates = useSettingsStore(
+    (state) => state.autoCheckForUpdates,
+  );
+  const appUpdate = useAppUpdate();
 
   const activeConnection = getActiveConnection();
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const recentConnections = recentConnectionIds
+    .map((connectionId) =>
+      connections.find((connection) => connection.id === connectionId),
+    )
+    .filter((connection): connection is (typeof connections)[number] =>
+      Boolean(connection),
+    );
 
   // Clear all tabs when active connection changes
   useEffect(() => {
@@ -101,9 +134,31 @@ function App() {
     setActiveTabId(null);
   }, [activeConnectionId]);
 
+  useEffect(() => {
+    const handleOpenAbout = () => {
+      setAboutDialogOpen(true);
+    };
+
+    window.addEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
+    return () => {
+      window.removeEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!autoCheckForUpdates) {
+      return;
+    }
+
+    void appUpdate.checkForUpdates({
+      silent: true,
+      onViewDetails: () => setAboutDialogOpen(true),
+    });
+  }, [appUpdate.checkForUpdates, autoCheckForUpdates]);
+
   const handleTableSelect = async (table: DatabaseTable) => {
     const existingTab = tabs.find(
-      (t) => t.type === "table" && t.table?.name === table.name
+      (t) => t.type === "table" && t.table?.name === table.name,
     );
     if (existingTab) {
       setActiveTabId(existingTab.id);
@@ -120,6 +175,20 @@ function App() {
       };
       setTabs([...tabs, newTab]);
       setActiveTabId(newTab.id);
+    }
+  };
+
+  const connectToConnection = async (
+    connection: (typeof connections)[number],
+  ) => {
+    try {
+      await invoke("connect_database", {
+        config: connection,
+      });
+      setActiveConnection(connection.id);
+    } catch (error) {
+      console.error("Failed to connect:", error);
+      alert(`Failed to connect to ${connection.name}: ${error}`);
     }
   };
 
@@ -189,8 +258,8 @@ function App() {
         tabs.map((t) =>
           t.id === queryTab!.id
             ? { ...t, queryContent: query, isDirty: true }
-            : t
-        )
+            : t,
+        ),
       );
       setActiveTabId(queryTab.id);
     }
@@ -207,14 +276,14 @@ function App() {
     setTabs(newTabs);
     if (activeTabId === tabId) {
       setActiveTabId(
-        newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null
+        newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null,
       );
     }
   };
 
   const togglePin = (tabId: string) => {
     setTabs(
-      tabs.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t))
+      tabs.map((t) => (t.id === tabId ? { ...t, isPinned: !t.isPinned } : t)),
     );
   };
 
@@ -297,13 +366,13 @@ function App() {
 
         // Update the tab with loaded columns
         setTabs(
-          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns } : t))
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns } : t)),
         );
       } catch (error) {
         console.error("Failed to load table columns:", error);
         // Set empty array to prevent infinite retry
         setTabs(
-          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns: [] } : t))
+          tabs.map((t) => (t.id === activeTab.id ? { ...t, columns: [] } : t)),
         );
       }
     };
@@ -349,13 +418,13 @@ function App() {
       // Ctrl+Shift+C for Switch Connection
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "C") {
         e.preventDefault();
-        setActiveConnection(null);
+        openConnectionSwitcher();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSchemaDesignerTab, setActiveConnection]);
+  }, [openConnectionSwitcher, openSchemaDesignerTab]);
 
   // Apply font family and font size to root element
   useEffect(() => {
@@ -371,8 +440,8 @@ function App() {
   }, [fontFamily, fontSize]);
 
   return (
-    <SidebarProvider>
-      <div className="relative flex min-h-screen w-full">
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <div className="relative flex min-h-screen w-full overflow-hidden">
         {activeConnectionId && activeConnection ? (
           <>
             <AppSidebar
@@ -385,12 +454,15 @@ function App() {
             <SidebarInset className="flex flex-col flex-1">
               {/* MenuBar for Linux/Windows (macOS uses native menu) */}
               {!navigator.userAgent.includes("Mac") && (
-                <header className="bg-background sticky top-0 z-50 w-full">
-                  <MenuBar />
+                <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+                  <MenuBar onOpenAbout={() => setAboutDialogOpen(true)} />
                 </header>
               )}
               {/* Top Navigation Bar */}
-              <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4">
+              <header
+                data-tauri-drag-region
+                className={`py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
+              >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
                   <div className="flex items-center gap-2">
@@ -399,31 +471,82 @@ function App() {
                 )}
 
                 {/* Connection Selector */}
-                {activeConnection && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-sm">
-                    <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                    <span className="font-medium">{activeConnection.name}</span>
-                    <span className="text-muted-foreground">
-                      ({activeConnection.db_type})
-                    </span>
-                  </div>
-                )}
-                {activeConnectionId && activeConnection && (
-                  <div className="flex items-center">
-                    <KeyboardTooltip
-                      description="Switch Connection"
-                      keys={["Ctrl", "Shift", "C"]}
-                    >
-                      <Button
-                        variant="ghost"
-                        onClick={() => setActiveConnection(null)}
+                {activeConnection ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 mt-0.5 text-sm transition-colors hover:bg-secondary/80"
                       >
-                        <DatabaseZap className="h-4 w-4" />
-                        Switch
-                      </Button>
-                    </KeyboardTooltip>
-                  </div>
-                )}
+                        <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
+                        <span className="text-sm">{activeConnection.name}</span>
+                        <span className="text-muted-foreground text-xs">
+                          ({activeConnection.db_type})
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-72">
+                      <DropdownMenuLabel>Recent Connections</DropdownMenuLabel>
+                      {recentConnections.length > 0 ? (
+                        recentConnections.map((connection) => {
+                          const isActive =
+                            connection.id === activeConnection.id;
+
+                          return (
+                            <DropdownMenuItem
+                              key={connection.id}
+                              onClick={() => {
+                                if (!isActive) {
+                                  void connectToConnection(connection);
+                                }
+                              }}
+                              className="items-start py-2"
+                            >
+                              <div className="flex min-w-0 flex-1 items-start gap-2">
+                                <div className="pt-0.5">
+                                  {isActive ? (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  ) : (
+                                    <Database className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate  text-sm">
+                                      {connection.name}
+                                    </span>
+                                    {isActive ? (
+                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                                        Current
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="truncate text-xs text-muted-foreground">
+                                    {connection.db_type.toUpperCase()}
+                                    {connection.file_path
+                                      ? ` • ${connection.file_path}`
+                                      : connection.host
+                                        ? ` • ${connection.host}:${connection.port}`
+                                        : ""}
+                                  </div>
+                                </div>
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })
+                      ) : (
+                        <div className="px-2 py-3 text-sm text-muted-foreground">
+                          No recent connections yet.
+                        </div>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={openConnectionSwitcher}>
+                        Browse all connections
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
                 <div className="flex-1" />
 
                 {/* Right Actions */}
@@ -453,11 +576,14 @@ function App() {
                   </Button>
                 </KeyboardTooltip>
 
-                <KeyboardTooltip description="New Connection">
+                <KeyboardTooltip
+                  description="Open Connections"
+                  keys={["Ctrl", "Shift", "C"]}
+                >
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setConnectionDialogOpen(true)}
+                    onClick={openConnectionSwitcher}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -509,61 +635,124 @@ function App() {
               />
               <main className="flex-1 overflow-hidden bg-secondary/20 flex">
                 <div className="flex-1 overflow-hidden">
-                  {activeTab ? (
-                    <>
-                      {activeTab.type === "table" && activeTab.table ? (
-                        activeTab.columns === undefined ? (
-                          <TableSkeleton />
-                        ) : (
-                          // <OptimizedTableViewer
-                          //   connection={activeConnection}
-                          //   table={activeTab.table}
-                          // />
-                          <TanStackTableViewer
-                            connection={activeConnection}
-                            table={activeTab.table}
-                            columns={activeTab.columns}
-                            onRefresh={async () => {
-                              // Reload columns
-                              try {
-                                const columns = await invoke<TableColumn[]>(
-                                  "get_table_structure",
-                                  {
-                                    connectionId: activeConnection.id,
-                                    tableName: activeTab.table!.name,
-                                    dbType: activeConnection.db_type,
+                  {/* Render all tabs but only show the active one via CSS.
+                      Query tabs are kept mounted to preserve their state (query text,
+                      results, execution history). Table/schema tabs unmount normally
+                      since they always reload fresh data. */}
+                  {tabs.map((tab) => {
+                    const isActive = tab.id === activeTabId;
+                    return (
+                      <div
+                        key={tab.id}
+                        className={`h-full w-full ${isActive ? "block" : "hidden"}`}
+                      >
+                        {tab.type === "table" && tab.table ? (
+                          // Only render table content when this tab is active (avoids
+                          // fetching data for background table tabs unnecessarily).
+                          isActive ? (
+                            tab.columns === undefined ? (
+                              <TableSkeleton />
+                            ) : (
+                              <TanStackTableViewer
+                                connection={activeConnection}
+                                table={tab.table}
+                                columns={tab.columns}
+                                initialFilters={tab.initialFilters}
+                                onNavigateToTable={(tableName, columnName, val) => {
+                                  const newTab: TabType = {
+                                    id: `table-${tableName}-filtered-${Date.now()}`,
+                                    type: "table",
+                                    title: `${tableName} (${columnName}=${val})`,
+                                    table: { name: tableName },
+                                    columns: undefined,
+                                    isPinned: false,
+                                    isDirty: false,
+                                    initialFilters: [{ id: columnName, value: val }],
+                                  };
+                                  setTabs([...tabs, newTab]);
+                                  setActiveTabId(newTab.id);
+                                }}
+                                onViewFlow={(val) => {
+                                  const newTab: TabType = {
+                                    id: `relation-flow-${val}-${Date.now()}`,
+                                    type: "relation-flow",
+                                    title: `Flow: ${val.substring(0, 8)}...`,
+                                    isPinned: false,
+                                    isDirty: false,
+                                    relationFlowValue: val,
+                                  };
+                                  setTabs([...tabs, newTab]);
+                                  setActiveTabId(newTab.id);
+                                }}
+                                onRefresh={async () => {
+                                  try {
+                                    const columns = await invoke<TableColumn[]>(
+                                      "get_table_structure",
+                                      {
+                                        connectionId: activeConnection.id,
+                                        tableName: tab.table!.name,
+                                        dbType: activeConnection.db_type,
+                                      },
+                                    );
+                                    setTabs(
+                                      tabs.map((t) =>
+                                        t.id === tab.id
+                                          ? { ...t, columns }
+                                          : t,
+                                      ),
+                                    );
+                                  } catch (error) {
+                                    console.error(
+                                      "Failed to reload columns:",
+                                      error,
+                                    );
                                   }
-                                );
-                                setTabs(
-                                  tabs.map((t) =>
-                                    t.id === activeTab.id
-                                      ? { ...t, columns }
-                                      : t
-                                  )
-                                );
-                              } catch (error) {
-                                console.error(
-                                  "Failed to reload columns:",
-                                  error
-                                );
-                              }
+                                }}
+                              />
+                            )
+                          ) : null
+                        ) : tab.type === "query-builder" ? (
+                          isActive ? (
+                            <VisualQueryBuilder connection={activeConnection} />
+                          ) : null
+                        ) : tab.type === "schema" ? (
+                          isActive ? (
+                            <SchemaDesigner connection={activeConnection} />
+                          ) : null
+                        ) : tab.type === "relation-flow" ? (
+                          <RelationFlow
+                            connection={activeConnection}
+                            value={tab.relationFlowValue || ""}
+                            onNavigateToTable={(tableName, columnName, val) => {
+                              const newTab: TabType = {
+                                id: `table-${tableName}-filtered-${Date.now()}`,
+                                type: "table",
+                                title: `${tableName} (${columnName}=${val})`,
+                                table: { name: tableName },
+                                columns: undefined,
+                                isPinned: false,
+                                isDirty: false,
+                                initialFilters: [{ id: columnName, value: val }],
+                              };
+                              setTabs([...tabs, newTab]);
+                              setActiveTabId(newTab.id);
                             }}
                           />
-                        )
-                      ) : activeTab.type === "query-builder" ? (
-                        <VisualQueryBuilder connection={activeConnection} />
-                      ) : activeTab.type === "schema" ? (
-                        <SchemaDesigner connection={activeConnection} />
-                      ) : (
-                        <QueryEditor connection={activeConnection} />
-                      )}
-                    </>
-                  ) : (
+                        ) : (
+                          // "query" tabs: always keep mounted to preserve state
+                          <QueryEditor connection={activeConnection} />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty state when no tabs are open */}
+                  {tabs.length === 0 && (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <Database className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
                         <h2 className="text-xl font-semibold mb-2">
-                          Welcome to {activeConnection.name}
+                          Welcome to {activeConnection?.name}
                         </h2>
                         <p className="text-sm text-muted-foreground mb-6">
                           Select a table from the sidebar or open a new query
@@ -596,19 +785,23 @@ function App() {
           </>
         ) : connections.length > 0 ? (
           /* Connection List when no active connection */
-          <div className="flex-1 flex flex-col p-6">
+          <div className="flex-1 flex flex-col">
+            <header
+              data-tauri-drag-region
+              className="pl-24 md:pl-0 h-9 py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
+            ></header>
             {/* Back button when switching connections */}
-            {activeConnectionId && (
-              <div className="flex items-center mb-6">
+            {previousConnectionId && (
+              <div className="flex items-center p-6 mb-6">
                 <Button
-                  variant="ghost"
-                  onClick={() => setActiveConnection(activeConnectionId)}
+                  variant="outline"
+                  onClick={restorePreviousConnection}
                   className="gap-2"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back to{" "}
-                  {connections.find((c) => c.id === activeConnectionId)?.name ||
-                    "Connection"}
+                  {connections.find((c) => c.id === previousConnectionId)
+                    ?.name || "Connection"}
                 </Button>
               </div>
             )}
@@ -626,17 +819,7 @@ function App() {
                     >
                       <button
                         onClick={async () => {
-                          try {
-                            await invoke("connect_database", {
-                              config: conn,
-                            });
-                            setActiveConnection(conn.id);
-                          } catch (error) {
-                            console.error("Failed to connect:", error);
-                            alert(
-                              `Failed to connect to ${conn.name}: ${error}`
-                            );
-                          }
+                          await connectToConnection(conn);
                         }}
                         className="w-full"
                       >
@@ -731,9 +914,9 @@ function App() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <div className="h-20 w-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Database className="h-10 w-10 text-primary" />
+                <img src="/logo.png" alt="NodaDB Logo" className="h-10w-10" />
               </div>
-              <h2 className="text-3xl font-bold mb-3">Welcome to NodaDB</h2>
+              <h2 className="text-3xl font-bold mb-3">NodaDB</h2>
               <p className="text-muted-foreground mb-8 text-lg">
                 A modern, professional database management tool built with Tauri
               </p>
@@ -765,7 +948,7 @@ function App() {
           </div>
         )}
 
-        <Toaster />
+        <Toaster richColors position="top-right" />
         <AlertDialog
           open={renameConnectionId !== null}
           onOpenChange={(open) => !open && setRenameConnectionId(null)}
@@ -849,6 +1032,14 @@ function App() {
         <SettingsDialog
           open={settingsDialogOpen}
           onOpenChange={setSettingsDialogOpen}
+          appUpdate={appUpdate}
+        />
+        <AboutDialog
+          open={aboutDialogOpen}
+          onOpenChange={setAboutDialogOpen}
+          appUpdate={appUpdate}
+          autoCheckForUpdates={autoCheckForUpdates}
+          onAutoCheckChange={setAutoCheckForUpdates}
         />
         <KeyboardCheatSheet />
       </div>

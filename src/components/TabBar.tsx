@@ -15,11 +15,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { DatabaseTable, TableColumn } from "@/types";
+import { DatabaseTable, TableColumn, TabFilter } from "@/types";
 
 export type TabType = {
   id: string;
-  type: "table" | "query" | "query-builder" | "schema";
+  type: "table" | "query" | "query-builder" | "schema" | "relation-flow";
   title: string;
   table?: DatabaseTable;
   columns?: TableColumn[];
@@ -27,6 +27,8 @@ export type TabType = {
   isDirty: boolean;
   queryContent?: string;
   lastModified?: Date;
+  initialFilters?: TabFilter[];
+  relationFlowValue?: string;
 };
 
 interface TabBarProps {

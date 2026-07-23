@@ -62,6 +62,15 @@ export function qualifyTableName(
   dbType?: DatabaseType
 ): string {
   const type = dbType || "sqlite";
+  const hasQualifier = tableName.includes(".");
+
+  if (type === "postgresql" && hasQualifier) {
+    const [existingSchema, existingTable] = tableName.split(".", 2);
+    return `${quoteIdentifier(
+      existingSchema.replace(/^"|"$/g, ""),
+      type
+    )}.${quoteIdentifier(existingTable.replace(/^"|"$/g, ""), type)}`;
+  }
 
   if (schema && type === "postgresql") {
     // For PostgreSQL, use schema.table format
@@ -78,6 +87,26 @@ export function qualifyTableName(
   } else {
     // For SQLite or when no schema is provided
     return quoteIdentifier(tableName, type);
+  }
+}
+
+function buildTextSearchExpression(
+  columnId: string,
+  value: string,
+  dbType: DatabaseType,
+  caseInsensitive = false
+): string {
+  const quotedColumn = quoteIdentifier(columnId, dbType);
+  const quotedValue = quoteValue(value, dbType);
+
+  switch (dbType) {
+    case "postgresql":
+      return `CAST(${quotedColumn} AS TEXT) ${caseInsensitive ? "ILIKE" : "LIKE"} ${quotedValue}`;
+    case "mysql":
+      return `CAST(${quotedColumn} AS CHAR) LIKE ${quotedValue}`;
+    case "sqlite":
+    default:
+      return `CAST(${quotedColumn} AS TEXT) LIKE ${quotedValue}`;
   }
 }
 
@@ -100,12 +129,10 @@ function buildWhereClause(
       const quotedColumn = quoteIdentifier(columnId, dbType || "sqlite");
 
       if (typeof value === "string" && value.includes("%")) {
-        // Handle LIKE operations
         conditions.push(
-          `${quotedColumn} LIKE ${quoteValue(value, dbType || "sqlite")}`
+          buildTextSearchExpression(columnId, value, dbType || "sqlite")
         );
       } else {
-        // Handle exact matches
         conditions.push(
           `${quotedColumn} = ${quoteValue(value, dbType || "sqlite")}`
         );
@@ -117,12 +144,13 @@ function buildWhereClause(
   if (globalFilter && columns) {
     const globalConditions: string[] = [];
     columns.forEach((column) => {
-      const quotedColumn = quoteIdentifier(column, dbType || "sqlite");
       globalConditions.push(
-        `${quotedColumn} LIKE ${quoteValue(
+        buildTextSearchExpression(
+          column,
           `%${globalFilter}%`,
-          dbType || "sqlite"
-        )}`
+          dbType || "sqlite",
+          dbType === "postgresql"
+        )
       );
     });
 

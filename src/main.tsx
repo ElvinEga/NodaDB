@@ -13,7 +13,15 @@ async function setupApp() {
 
       if (isMacOS) {
         const { setupNativeMenu } = await import("./lib/nativeMenu");
+        const { exit } = await import("@tauri-apps/plugin-process");
         await setupNativeMenu();
+
+        window.addEventListener("keydown", (event) => {
+          if (event.metaKey && event.key.toLowerCase() === "q") {
+            event.preventDefault();
+            void exit(0);
+          }
+        });
       }
       // For Linux/Windows, the MenuBar will be rendered in App.tsx
     } catch (error) {

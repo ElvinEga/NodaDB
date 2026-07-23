@@ -143,5 +143,66 @@ All notable changes to NodaDB will be documented in this file.
 - Import/Export (CSV, JSON, SQL)
 - Additional keyboard shortcuts
 - Theme customization (Dark/Light mode)
-- Connection management improvements
+- Further connection management improvements
 - Performance optimizations
+
+## [0.2.8] - 2026-06-02
+
+### Fixed
+- Disabled accidental macOS certificate import attempts unless `ENABLE_APPLE_NOTARIZATION=true` is explicitly set alongside all Apple signing secrets
+- Restored the default macOS release path to ad-hoc signing for teams that do not yet have Apple Developer certificates
+
+## [0.2.7] - 2026-06-02
+
+### Fixed
+- Statically vendored OpenSSL for the SSH stack so the macOS app no longer loads `/opt/homebrew/.../libssl.3.dylib` or `/opt/homebrew/.../libcrypto.3.dylib` at launch
+- Added a CI guard that fails macOS releases if the app binary links against Homebrew-managed libraries
+
+## [0.2.6] - 2026-06-02
+
+### Fixed
+- Added a safe notarized macOS release path that only enables Apple certificate import when all required Apple secrets are present
+- Prevented partial Apple secret configuration from breaking macOS CI before the fallback signing path runs
+
+### Changed
+- Added macOS release verification steps for codesign, Gatekeeper, and stapled notarization tickets when notarization is active
+
+## [0.2.5] - 2026-06-02
+
+### Fixed
+- Stopped passing Apple certificate import variables into the default release workflow so macOS CI no longer fails in `security import` before ad-hoc signing
+- Kept the release pipeline on ad-hoc macOS signing by default for Apple Silicon compatibility without requiring Apple certificate secrets
+
+## [0.2.4] - 2026-06-02
+
+### Fixed
+- Ad-hoc sign macOS builds by default so Apple Silicon downloads are no longer flagged as damaged when no Apple certificate is configured
+
+### Changed
+- Added optional Apple code-signing and notarization environment support to the GitHub release workflow
+
+## [0.2.3] - 2026-06-02
+
+### Added
+- Foreign key management UI for creating, inspecting, and dropping table relationships
+- Manual SQL migration manager with saved up/down scripts per connection
+- Database-backed migration tracking through the `schema_migrations` table
+- Real foreign key metadata loading in the schema designer for SQLite, PostgreSQL, and MySQL
+
+### Changed
+- Updated schema export to include foreign key DDL alongside columns, primary keys, and indexes
+- Upgraded the schema designer to prefer actual constraint metadata before falling back to name-based relationship detection
+- Added SQLite table-rebuild handling so foreign key changes can be applied on SQLite connections
+
+## [0.2.1] - 2026-06-01
+
+### Added
+- In-app desktop auto-update support using the Tauri v2 updater and process plugins
+- Changelog-aware update UI in Settings and About dialogs
+- Signed release pipeline support for updater artifacts, `latest.json`, and installer verification
+- Recent-connections dropdown from the active database pill in the top bar
+
+### Changed
+- Replaced the separate header **Switch** button with a clickable current-connection selector
+- Changed the top-bar **New Connection** button to open the full saved-connections list instead of jumping straight into the modal
+- Persisted recent-connection ordering to speed up switching between databases

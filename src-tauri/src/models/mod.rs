@@ -8,6 +8,31 @@ pub enum DatabaseType {
     MySQL,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ColumnTypeFamily {
+    Boolean,
+    Integer,
+    Float,
+    Decimal,
+    Text,
+    DateTime,
+    Date,
+    Time,
+    Json,
+    Uuid,
+    Binary,
+    Enum,
+    Array,
+    Network,
+    Range,
+    FullText,
+    Extension,
+    Domain,
+    Custom,
+    Unknown,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SSHAuthMethod {
@@ -45,21 +70,66 @@ pub struct ConnectionConfig {
 pub struct DatabaseTable {
     pub name: String,
     pub schema: Option<String>,
+    pub full_name: Option<String>,
     pub row_count: Option<i64>,
     pub size_kb: Option<i64>,
     pub table_type: Option<String>, // "TABLE" or "VIEW"
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TableColumn {
     pub name: String,
     pub data_type: String,
+    pub raw_type: Option<String>,
+    pub normalized_type: String,
+    pub type_family: ColumnTypeFamily,
+    pub db_type: DatabaseType,
     pub is_nullable: bool,
     pub default_value: Option<String>,
     pub is_primary_key: bool,
+    pub is_boolean_like: bool,
+    pub is_array: bool,
+    pub enum_values: Option<Vec<String>>,
+    pub identity_kind: Option<String>,
+    pub generated_kind: Option<String>,
+    pub generation_expression: Option<String>,
+    pub column_comment: Option<String>,
+    pub collation_name: Option<String>,
+    pub domain_name: Option<String>,
+    pub domain_schema: Option<String>,
+    pub domain_base_type: Option<String>,
+    pub array_dimensions: Option<i32>,
+    pub element_raw_type: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ForeignKeyDefinition {
+    pub constraint_name: String,
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub referenced_table_name: String,
+    pub referenced_column_names: Vec<String>,
+    pub on_delete: Option<String>,
+    pub on_update: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppliedMigration {
+    pub id: String,
+    pub name: String,
+    pub applied_at: String,
+    pub checksum: Option<String>,
+}
+
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExportArchiveEntry {
+    pub path: String,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryResult {
     pub columns: Vec<String>,
     pub rows: Vec<serde_json::Value>,
@@ -93,3 +163,69 @@ pub struct ConnectionTestResult {
     pub db_version: String,
     pub error: Option<String>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TableConstraint {
+    pub constraint_name: String,
+    pub constraint_type: String,
+    pub table_schema: Option<String>,
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub foreign_table_schema: Option<String>,
+    pub foreign_table_name: Option<String>,
+    pub foreign_column_names: Option<Vec<String>>,
+    pub check_expression: Option<String>,
+    pub is_deferrable: Option<bool>,
+    pub initially_deferred: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TableIndex {
+    pub index_name: String,
+    pub method: Option<String>,
+    pub is_unique: bool,
+    pub is_primary: bool,
+    pub is_valid: Option<bool>,
+    pub columns: Vec<String>,
+    pub expression: Option<String>,
+    pub predicate: Option<String>,
+    pub definition: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresConnectionInfo {
+    pub version: String,
+    pub server_version: String,
+    pub current_database: String,
+    pub current_user: String,
+    pub search_path: String,
+    pub timezone: String,
+    pub backend_pid: i32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresExtension {
+    pub extname: String,
+    pub extversion: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PostgresTablePrivileges {
+    pub can_select: bool,
+    pub can_insert: bool,
+    pub can_update: bool,
+    pub can_delete: bool,
+    pub can_truncate: bool,
+    pub can_references: bool,
+    pub can_trigger: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationMatch {
+    pub table_name: String,
+    pub column_name: String,
+    pub is_primary_key: bool,
+    pub count: u64,
+    pub sample_rows: QueryResult,
+}
+

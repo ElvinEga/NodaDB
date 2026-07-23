@@ -12,6 +12,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(connection_manager)
         .invoke_handler(tauri::generate_handler![
             commands::test_connection,
@@ -32,8 +34,22 @@ pub fn run() {
             commands::execute_transaction,
             commands::rename_table,
             commands::export_table_structure,
+            commands::get_table_constraints,
+            commands::get_table_indexes,
+            commands::create_foreign_key,
+            commands::drop_foreign_key,
+            commands::list_applied_migrations,
+            commands::apply_migration,
+            commands::rollback_migration,
+            commands::get_postgres_connection_info,
+            commands::cancel_postgres_backend_query,
+            commands::get_postgres_extensions,
+            commands::get_postgres_table_privileges,
             commands::create_new_window,
             commands::create_window_from_label,
+            commands::save_export_file,
+            commands::create_export_archive,
+            commands::trace_id_relations,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

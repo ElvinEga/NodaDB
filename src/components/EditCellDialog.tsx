@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Edit2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { TableColumn } from '@/types';
+import { resolveColumnInputType } from '@/lib/db-types';
 import {
   Select,
   SelectContent,
@@ -23,8 +35,13 @@ interface EditCellDialogProps {
   onOpenChange: (open: boolean) => void;
   columnName: string;
   columnType: string;
+  column: TableColumn;
   currentValue: any;
   onSave: (newValue: string) => Promise<void>;
+  title?: string;
+  description?: ReactNode;
+  submitLabel?: string;
+  confirmMessage?: string | ((newValue: string) => string);
 }
 
 export function EditCellDialog({
@@ -32,22 +49,31 @@ export function EditCellDialog({
   onOpenChange,
   columnName,
   columnType,
+  column,
   currentValue,
   onSave,
+  title = 'Edit Cell Value',
+  description,
+  submitLabel = 'Save Changes',
+  confirmMessage,
 }: EditCellDialogProps) {
   const [value, setValue] = useState('');
+  const [valueMode, setValueMode] = useState<'value' | 'null' | 'default' | 'empty'>('value');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<string | null>(null);
+  const [pendingValue, setPendingValue] = useState<string | null>(null);
 
-  const isBoolean = columnType.toUpperCase().includes('BOOL') || columnType.toUpperCase() === 'BIT';
+  const isBoolean = column.type_family === 'boolean';
+  const isReadOnlyGenerated = (column.generated_kind ?? '') !== '';
 
   useEffect(() => {
     if (open) {
+      setValueMode('value');
       if (isBoolean) {
-        // Normalize boolean values to '1' or '0'
         if (currentValue === true || currentValue === 1 || currentValue === '1' || currentValue === 'true' || currentValue === 't') {
-          setValue('1');
+          setValue('true');
         } else if (currentValue === false || currentValue === 0 || currentValue === '0' || currentValue === 'false' || currentValue === 'f') {
-          setValue('0');
+          setValue('false');
         } else {
           setValue(''); // Default/Null
         }
@@ -58,12 +84,13 @@ export function EditCellDialog({
     }
   }, [open, currentValue, isBoolean]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeSave = async (outgoingValue: string) => {
     setIsSubmitting(true);
 
     try {
-      await onSave(value);
+      await onSave(outgoingValue);
+      setPendingConfirmation(null);
+      setPendingValue(null);
       onOpenChange(false);
     } catch (error) {
       // Error handling is done in parent component
@@ -73,39 +100,78 @@ export function EditCellDialog({
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isReadOnlyGenerated) {
+      return;
+    }
+
+    const outgoingValue =
+      valueMode === 'null'
+        ? ''
+        : valueMode === 'default'
+          ? '__NODADB_USE_DEFAULT__'
+          : valueMode === 'empty'
+            ? '__NODADB_EMPTY_STRING__'
+            : value;
+
+    const confirmation =
+      typeof confirmMessage === 'function'
+        ? confirmMessage(outgoingValue)
+        : confirmMessage;
+
+    if (confirmation) {
+      setPendingValue(outgoingValue);
+      setPendingConfirmation(confirmation);
+      return;
+    }
+
+    await executeSave(outgoingValue);
+  };
+
   const getInputType = (): string => {
-    const type = columnType.toUpperCase();
-    if (type.includes('INT') || type.includes('SERIAL')) return 'number';
-    if (type.includes('FLOAT') || type.includes('REAL') || type.includes('DOUBLE') || type.includes('NUMERIC')) return 'number';
-    if (type.includes('BOOL')) return 'text';
-    if (type.includes('DATE') && !type.includes('TIME')) return 'date';
-    if (type.includes('DATETIME') || type.includes('TIMESTAMP')) return 'datetime-local';
-    if (type.includes('TIME') && !type.includes('DATE')) return 'time';
-    return 'text';
+    return resolveColumnInputType(column);
   };
 
   const getPlaceholder = (): string => {
-    const type = columnType.toUpperCase();
-    if (type.includes('INT')) return 'Enter integer value';
-    if (type.includes('FLOAT') || type.includes('REAL') || type.includes('DOUBLE') || type.includes('NUMERIC')) return 'Enter decimal number';
-    if (type.includes('BOOL')) return 'true/false or 1/0';
-    if (type.includes('DATE')) return 'Select date';
-    if (type.includes('TIME')) return 'Select time';
-    return 'Enter value or leave empty for NULL';
+    switch (column.type_family) {
+      case 'integer':
+        return 'Enter integer value';
+      case 'float':
+      case 'decimal':
+        return 'Enter decimal number';
+      case 'boolean':
+        return 'true/false';
+      case 'date':
+        return 'Select date';
+      case 'date_time':
+        return 'Select date and time';
+      case 'time':
+        return 'Select time';
+      case 'json':
+        return '{"key":"value"}';
+      default:
+        return 'Enter value or leave empty for NULL';
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit2 className="h-4 w-4 text-primary" />
-            Edit Cell Value
+            {title}
           </DialogTitle>
           <DialogDescription>
-            Editing column: <span className="font-mono font-semibold text-foreground">{columnName}</span>
-            {' '}
-            <span className="text-xs text-muted-foreground">({columnType})</span>
+            {description ?? (
+              <>
+                Editing column: <span className="font-mono font-semibold text-foreground">{columnName}</span>
+                {' '}
+                <span className="text-xs text-muted-foreground">({columnType})</span>
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -115,16 +181,59 @@ export function EditCellDialog({
               <label htmlFor="cell-value" className="text-sm font-medium">
                 New Value
               </label>
-              {isBoolean ? (
+              <Select value={valueMode} onValueChange={(v) => setValueMode(v as 'value' | 'null' | 'default' | 'empty')}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="value">Set Value</SelectItem>
+                  <SelectItem value="null">Set NULL</SelectItem>
+                  <SelectItem value="default">Use DEFAULT</SelectItem>
+                  <SelectItem value="empty">Set Empty String</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Mode controls SQL semantics: value, NULL, DEFAULT, or empty string.
+              </p>
+              {valueMode === 'value' && (isReadOnlyGenerated ? (
+                <Input
+                  id="cell-value"
+                  value={value}
+                  disabled
+                  className="h-9"
+                />
+              ) : isBoolean ? (
                 <Select value={value} onValueChange={setValue}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select boolean value" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">True</SelectItem>
-                    <SelectItem value="0">False</SelectItem>
+                    <SelectItem value="true">True</SelectItem>
+                    <SelectItem value="false">False</SelectItem>
                   </SelectContent>
                 </Select>
+              ) : column.type_family === 'enum' && (column.enum_values?.length ?? 0) > 0 ? (
+                <Select value={value} onValueChange={setValue}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select enum value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {column.enum_values?.map((enumValue) => (
+                      <SelectItem key={enumValue} value={enumValue}>
+                        {enumValue}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : column.type_family === 'json' ? (
+                <textarea
+                  id="cell-value"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={getPlaceholder()}
+                  autoFocus
+                  className="min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                />
               ) : (
                 <Input
                   id="cell-value"
@@ -135,9 +244,11 @@ export function EditCellDialog({
                   autoFocus
                   className="h-9"
                 />
-              )}
+              ))}
               <p className="text-xs text-muted-foreground">
-                Leave empty to set as NULL
+                {isReadOnlyGenerated
+                  ? 'Generated columns are read-only'
+                  : 'Leave empty to set as NULL'}
               </p>
             </div>
           </div>
@@ -151,19 +262,53 @@ export function EditCellDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || isReadOnlyGenerated}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Saving...
                 </>
               ) : (
-                'Save Changes'
+                submitLabel
               )}
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={pendingConfirmation !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !isSubmitting) {
+            setPendingConfirmation(null);
+            setPendingValue(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm update</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingConfirmation}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSubmitting || pendingValue === null}
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingValue !== null) {
+                  void executeSave(pendingValue);
+                }
+              }}
+            >
+              {isSubmitting ? 'Updating...' : 'Confirm'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

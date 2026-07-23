@@ -1,25 +1,28 @@
-import {
-  Menu,
-  Submenu,
-  MenuItem,
-  PredefinedMenuItem,
-} from "@tauri-apps/api/menu";
+import { Menu, Submenu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { exit } from "@tauri-apps/plugin-process";
+import { emitOpenAboutEvent } from "@/lib/appEvents";
 
 export async function setupNativeMenu(): Promise<void> {
-  const app = await import("@tauri-apps/api/app");
-
-  // About submenu for macOS
+  // App submenu for macOS
   const aboutSubmenu = await Submenu.new({
-    text: "About",
+    text: "NodaDB",
     items: [
       await MenuItem.new({
         id: "about",
         text: "About NodaDB",
         action: async () => {
-          alert(
-            "NodaDB v0.1.2\n\nA modern database management tool built with Tauri 2, React, and Rust."
-          );
+          emitOpenAboutEvent();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator", text: "" }),
+      await MenuItem.new({
+        id: "quit-nodadb",
+        text: "Quit NodaDB",
+        accelerator: "Cmd+Q",
+        action: async () => {
+          await exit(0);
         },
       }),
     ],
@@ -215,16 +218,14 @@ export async function setupNativeMenu(): Promise<void> {
         id: "github",
         text: "GitHub Repository",
         action: async () => {
-          await invoke("open_github");
+          await openUrl("https://github.com/ElvinEga/NodaDB");
         },
       }),
       await MenuItem.new({
         id: "about",
         text: "About NodaDB",
         action: async () => {
-          alert(
-            "NodaDB v0.1.2\n\nA modern database management tool built with Tauri 2, React, and Rust."
-          );
+          emitOpenAboutEvent();
         },
       }),
     ],

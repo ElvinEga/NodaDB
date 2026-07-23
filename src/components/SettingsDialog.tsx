@@ -1,4 +1,11 @@
-import { Settings, Palette, Code, Database, FileText } from "lucide-react";
+import {
+  Settings,
+  Palette,
+  Code,
+  Database,
+  FileText,
+  Download,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { AppUpdatePanel } from "@/components/AppUpdatePanel";
+import type { useAppUpdate } from "@/hooks/useAppUpdate";
 import {
   useSettingsStore,
   Theme,
@@ -30,9 +39,14 @@ import { toast } from "sonner";
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  appUpdate: ReturnType<typeof useAppUpdate>;
 }
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  appUpdate,
+}: SettingsDialogProps) {
   const {
     theme,
     fontSize,
@@ -46,6 +60,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     maxHistorySize,
     rowsPerPage,
     showRowNumbers,
+    autoCheckForUpdates,
     setTheme,
     setFontSize,
     setFontFamily,
@@ -58,6 +73,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setMaxHistorySize,
     setRowsPerPage,
     setShowRowNumbers,
+    setAutoCheckForUpdates,
     resetToDefaults,
   } = useSettingsStore();
 
@@ -116,22 +132,26 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           defaultValue="appearance"
           className="flex-1 overflow-hidden flex flex-col"
         >
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="appearance">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="appearance" className="!text-sm">
               <Palette className="h-4 w-4 mr-2" />
               Appearance
             </TabsTrigger>
-            <TabsTrigger value="editor">
+            <TabsTrigger value="editor" className="!text-sm">
               <Code className="h-4 w-4 mr-2" />
               Editor
             </TabsTrigger>
-            <TabsTrigger value="query">
+            <TabsTrigger value="query" className="!text-sm">
               <FileText className="h-4 w-4 mr-2" />
               Query
             </TabsTrigger>
-            <TabsTrigger value="table">
+            <TabsTrigger value="table" className="!text-sm">
               <Database className="h-4 w-4 mr-2" />
               Table
+            </TabsTrigger>
+            <TabsTrigger value="updates" className="!text-sm">
+              <Download className="h-4 w-4 mr-2" />
+              Updates
             </TabsTrigger>
           </TabsList>
 
@@ -356,6 +376,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   onCheckedChange={setShowRowNumbers}
                 />
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent
+            value="updates"
+            className="flex-1 overflow-y-auto space-y-6 pt-4"
+          >
+            <div className="mx-2">
+              <AppUpdatePanel
+                appUpdate={appUpdate}
+                autoCheckForUpdates={autoCheckForUpdates}
+                onAutoCheckChange={setAutoCheckForUpdates}
+              />
             </div>
           </TabsContent>
         </Tabs>

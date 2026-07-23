@@ -3,9 +3,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { DatabaseExplorer } from "@/components/DatabaseExplorer";
@@ -25,20 +22,9 @@ export function AppSidebar({
   onNewQuery,
 }: AppSidebarProps) {
   return (
-    <Sidebar collapsible="icon" variant="inset">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="sm" tooltip="New Query">
-              {/* Logo & App Name */}
-              <div className="flex items-center gap-4">
-                {/* <Database className="h-5 w-5 text-primary" /> */}
-                <img src="/logo.svg" alt="NodaDB Logo" className="h-5 w-5" />
-                <h1 className="text-lg font-bold text-primary">NodaDB</h1>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+    <Sidebar collapsible="offcanvas" variant="inset">
+      <SidebarHeader data-tauri-drag-region>
+        <div className="flex items-center gap-4"></div>
       </SidebarHeader>
 
       <SidebarContent>
