@@ -314,7 +314,55 @@ export function AddRowDialog({
                       }
                       className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                     />
-                  ) : (column.type_family === "date_time" || column.type_family === "date") ? (() => {
+                  ) : column.type_family === "date_time" ? (() => {
+                    const val = formData[column.name] || "";
+                    const selectedDate = val ? new Date(val.includes(" ") ? val.split(" ")[0] : val) : undefined;
+                    const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+                    const timeVal = val && val.includes(" ") ? val.split(" ")[1] : "12:00:00";
+
+                    return (
+                      <div className="flex gap-2 w-full">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "h-9 flex-1 justify-start text-left font-normal bg-background border-input text-sm",
+                                !val && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              <span className="truncate">{isValidDate ? format(selectedDate, "yyyy-MM-dd") : "Pick date..."}</span>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={isValidDate ? selectedDate : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  handleInputChange(column.name, `${format(date, "yyyy-MM-dd")} ${timeVal}`);
+                                } else {
+                                  handleInputChange(column.name, "");
+                                }
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <Input
+                          type="time"
+                          step="1"
+                          value={timeVal}
+                          onChange={(e) => {
+                            const newTime = e.target.value || "12:00:00";
+                            const dateStr = isValidDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+                            handleInputChange(column.name, `${dateStr} ${newTime}`);
+                          }}
+                          className="h-9 text-sm w-[110px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                        />
+                      </div>
+                    );
+                  })() : column.type_family === "date" ? (() => {
                     const val = formData[column.name] || "";
                     const selectedDate = val ? new Date(val) : undefined;
                     const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
@@ -331,10 +379,10 @@ export function AddRowDialog({
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {isValidDate ? (
-                              format(selectedDate, "yyyy-MM-dd HH:mm:ss")
+                              format(selectedDate, "yyyy-MM-dd")
                             ) : (
                               <span>
-                                {column.is_nullable ? "NULL (optional) - Pick date/time..." : "Pick date/time..."}
+                                {column.is_nullable ? "NULL (optional) - Pick date..." : "Pick date..."}
                               </span>
                             )}
                           </Button>
@@ -345,7 +393,7 @@ export function AddRowDialog({
                             selected={isValidDate ? selectedDate : undefined}
                             onSelect={(date) => {
                               if (date) {
-                                handleInputChange(column.name, format(date, "yyyy-MM-dd HH:mm:ss"));
+                                handleInputChange(column.name, format(date, "yyyy-MM-dd"));
                               } else {
                                 handleInputChange(column.name, "");
                               }
