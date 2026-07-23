@@ -2945,7 +2945,8 @@ impl ConnectionManager {
                 }
 
                 let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
-
+                let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+                
                 for table_name in &table_names {
                     // Fetch table column info
                     let col_query = format!("PRAGMA table_info(\"{}\")", table_name.replace('"', "\"\""));
@@ -2991,8 +2992,10 @@ impl ConnectionManager {
                             let table_name_clone = table_name.clone();
                             let col_name_clone = col_name.clone();
                             let clean_value_clone = clean_value.to_string();
+                            let sem_clone = sem.clone();
                             
                             set.spawn(async move {
+                                let _permit = sem_clone.acquire().await.unwrap();
                                 // Check count
                                 let count_query = format!(
                                     "SELECT COUNT(*) FROM \"{}\" WHERE \"{}\" = ?",
@@ -3077,6 +3080,7 @@ impl ConnectionManager {
                 }
 
                 let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
+                let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
 
                 for row in col_rows {
                     let table_name: String = row.try_get(0).unwrap_or_default();
@@ -3168,7 +3172,9 @@ impl ConnectionManager {
                             )
                         };
 
+                        let sem_clone = sem.clone();
                         set.spawn(async move {
+                            let _permit = sem_clone.acquire().await.unwrap();
                             // Check count
                             if let Ok(count_row) = sqlx::query(&count_query).bind(&clean_value_clone).fetch_one(&pool_clone).await {
                                 let count: i64 = count_row.try_get(0).unwrap_or(0);
@@ -3228,6 +3234,7 @@ impl ConnectionManager {
                 }
 
                 let mut set: tokio::task::JoinSet<Result<Option<RelationMatch>>> = tokio::task::JoinSet::new();
+                let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
 
                 for row in col_rows {
                     let table_name: String = row.try_get(0).unwrap_or_default();
@@ -3269,7 +3276,9 @@ impl ConnectionManager {
                         let col_name_clone = col_name.clone();
                         let clean_value_clone = clean_value.to_string();
 
+                        let sem_clone = sem.clone();
                         set.spawn(async move {
+                            let _permit = sem_clone.acquire().await.unwrap();
                             // Check count using backticks for MySQL identifiers
                             let count_query = format!(
                                 "SELECT COUNT(*) FROM `{}` WHERE `{}` = ?",
@@ -3321,6 +3330,130 @@ impl ConnectionManager {
         }
 
         Ok(matches)
+    }
+
+    pub async fn get_relation_rows(
+        &self,
+        connection_id: &str,
+        table_name: &str,
+        column_name: &str,
+        value: &str,
+        page: u32,
+        page_size: u32,
+        _db_type: &DatabaseType,
+    ) -> Result<QueryResult> {
+        let connections = self.connections.read().await;
+        let pool = connections
+            .get(connection_id)
+            .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        let limit = page_size;
+        let offset = (page.saturating_sub(1)) * page_size;
+        let clean_value = value.trim();
+
+        match pool {
+            DatabasePool::Sqlite(pool) => {
+                let query = format!(
+                    "SELECT * FROM \"{}\" WHERE \"{}\" = ? LIMIT ? OFFSET ?",
+                    table_name.replace('"', "\"\""),
+                    column_name.replace('"', "\"\"")
+                );
+                
+                let rows = sqlx::query(&query)
+                    .bind(clean_value)
+                    .bind(limit as i64)
+                    .bind(offset as i64)
+                    .fetch_all(pool)
+                    .await?;
+                
+                let converter = |r: Vec<sqlx::sqlite::SqliteRow>| -> Result<QueryResult> {
+                    Ok(process_rows!(r, common))
+                };
+                converter(rows)
+            }
+            DatabasePool::Postgres(pool) => {
+                // Determine schema name and table name
+                let parts: Vec<&str> = table_name.split('.').collect();
+                let (schema, table) = if parts.len() == 2 {
+                    (parts[0], parts[1])
+                } else {
+                    ("public", table_name)
+                };
+
+                // Fetch column type
+                let col_query = r#"
+                    SELECT data_type 
+                    FROM information_schema.columns 
+                    WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+                "#;
+                let col_type_row = sqlx::query(col_query)
+                    .bind(schema)
+                    .bind(table)
+                    .bind(column_name)
+                    .fetch_optional(pool)
+                    .await?;
+                
+                let col_type = col_type_row
+                    .map(|r| r.try_get::<String, _>(0).unwrap_or_default())
+                    .unwrap_or_default();
+                
+                let col_type_lower = col_type.to_lowercase();
+
+                let query = if col_type_lower.contains("uuid") {
+                    format!(
+                        "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1::uuid LIMIT $2 OFFSET $3",
+                        schema.replace('"', "\"\""),
+                        table.replace('"', "\"\""),
+                        column_name.replace('"', "\"\"")
+                    )
+                } else if col_type_lower.contains("int") || col_type_lower.contains("serial") {
+                    format!(
+                        "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1::bigint LIMIT $2 OFFSET $3",
+                        schema.replace('"', "\"\""),
+                        table.replace('"', "\"\""),
+                        column_name.replace('"', "\"\"")
+                    )
+                } else {
+                    format!(
+                        "SELECT * FROM \"{}\".\"{}\" WHERE \"{}\" = $1 LIMIT $2 OFFSET $3",
+                        schema.replace('"', "\"\""),
+                        table.replace('"', "\"\""),
+                        column_name.replace('"', "\"\"")
+                    )
+                };
+
+                let rows = sqlx::query(&query)
+                    .bind(clean_value)
+                    .bind(limit as i64)
+                    .bind(offset as i64)
+                    .fetch_all(pool)
+                    .await?;
+
+                let converter = |r: Vec<sqlx::postgres::PgRow>| -> Result<QueryResult> {
+                    Ok(process_rows!(r, postgres))
+                };
+                converter(rows)
+            }
+            DatabasePool::MySql(pool) => {
+                let query = format!(
+                    "SELECT * FROM `{}` WHERE `{}` = ? LIMIT ? OFFSET ?",
+                    table_name.replace('`', "``"),
+                    column_name.replace('`', "``")
+                );
+                
+                let rows = sqlx::query(&query)
+                    .bind(clean_value)
+                    .bind(limit as i64)
+                    .bind(offset as i64)
+                    .fetch_all(pool)
+                    .await?;
+
+                let converter = |r: Vec<sqlx::mysql::MySqlRow>| -> Result<QueryResult> {
+                    Ok(process_rows!(r, common))
+                };
+                converter(rows)
+            }
+        }
     }
 }
 

@@ -504,3 +504,20 @@ pub async fn trace_id_relations(
         .map_err(|e| format!("Relation search failed: {}", e))
 }
 
+#[tauri::command]
+pub async fn get_relation_rows(
+    connection_id: String,
+    table_name: String,
+    column_name: String,
+    value: String,
+    page: u32,
+    page_size: u32,
+    db_type: DatabaseType,
+    manager: State<'_, ConnectionManager>,
+) -> Result<QueryResult, String> {
+    manager
+        .get_relation_rows(&connection_id, &table_name, &column_name, &value, page, page_size, &db_type)
+        .await
+        .map_err(|e| format!("Failed to fetch page: {}", e))
+}
+
