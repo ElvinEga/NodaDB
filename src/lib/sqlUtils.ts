@@ -129,9 +129,29 @@ function buildWhereClause(
       const quotedColumn = quoteIdentifier(columnId, dbType || "sqlite");
 
       if (typeof value === "object" && value !== null && "operator" in value && "value" in value) {
-        const valObj = value as { operator: string; value: string };
+        const valObj = value as { operator: string; value: string; dataType?: string };
         const op = valObj.operator;
         const val = valObj.value;
+        const dataType = valObj.dataType || "";
+
+        const colLower = columnId.toLowerCase();
+        const isDateColumn = dataType.toUpperCase().includes("DATE") ||
+                             dataType.toUpperCase().includes("TIME") ||
+                             dataType.toUpperCase().includes("TIMESTAMP") ||
+                             colLower.includes("date") ||
+                             colLower.includes("time") ||
+                             colLower.includes("_at");
+
+        if (op === "equals" && isDateColumn) {
+          const trimmed = val.trim();
+          if (trimmed.length >= 10) {
+            const datePart = trimmed.substring(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+              conditions.push(`${quotedColumn} BETWEEN '${datePart} 00:00:00' AND '${datePart} 23:59:59'`);
+              return;
+            }
+          }
+        }
 
         if (op === "between") {
           const parts = val.split(",");
@@ -177,6 +197,20 @@ function buildWhereClause(
         }
       } else {
         // Fallback for simple string/primitive values (legacy or right-click filter by value)
+        const colLower = columnId.toLowerCase();
+        const isDateColumn = colLower.includes("date") || colLower.includes("time") || colLower.includes("_at");
+        
+        if (typeof value === "string" && isDateColumn) {
+          const trimmed = value.trim();
+          if (trimmed.length >= 10) {
+            const datePart = trimmed.substring(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+              conditions.push(`${quotedColumn} BETWEEN '${datePart} 00:00:00' AND '${datePart} 23:59:59'`);
+              return;
+            }
+          }
+        }
+
         if (typeof value === "string" && value.includes("%")) {
           conditions.push(
             buildTextSearchExpression(columnId, value, dbType || "sqlite")
