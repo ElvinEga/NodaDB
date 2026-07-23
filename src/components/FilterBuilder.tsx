@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Filter as FilterIcon } from 'lucide-react';
+import { X, Plus, Filter as FilterIcon, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -16,6 +16,10 @@ import {
   getOperatorsForDataType,
   buildWhereClause 
 } from '@/types/filter';
+import { format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 interface FilterBuilderProps {
   columns: TableColumn[];
@@ -193,21 +197,97 @@ export function FilterBuilder({
                 </Select>
 
                 {/* Value Input */}
-                {requiresValue && (
-                  <Input
-                    type="text"
-                    value={filter.value}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                    placeholder={
-                      filter.operator === 'like' || filter.operator === 'not_like'
-                        ? 'Use % for wildcards'
-                        : filter.operator === 'in' || filter.operator === 'not_in'
-                        ? 'Comma-separated values'
-                        : 'Enter value...'
-                    }
-                    className="h-8 text-xs flex-1"
-                  />
-                )}
+                {requiresValue && (() => {
+                  const typeFamily = column?.type_family;
+                  const isBoolean = typeFamily === 'boolean';
+                  const isNumber = typeFamily === 'integer' || typeFamily === 'float' || typeFamily === 'decimal';
+                  const isDateTime = typeFamily === 'date_time' || typeFamily === 'date' || typeFamily === 'time';
+                  const isEnum = typeFamily === 'enum' || (column?.enum_values && column.enum_values.length > 0);
+
+                  return (
+                    <div className="flex-1 min-w-[200px]">
+                      {isBoolean ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(val) => updateFilter(filter.id, { value: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-full bg-background border-border">
+                            <SelectValue placeholder="Select boolean..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true" className="text-xs">True</SelectItem>
+                            <SelectItem value="false" className="text-xs">False</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : isEnum ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(val) => updateFilter(filter.id, { value: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-full bg-background border-border">
+                            <SelectValue placeholder="Select enum..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {column?.enum_values?.map((val) => (
+                              <SelectItem key={val} value={val} className="text-xs">
+                                {val}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : isDateTime ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                !filter.value && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                              {filter.value ? (
+                                format(new Date(filter.value), "yyyy-MM-dd HH:mm:ss")
+                              ) : (
+                                <span>Pick date/time...</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={filter.value ? new Date(filter.value) : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  updateFilter(filter.id, { 
+                                    value: format(date, "yyyy-MM-dd HH:mm:ss") 
+                                  });
+                                } else {
+                                  updateFilter(filter.id, { value: '' });
+                                }
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <Input
+                          type={isNumber ? "number" : "text"}
+                          value={filter.value}
+                          onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                          placeholder={
+                            filter.operator === 'like' || filter.operator === 'not_like'
+                              ? 'Use % for wildcards'
+                              : filter.operator === 'in' || filter.operator === 'not_in'
+                              ? 'Comma-separated values'
+                              : 'Enter value...'
+                          }
+                          className="h-8 text-xs w-full"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Remove Button */}
                 <Button
