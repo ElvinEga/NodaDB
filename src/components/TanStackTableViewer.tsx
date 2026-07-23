@@ -133,6 +133,8 @@ import {
   quoteIdentifier,
 } from "@/lib/sqlUtils";
 import { KeyboardTooltip } from "./ui/keyboard-tooltip";
+import { getOperatorsForDataType, FilterOperator } from "@/types/filter";
+import { DateRange } from "react-day-picker";
 
 interface TanStackTableViewerProps {
   connection: ConnectionConfig;
@@ -267,13 +269,21 @@ export function TanStackTableViewer({
   );
 
   const [selectedFilterColumn, setSelectedFilterColumn] = useState<string>("");
+  const [selectedFilterOperator, setSelectedFilterOperator] = useState<FilterOperator>("equals");
   const [filterValue, setFilterValue] = useState<string>("");
 
   useEffect(() => {
-    if (effectiveTableColumns.length > 0 && !selectedFilterColumn) {
-      setSelectedFilterColumn(effectiveTableColumns[0].name);
+    if (effectiveTableColumns.length > 0) {
+      if (!selectedFilterColumn) {
+        setSelectedFilterColumn(effectiveTableColumns[0].name);
+      }
+      const col = effectiveTableColumns.find((c) => c.name === selectedFilterColumn);
+      const ops = col ? getOperatorsForDataType(col.data_type) : [];
+      if (ops.length > 0 && !ops.some((op) => op.value === selectedFilterOperator)) {
+        setSelectedFilterOperator(ops[0].value);
+      }
     }
-  }, [effectiveTableColumns, selectedFilterColumn]);
+  }, [effectiveTableColumns, selectedFilterColumn, selectedFilterOperator]);
 
   // Helper: Get primary key column
   const primaryKeyColumn = effectiveTableColumns.find(
@@ -1684,10 +1694,24 @@ Sum: ${stats.sum}`
                         >
                           <div className="flex items-center gap-1.5 overflow-hidden">
                             <span className="font-semibold truncate">{f.id}</span>
-                            <span className="text-muted-foreground">=</span>
-                            <span className="text-muted-foreground truncate font-mono bg-background px-1 py-0.5 rounded border border-border/50">
-                              {String(f.value)}
-                            </span>
+                            {typeof f.value === "object" && f.value !== null && "operator" in f.value ? (() => {
+                              const valObj = f.value as { operator: string; value: string };
+                              return (
+                                <>
+                                  <span className="text-primary font-medium">{valObj.operator}</span>
+                                  <span className="text-muted-foreground truncate font-mono bg-background px-1 py-0.5 rounded border border-border/50">
+                                    {valObj.value}
+                                  </span>
+                                </>
+                              );
+                            })() : (
+                              <>
+                                <span className="text-muted-foreground">=</span>
+                                <span className="text-muted-foreground truncate font-mono bg-background px-1 py-0.5 rounded border border-border/50">
+                                  {String(f.value)}
+                                </span>
+                              </>
+                            )}
                           </div>
                           <Button
                             variant="ghost"
@@ -1734,6 +1758,36 @@ Sum: ${stats.sum}`
                       </Select>
                     </div>
 
+                    {/* Operator Select */}
+                    {(() => {
+                      const col = effectiveTableColumns.find((c) => c.name === selectedFilterColumn);
+                      const operators = col ? getOperatorsForDataType(col.data_type) : [];
+                      
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground font-medium">Operator</label>
+                          <Select
+                            value={selectedFilterOperator}
+                            onValueChange={(val) => {
+                              setSelectedFilterOperator(val as FilterOperator);
+                              setFilterValue("");
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              <SelectValue placeholder="Select operator..." />
+                            </SelectTrigger>
+                            <SelectContent className="z-[110]">
+                              {operators.map((op) => (
+                                <SelectItem key={op.value} value={op.value} className="text-xs">
+                                  {op.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })()}
+
                     {/* Dynamic Value Field */}
                     {(() => {
                       const col = effectiveTableColumns.find((c) => c.name === selectedFilterColumn);
@@ -1742,6 +1796,7 @@ Sum: ${stats.sum}`
                       const isNumber = typeFamily === "integer" || typeFamily === "float" || typeFamily === "decimal";
                       const isDateTime = typeFamily === "date_time" || typeFamily === "date" || typeFamily === "time";
                       const isEnum = typeFamily === "enum" || (col?.enum_values && col.enum_values.length > 0);
+                      const isBetween = selectedFilterOperator === 'between';
 
                       return (
                         <div className="space-y-1">
@@ -1775,40 +1830,83 @@ Sum: ${stats.sum}`
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : isDateTime ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className={cn(
-                                    "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
-                                    !filterValue && "text-muted-foreground"
-                                  )}
-                                >
-                                  <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                                  {filterValue ? (
-                                    format(new Date(filterValue), "yyyy-MM-dd HH:mm:ss")
+                          ) : isDateTime ? (() => {
+                            let selectedRange: DateRange | undefined = undefined;
+                            if (isBetween && filterValue) {
+                              const parts = filterValue.split(',');
+                              const fromDate = parts[0] ? new Date(parts[0]) : undefined;
+                              const toDate = parts[1] ? new Date(parts[1]) : undefined;
+                              if (fromDate && !isNaN(fromDate.getTime())) {
+                                selectedRange = {
+                                  from: fromDate,
+                                  to: toDate && !isNaN(toDate.getTime()) ? toDate : undefined,
+                                };
+                              }
+                            }
+
+                            const selectedDate = !isBetween && filterValue ? new Date(filterValue) : undefined;
+                            const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+
+                            const getButtonText = () => {
+                              if (isBetween) {
+                                if (selectedRange?.from) {
+                                  const fromStr = format(selectedRange.from, "yyyy-MM-dd");
+                                  const toStr = selectedRange.to ? format(selectedRange.to, "yyyy-MM-dd") : "Pick end date";
+                                  return `${fromStr} - ${toStr}`;
+                                }
+                                return "Pick date range...";
+                              } else {
+                                return isValidDate ? format(selectedDate!, "yyyy-MM-dd HH:mm:ss") : "Pick date/time...";
+                              }
+                            };
+
+                            return (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(
+                                      "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                      !filterValue && "text-muted-foreground"
+                                    )}
+                                  >
+                                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                    <span>{getButtonText()}</span>
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                                  {isBetween ? (
+                                    <Calendar
+                                      mode="range"
+                                      selected={selectedRange}
+                                      onSelect={(range) => {
+                                        if (range) {
+                                          const fromStr = range.from ? format(range.from, "yyyy-MM-dd 00:00:00") : "";
+                                          const toStr = range.to ? format(range.to, "yyyy-MM-dd 23:59:59") : "";
+                                          setFilterValue(`${fromStr},${toStr}`);
+                                        } else {
+                                          setFilterValue("");
+                                        }
+                                      }}
+                                    />
                                   ) : (
-                                    <span>Pick date/time...</span>
+                                    <Calendar
+                                      mode="single"
+                                      selected={isValidDate ? selectedDate : undefined}
+                                      onSelect={(date) => {
+                                        if (date) {
+                                          setFilterValue(format(date, "yyyy-MM-dd HH:mm:ss"));
+                                        } else {
+                                          setFilterValue("");
+                                        }
+                                      }}
+                                    />
                                   )}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0 z-[120]" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={filterValue ? new Date(filterValue) : undefined}
-                                  onSelect={(date) => {
-                                    if (date) {
-                                      setFilterValue(format(date, "yyyy-MM-dd HH:mm:ss"));
-                                    } else {
-                                      setFilterValue("");
-                                    }
-                                  }}
-                                />
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          })() : (
                             <Input
                               type={isNumber ? "number" : "text"}
                               value={filterValue}
@@ -1830,7 +1928,7 @@ Sum: ${stats.sum}`
                         // Avoid duplicates: remove previous filter for this column first
                         setColumnFilters((prev) => [
                           ...prev.filter((f) => f.id !== selectedFilterColumn),
-                          { id: selectedFilterColumn, value: filterValue },
+                          { id: selectedFilterColumn, value: { operator: selectedFilterOperator, value: filterValue } },
                         ]);
                         setFilterValue("");
                       }}
