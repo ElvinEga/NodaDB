@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { DateRange } from "react-day-picker";
 
 interface FilterBuilderProps {
   columns: TableColumn[];
@@ -235,42 +236,88 @@ export function FilterBuilder({
                             ))}
                           </SelectContent>
                         </Select>
-                      ) : isDateTime ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={cn(
-                                "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
-                                !filter.value && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                              {filter.value ? (
-                                format(new Date(filter.value), "yyyy-MM-dd HH:mm:ss")
+                      ) : isDateTime ? ( (() => {
+                        const isBetween = filter.operator === 'between';
+                        
+                        let selectedRange: DateRange | undefined = undefined;
+                        if (isBetween && filter.value) {
+                          const parts = filter.value.split(',');
+                          const fromDate = parts[0] ? new Date(parts[0]) : undefined;
+                          const toDate = parts[1] ? new Date(parts[1]) : undefined;
+                          if (fromDate && !isNaN(fromDate.getTime())) {
+                            selectedRange = {
+                              from: fromDate,
+                              to: toDate && !isNaN(toDate.getTime()) ? toDate : undefined,
+                            };
+                          }
+                        }
+
+                        const selectedDate = !isBetween && filter.value ? new Date(filter.value) : undefined;
+                        const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+
+                        const getButtonText = () => {
+                          if (isBetween) {
+                            if (selectedRange?.from) {
+                              const fromStr = format(selectedRange.from, "yyyy-MM-dd");
+                              const toStr = selectedRange.to ? format(selectedRange.to, "yyyy-MM-dd") : "Pick end date";
+                              return `${fromStr} - ${toStr}`;
+                            }
+                            return "Pick date range...";
+                          } else {
+                            return isValidDate ? format(selectedDate!, "yyyy-MM-dd HH:mm:ss") : "Pick date/time...";
+                          }
+                        };
+
+                        return (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                  !filter.value && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                <span>{getButtonText()}</span>
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                              {isBetween ? (
+                                <Calendar
+                                  mode="range"
+                                  selected={selectedRange}
+                                  onSelect={(range) => {
+                                    if (range) {
+                                      const fromStr = range.from ? format(range.from, "yyyy-MM-dd 00:00:00") : "";
+                                      const toStr = range.to ? format(range.to, "yyyy-MM-dd 23:59:59") : "";
+                                      updateFilter(filter.id, { value: `${fromStr},${toStr}` });
+                                    } else {
+                                      updateFilter(filter.id, { value: "" });
+                                    }
+                                  }}
+                                />
                               ) : (
-                                <span>Pick date/time...</span>
+                                <Calendar
+                                  mode="single"
+                                  selected={isValidDate ? selectedDate : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      updateFilter(filter.id, { 
+                                        value: format(date, "yyyy-MM-dd HH:mm:ss") 
+                                      });
+                                    } else {
+                                      updateFilter(filter.id, { value: '' });
+                                    }
+                                  }}
+                                />
                               )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={filter.value ? new Date(filter.value) : undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  updateFilter(filter.id, { 
-                                    value: format(date, "yyyy-MM-dd HH:mm:ss") 
-                                  });
-                                } else {
-                                  updateFilter(filter.id, { value: '' });
-                                }
-                              }}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
+                            </PopoverContent>
+                            </Popover>
+                          );
+                      })() )
+                      : (
                         <Input
                           type={isNumber ? "number" : "text"}
                           value={filter.value}
