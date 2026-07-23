@@ -128,14 +128,64 @@ function buildWhereClause(
     if (value !== undefined && value !== null && value !== "") {
       const quotedColumn = quoteIdentifier(columnId, dbType || "sqlite");
 
-      if (typeof value === "string" && value.includes("%")) {
-        conditions.push(
-          buildTextSearchExpression(columnId, value, dbType || "sqlite")
-        );
+      if (typeof value === "object" && value !== null && "operator" in value && "value" in value) {
+        const valObj = value as { operator: string; value: string };
+        const op = valObj.operator;
+        const val = valObj.value;
+
+        if (op === "between") {
+          const parts = val.split(",");
+          const val1 = quoteValue(parts[0] || "", dbType || "sqlite");
+          if (parts.length > 1 && parts[1]) {
+            const val2 = quoteValue(parts[1], dbType || "sqlite");
+            conditions.push(`${quotedColumn} BETWEEN ${val1} AND ${val2}`);
+          } else {
+            conditions.push(`${quotedColumn} >= ${val1}`);
+          }
+        } else if (op === "is_null") {
+          conditions.push(`${quotedColumn} IS NULL`);
+        } else if (op === "is_not_null") {
+          conditions.push(`${quotedColumn} IS NOT NULL`);
+        } else {
+          let sqlOperator = "=";
+          switch (op) {
+            case "equals": sqlOperator = "="; break;
+            case "not_equals": sqlOperator = "!="; break;
+            case "greater_than": sqlOperator = ">"; break;
+            case "greater_than_or_equal": sqlOperator = ">="; break;
+            case "less_than": sqlOperator = "<"; break;
+            case "less_than_or_equal": sqlOperator = "<="; break;
+            case "like": sqlOperator = "LIKE"; break;
+            case "not_like": sqlOperator = "NOT LIKE"; break;
+            case "in": sqlOperator = "IN"; break;
+            case "not_in": sqlOperator = "NOT IN"; break;
+          }
+
+          let formattedVal = "";
+          if (op === "in" || op === "not_in") {
+            const values = val.split(",").map(v => v.trim());
+            formattedVal = `(${values.map(v => quoteValue(v, dbType || "sqlite")).join(", ")})`;
+          } else if (op === "like" || op === "not_like") {
+            const escaped = val.replace(/'/g, "''");
+            const finalVal = escaped.includes("%") ? escaped : `%${escaped}%`;
+            formattedVal = `'${finalVal}'`;
+          } else {
+            formattedVal = quoteValue(val, dbType || "sqlite");
+          }
+
+          conditions.push(`${quotedColumn} ${sqlOperator} ${formattedVal}`);
+        }
       } else {
-        conditions.push(
-          `${quotedColumn} = ${quoteValue(value, dbType || "sqlite")}`
-        );
+        // Fallback for simple string/primitive values (legacy or right-click filter by value)
+        if (typeof value === "string" && value.includes("%")) {
+          conditions.push(
+            buildTextSearchExpression(columnId, value, dbType || "sqlite")
+          );
+        } else {
+          conditions.push(
+            `${quotedColumn} = ${quoteValue(value, dbType || "sqlite")}`
+          );
+        }
       }
     }
   });
