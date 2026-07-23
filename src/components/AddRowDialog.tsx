@@ -23,6 +23,11 @@ import { ConnectionConfig, TableColumn, DatabaseTable } from "@/types";
 import { coerceValueForDatabase, parseInputValue, resolveColumnInputType } from "@/lib/db-types";
 import { toast } from "sonner";
 import { TableAction } from "@/stores/undoRedoStore";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface AddRowDialogProps {
   open: boolean;
@@ -309,7 +314,47 @@ export function AddRowDialog({
                       }
                       className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                     />
-                  ) : (
+                  ) : (column.type_family === "date_time" || column.type_family === "date") ? (() => {
+                    const val = formData[column.name] || "";
+                    const selectedDate = val ? new Date(val) : undefined;
+                    const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+
+                    return (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "h-9 w-full justify-start text-left font-normal bg-background border-input text-sm",
+                              !val && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {isValidDate ? (
+                              format(selectedDate, "yyyy-MM-dd HH:mm:ss")
+                            ) : (
+                              <span>
+                                {column.is_nullable ? "NULL (optional) - Pick date/time..." : "Pick date/time..."}
+                              </span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={isValidDate ? selectedDate : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                handleInputChange(column.name, format(date, "yyyy-MM-dd HH:mm:ss"));
+                              } else {
+                                handleInputChange(column.name, "");
+                              }
+                            }}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    );
+                  })() : (
                     <Input
                       id={column.name}
                       type={resolveColumnInputType(column)}
