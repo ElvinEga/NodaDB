@@ -29,10 +29,13 @@ import {
   Loader2,
   XCircle,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ConnectionConfig, RelationMatch } from "@/types";
 import { ExportDataDialog } from "@/components/ExportDataDialog";
 import { ExportAllFlowDialog } from "./ExportAllFlowDialog";
+import { toast } from "sonner";
 
 interface RelationFlowProps {
   connection: ConnectionConfig;
@@ -184,6 +187,9 @@ export default function RelationFlow({
   const [exportTableName, setExportTableName] = useState("");
   const [exportAllDialogOpen, setExportAllDialogOpen] = useState(false);
 
+  const [tableRows, setTableRows] = useState<Record<string, any>>({});
+  const [tablePages, setTablePages] = useState<Record<string, number>>({});
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -211,6 +217,17 @@ export default function RelationFlow({
       });
 
       setMatches(sortedResults);
+
+      // Initialize tableRows and tablePages
+      const initialRows: Record<string, any> = {};
+      const initialPages: Record<string, number> = {};
+      sortedResults.forEach((m) => {
+        initialRows[m.table_name] = m.sample_rows;
+        initialPages[m.table_name] = 1;
+      });
+      setTableRows(initialRows);
+      setTablePages(initialPages);
+
       buildGraph(sortedResults);
     } catch (err: any) {
       console.error("Failed to load relation flow data:", err);
@@ -219,6 +236,47 @@ export default function RelationFlow({
       setIsLoading(false);
     }
   };
+
+  const handlePageChange = async (tableName: string, columnName: string, newPage: number) => {
+    try {
+      const result = await invoke<any>("get_relation_rows", {
+        connectionId: connection.id,
+        tableName,
+        columnName,
+        value,
+        page: newPage,
+        pageSize: 10,
+        dbType: connection.db_type,
+      });
+      setTableRows((prev) => ({ ...prev, [tableName]: result }));
+      setTablePages((prev) => ({ ...prev, [tableName]: newPage }));
+    } catch (err: any) {
+      toast.error(`Failed to load page: ${err}`);
+      console.error("Failed to load page:", err);
+    }
+  };
+
+  // Synchronize React Flow nodes when tableRows updates (e.g. on pagination)
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === "tableNode") {
+          const tableName = (node.data as any).tableName;
+          const currentRows = tableRows[tableName];
+          if (currentRows) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                sampleRows: currentRows,
+              },
+            };
+          }
+        }
+        return node;
+      })
+    );
+  }, [tableRows]);
 
   const buildGraph = (relationMatches: RelationMatch[]) => {
     if (relationMatches.length === 0) return;
@@ -478,13 +536,13 @@ export default function RelationFlow({
                       <span className="text-[10px] text-muted-foreground">({match.count} match{match.count === 1 ? "" : "es"})</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                     <div className="flex items-center gap-1.5">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 text-[10px] px-2.5 hover:bg-primary/5 hover:text-primary gap-1"
                         onClick={() => {
-                          setExportData(match.sample_rows);
+                          setExportData(tableRows[match.table_name] || match.sample_rows);
                           setExportTableName(match.table_name);
                           setExportDialogOpen(true);
                         }}
@@ -507,9 +565,10 @@ export default function RelationFlow({
                   </div>
 
                   {/* Table View */}
-                  <div className="w-full overflow-x-auto overflow-y-auto max-h-[250px] min-w-0">
+                  <div className="w-full overflow-x-auto overflow-y-auto max-h-[250px] min-w-0 flex-1">
                     {(() => {
-                      const hasDeletedAtColumn = match.sample_rows.columns.includes("deleted_at");
+                      const currentData = tableRows[match.table_name] || match.sample_rows;
+                      const hasDeletedAtColumn = currentData.columns.includes("deleted_at");
                       return (
                         <table className="w-full min-w-max text-sm text-left border-collapse">
                           <thead>
@@ -519,7 +578,7 @@ export default function RelationFlow({
                                   Status
                                 </th>
                               )}
-                              {match.sample_rows.columns.map((col) => {
+                              {currentData.columns.map((col: string) => {
                                 const isMatchedCol = col === match.column_name;
                                 return (
                                   <th key={col} className={`text-[10px] font-normal py-2 px-3 whitespace-nowrap border-r border-border text-muted-foreground align-middle ${isMatchedCol ? "bg-primary/10 text-primary font-semibold border-r border-primary/20" : ""}`}>
@@ -530,7 +589,7 @@ export default function RelationFlow({
                             </tr>
                           </thead>
                           <tbody>
-                            {match.sample_rows.rows.map((row, rIdx) => {
+                            {currentData.rows.map((row: any, rIdx: number) => {
                               const isDeleted = hasDeletedAtColumn && row["deleted_at"] !== null && row["deleted_at"] !== undefined;
                               return (
                                 <tr key={rIdx} className={`border-b border-border hover:bg-muted/30 last:border-b-0 ${isDeleted ? "bg-destructive/5 text-destructive/95" : ""}`}>
@@ -543,7 +602,7 @@ export default function RelationFlow({
                                       )}
                                     </td>
                                   )}
-                                  {match.sample_rows.columns.map((col) => {
+                                  {currentData.columns.map((col: string) => {
                                     const isMatchedCol = col === match.column_name;
                                     const cellValue = row[col];
                                     return (
@@ -560,6 +619,43 @@ export default function RelationFlow({
                       );
                     })()}
                   </div>
+
+                  {/* Card Footer with Pagination Controls */}
+                  {(() => {
+                    const currentPage = tablePages[match.table_name] || 1;
+                    const totalPages = Math.ceil(match.count / 10);
+                    if (totalPages <= 1) return null;
+                    return (
+                      <div className="px-4 py-2 border-t border-border bg-muted/10 flex items-center justify-between text-xs shrink-0">
+                        <span className="text-muted-foreground">
+                          Showing rows {((currentPage - 1) * 10) + 1} - {Math.min(currentPage * 10, match.count)} of {match.count}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6 rounded-md"
+                            disabled={currentPage === 1}
+                            onClick={() => handlePageChange(match.table_name, match.column_name, currentPage - 1)}
+                          >
+                            <ChevronLeft className="h-3 w-3" />
+                          </Button>
+                          <span className="px-2 py-0.5 bg-muted rounded font-medium">
+                            {currentPage} / {totalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6 rounded-md"
+                            disabled={currentPage >= totalPages}
+                            onClick={() => handlePageChange(match.table_name, match.column_name, currentPage + 1)}
+                          >
+                            <ChevronRight className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
