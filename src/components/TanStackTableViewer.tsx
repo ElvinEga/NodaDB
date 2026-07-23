@@ -1919,16 +1919,23 @@ Sum: ${stats.sum}`
                       );
                     })()}
 
-                    {/* Add Button */}
                     <Button
                       variant="default"
                       size="sm"
                       onClick={() => {
                         if (!selectedFilterColumn) return;
+                        const col = effectiveTableColumns.find((c) => c.name === selectedFilterColumn);
                         // Avoid duplicates: remove previous filter for this column first
                         setColumnFilters((prev) => [
                           ...prev.filter((f) => f.id !== selectedFilterColumn),
-                          { id: selectedFilterColumn, value: { operator: selectedFilterOperator, value: filterValue } },
+                          { 
+                            id: selectedFilterColumn, 
+                            value: { 
+                              operator: selectedFilterOperator, 
+                              value: filterValue,
+                              dataType: col?.data_type || ""
+                            } 
+                          },
                         ]);
                         setFilterValue("");
                       }}
