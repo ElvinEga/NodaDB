@@ -29,6 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface EditCellDialogProps {
   open: boolean;
@@ -234,7 +239,93 @@ export function EditCellDialog({
                   autoFocus
                   className="min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                 />
-              ) : (
+              ) : column.type_family === 'date_time' ? (() => {
+                const selectedDate = value ? new Date(value.includes(" ") ? value.split(" ")[0] : value) : undefined;
+                const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+                const timeVal = value && value.includes(" ") ? value.split(" ")[1] : "12:00:00";
+
+                return (
+                  <div className="flex gap-2 w-full">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "h-9 flex-1 justify-start text-left font-normal bg-background border-input text-sm",
+                            !value && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          <span className="truncate">{isValidDate ? format(selectedDate, "yyyy-MM-dd") : "Pick date..."}</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={isValidDate ? selectedDate : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              setValue(`${format(date, "yyyy-MM-dd")} ${timeVal}`);
+                            } else {
+                              setValue("");
+                            }
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Input
+                      type="time"
+                      step="1"
+                      value={timeVal}
+                      onChange={(e) => {
+                        const newTime = e.target.value || "12:00:00";
+                        const dateStr = isValidDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+                        setValue(`${dateStr} ${newTime}`);
+                      }}
+                      className="h-9 text-sm w-[110px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                    />
+                  </div>
+                );
+              })() : column.type_family === 'date' ? (() => {
+                const selectedDate = value ? new Date(value) : undefined;
+                const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+
+                return (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "h-9 w-full justify-start text-left font-normal bg-background border-input text-sm",
+                          !value && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {isValidDate ? (
+                          format(selectedDate, "yyyy-MM-dd")
+                        ) : (
+                          <span>
+                            {column.is_nullable ? "NULL (optional) - Pick date..." : "Pick date..."}
+                          </span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 z-[120]" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={isValidDate ? selectedDate : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            setValue(format(date, "yyyy-MM-dd"));
+                          } else {
+                            setValue("");
+                          }
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                );
+              })() : (
                 <Input
                   id="cell-value"
                   type={getInputType()}

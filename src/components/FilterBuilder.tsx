@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Filter as FilterIcon } from 'lucide-react';
+import { X, Plus, Filter as FilterIcon, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -10,12 +10,17 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { TableColumn } from '@/types';
-import { 
-  TableFilter, 
-  FilterOperator, 
+import {
+  TableFilter,
+  FilterOperator,
   getOperatorsForDataType,
-  buildWhereClause 
+  buildWhereClause
 } from '@/types/filter';
+import { format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { DateRange } from "react-day-picker";
 
 interface FilterBuilderProps {
   columns: TableColumn[];
@@ -25,12 +30,12 @@ interface FilterBuilderProps {
   onClear: () => void;
 }
 
-export function FilterBuilder({ 
-  columns, 
-  filters, 
+export function FilterBuilder({
+  columns,
+  filters,
   onFiltersChange,
   onApply,
-  onClear 
+  onClear
 }: FilterBuilderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -52,8 +57,8 @@ export function FilterBuilder({
 
   const updateFilter = (id: string, updates: Partial<TableFilter>) => {
     onFiltersChange(
-      filters.map(f => 
-        f.id === id 
+      filters.map(f =>
+        f.id === id
           ? { ...f, ...updates }
           : f
       )
@@ -101,7 +106,7 @@ export function FilterBuilder({
             </span>
           )}
         </button>
-        
+
         <div className="flex items-center gap-2">
           {filters.length > 0 && (
             <>
@@ -193,21 +198,209 @@ export function FilterBuilder({
                 </Select>
 
                 {/* Value Input */}
-                {requiresValue && (
-                  <Input
-                    type="text"
-                    value={filter.value}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                    placeholder={
-                      filter.operator === 'like' || filter.operator === 'not_like'
-                        ? 'Use % for wildcards'
-                        : filter.operator === 'in' || filter.operator === 'not_in'
-                        ? 'Comma-separated values'
-                        : 'Enter value...'
-                    }
-                    className="h-8 text-xs flex-1"
-                  />
-                )}
+                {requiresValue && (() => {
+                  const typeFamily = column?.type_family;
+                  const isBoolean = typeFamily === 'boolean';
+                  const isNumber = typeFamily === 'integer' || typeFamily === 'float' || typeFamily === 'decimal';
+                  const isDateTime = typeFamily === 'date_time' || typeFamily === 'date' || typeFamily === 'time';
+                  const isEnum = typeFamily === 'enum' || (column?.enum_values && column.enum_values.length > 0);
+
+                  return (
+                    <div className="flex-1 min-w-[200px]">
+                      {isBoolean ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(val) => updateFilter(filter.id, { value: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-full bg-background border-border">
+                            <SelectValue placeholder="Select boolean..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true" className="text-xs">True</SelectItem>
+                            <SelectItem value="false" className="text-xs">False</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : isEnum ? (
+                        <Select
+                          value={filter.value}
+                          onValueChange={(val) => updateFilter(filter.id, { value: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-full bg-background border-border">
+                            <SelectValue placeholder="Select enum..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {column?.enum_values?.map((val) => (
+                              <SelectItem key={val} value={val} className="text-xs">
+                                {val}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : isDateTime ? ( (() => {
+                        const isBetween = filter.operator === 'between';
+
+                        let selectedRange: DateRange | undefined = undefined;
+                        if (isBetween && filter.value) {
+                          const parts = filter.value.split(',');
+                          const fromDate = parts[0] ? new Date(parts[0]) : undefined;
+                          const toDate = parts[1] ? new Date(parts[1]) : undefined;
+                          if (fromDate && !isNaN(fromDate.getTime())) {
+                            selectedRange = {
+                              from: fromDate,
+                              to: toDate && !isNaN(toDate.getTime()) ? toDate : undefined,
+                            };
+                          }
+                        }
+
+                        const selectedDate = !isBetween && filter.value ? new Date(filter.value.includes(" ") ? filter.value.split(" ")[0] : filter.value) : undefined;
+                        const isValidDate = selectedDate && !isNaN(selectedDate.getTime());
+
+                        if (isBetween) {
+                          const getButtonText = () => {
+                            if (selectedRange?.from) {
+                              const fromStr = format(selectedRange.from, "yyyy-MM-dd");
+                              const toStr = selectedRange.to ? format(selectedRange.to, "yyyy-MM-dd") : "Pick end date";
+                              return `${fromStr} - ${toStr}`;
+                            }
+                            return "Pick date range...";
+                          };
+
+                          return (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={cn(
+                                    "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                    !filter.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                  <span>{getButtonText()}</span>
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                <Calendar
+                                  mode="range"
+                                  selected={selectedRange}
+                                  onSelect={(range) => {
+                                    if (range) {
+                                      const fromStr = range.from ? format(range.from, "yyyy-MM-dd 00:00:00") : "";
+                                      const toStr = range.to ? format(range.to, "yyyy-MM-dd 23:59:59") : "";
+                                      updateFilter(filter.id, { value: `${fromStr},${toStr}` });
+                                    } else {
+                                      updateFilter(filter.id, { value: "" });
+                                    }
+                                  }}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          );
+                        }
+
+                        // Single Date / Datetime
+                        if (typeFamily === "date_time") {
+                          const timeVal = filter.value && filter.value.includes(" ") ? filter.value.split(" ")[1] : "12:00:00";
+                          return (
+                            <div className="flex gap-1.5 justify-between w-full">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(
+                                      "h-8 text-xs flex-1 justify-start text-left font-normal bg-background border-border",
+                                      !filter.value && "text-muted-foreground"
+                                    )}
+                                  >
+                                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                                    <span className="truncate">{isValidDate ? format(selectedDate!, "yyyy-MM-dd") : "Pick date..."}</span>
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={isValidDate ? selectedDate : undefined}
+                                    onSelect={(date) => {
+                                      if (date) {
+                                        updateFilter(filter.id, {
+                                          value: `${format(date, "yyyy-MM-dd")} ${timeVal}`
+                                        });
+                                      } else {
+                                        updateFilter(filter.id, { value: "" });
+                                      }
+                                    }}
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <Input
+                                type="time"
+                                step="1"
+                                value={timeVal}
+                                onChange={(e) => {
+                                  const newTime = e.target.value || "12:00:00";
+                                  const dateStr = isValidDate ? format(selectedDate!, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+                                  updateFilter(filter.id, { value: `${dateStr} ${newTime}` });
+                                }}
+                                className="h-8 text-xs w-[108px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                              />
+                            </div>
+                          );
+                        }
+
+                        // Pure Date
+                        return (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-8 text-xs w-full justify-start text-left font-normal bg-background border-border",
+                                  !filter.value && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                <span>{isValidDate ? format(selectedDate!, "yyyy-MM-dd") : "Pick date..."}</span>
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={isValidDate ? selectedDate : undefined}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    updateFilter(filter.id, {
+                                      value: format(date, "yyyy-MM-dd")
+                                    });
+                                  } else {
+                                    updateFilter(filter.id, { value: "" });
+                                  }
+                                }}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        );
+                      })() )
+                      : (
+                        <Input
+                          type={isNumber ? "number" : "text"}
+                          value={filter.value}
+                          onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                          placeholder={
+                            filter.operator === 'like' || filter.operator === 'not_like'
+                              ? 'Use % for wildcards'
+                              : filter.operator === 'in' || filter.operator === 'not_in'
+                              ? 'Comma-separated values'
+                              : 'Enter value...'
+                          }
+                          className="h-8 text-xs w-full"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Remove Button */}
                 <Button
