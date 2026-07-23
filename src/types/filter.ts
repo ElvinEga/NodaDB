@@ -182,6 +182,19 @@ export function buildWhereClause(filters: TableFilter[]): string {
       return `${filter.column} ${sqlOperator}`;
     }
 
+    if (filter.operator === 'equals') {
+      const type = filter.dataType.toUpperCase();
+      if (type.includes('DATE') || type.includes('TIME') || type.includes('TIMESTAMP')) {
+        const trimmed = filter.value.trim();
+        if (trimmed.length >= 10) {
+          const datePart = trimmed.substring(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            return `${filter.column} BETWEEN '${datePart} 00:00:00' AND '${datePart} 23:59:59'`;
+          }
+        }
+      }
+    }
+
     if (filter.operator === 'between') {
       const parts = filter.value.split(',');
       const val1 = formatValueForSQL(parts[0] || '', filter.dataType, 'equals');
