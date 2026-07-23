@@ -10,11 +10,11 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { TableColumn } from '@/types';
-import { 
-  TableFilter, 
-  FilterOperator, 
+import {
+  TableFilter,
+  FilterOperator,
   getOperatorsForDataType,
-  buildWhereClause 
+  buildWhereClause
 } from '@/types/filter';
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,12 +30,12 @@ interface FilterBuilderProps {
   onClear: () => void;
 }
 
-export function FilterBuilder({ 
-  columns, 
-  filters, 
+export function FilterBuilder({
+  columns,
+  filters,
   onFiltersChange,
   onApply,
-  onClear 
+  onClear
 }: FilterBuilderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -57,8 +57,8 @@ export function FilterBuilder({
 
   const updateFilter = (id: string, updates: Partial<TableFilter>) => {
     onFiltersChange(
-      filters.map(f => 
-        f.id === id 
+      filters.map(f =>
+        f.id === id
           ? { ...f, ...updates }
           : f
       )
@@ -106,7 +106,7 @@ export function FilterBuilder({
             </span>
           )}
         </button>
-        
+
         <div className="flex items-center gap-2">
           {filters.length > 0 && (
             <>
@@ -238,7 +238,7 @@ export function FilterBuilder({
                         </Select>
                       ) : isDateTime ? ( (() => {
                         const isBetween = filter.operator === 'between';
-                        
+
                         let selectedRange: DateRange | undefined = undefined;
                         if (isBetween && filter.value) {
                           const parts = filter.value.split(',');
@@ -303,7 +303,7 @@ export function FilterBuilder({
                         if (typeFamily === "date_time") {
                           const timeVal = filter.value && filter.value.includes(" ") ? filter.value.split(" ")[1] : "12:00:00";
                           return (
-                            <div className="flex gap-1.5 w-full">
+                            <div className="flex gap-1.5 justify-between w-full">
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <Button
@@ -324,8 +324,8 @@ export function FilterBuilder({
                                     selected={isValidDate ? selectedDate : undefined}
                                     onSelect={(date) => {
                                       if (date) {
-                                        updateFilter(filter.id, { 
-                                          value: `${format(date, "yyyy-MM-dd")} ${timeVal}` 
+                                        updateFilter(filter.id, {
+                                          value: `${format(date, "yyyy-MM-dd")} ${timeVal}`
                                         });
                                       } else {
                                         updateFilter(filter.id, { value: "" });
@@ -343,7 +343,7 @@ export function FilterBuilder({
                                   const dateStr = isValidDate ? format(selectedDate!, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
                                   updateFilter(filter.id, { value: `${dateStr} ${newTime}` });
                                 }}
-                                className="h-8 text-xs w-[90px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                                className="h-8 text-xs w-[108px] bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                               />
                             </div>
                           );
@@ -371,8 +371,8 @@ export function FilterBuilder({
                                 selected={isValidDate ? selectedDate : undefined}
                                 onSelect={(date) => {
                                   if (date) {
-                                    updateFilter(filter.id, { 
-                                      value: format(date, "yyyy-MM-dd") 
+                                    updateFilter(filter.id, {
+                                      value: format(date, "yyyy-MM-dd")
                                     });
                                   } else {
                                     updateFilter(filter.id, { value: "" });
