@@ -14,7 +14,8 @@ export type FilterOperator =
   | 'is_null'
   | 'is_not_null'
   | 'in'
-  | 'not_in';
+  | 'not_in'
+  | 'between';
 
 export interface TableFilter {
   id: string;
@@ -77,6 +78,7 @@ export function getOperatorsForDataType(dataType: string): FilterOperatorOption[
       { value: 'greater_than_or_equal', label: '≥', requiresValue: true },
       { value: 'less_than', label: '<', requiresValue: true },
       { value: 'less_than_or_equal', label: '≤', requiresValue: true },
+      { value: 'between', label: 'BETWEEN', requiresValue: true },
     ];
   }
 
@@ -111,6 +113,7 @@ export function operatorToSQL(operator: FilterOperator): string {
     case 'is_not_null': return 'IS NOT NULL';
     case 'in': return 'IN';
     case 'not_in': return 'NOT IN';
+    case 'between': return 'BETWEEN';
     default: return '=';
   }
 }
@@ -177,6 +180,17 @@ export function buildWhereClause(filters: TableFilter[]): string {
     
     if (filter.operator === 'is_null' || filter.operator === 'is_not_null') {
       return `${filter.column} ${sqlOperator}`;
+    }
+
+    if (filter.operator === 'between') {
+      const parts = filter.value.split(',');
+      const val1 = formatValueForSQL(parts[0] || '', filter.dataType, 'equals');
+      if (parts.length > 1 && parts[1]) {
+        const val2 = formatValueForSQL(parts[1], filter.dataType, 'equals');
+        return `${filter.column} BETWEEN ${val1} AND ${val2}`;
+      } else {
+        return `${filter.column} >= ${val1}`;
+      }
     }
 
     const formattedValue = formatValueForSQL(filter.value, filter.dataType, filter.operator);
