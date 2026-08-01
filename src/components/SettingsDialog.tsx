@@ -96,9 +96,13 @@ export function SettingsDialog({
 
   // Apply font size
   useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("font-small", "font-medium", "font-large");
-    root.classList.add(`font-${fontSize}`);
+    const root = document.documentElement;
+    root.classList.remove(
+      "font-size-small",
+      "font-size-medium",
+      "font-size-large",
+    );
+    root.classList.add(`font-size-${fontSize}`);
   }, [fontSize]);
 
   // Apply font family

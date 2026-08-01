@@ -435,8 +435,12 @@ function App() {
     root.classList.add(`font-${fontFamily.toLowerCase().replace(" ", "-")}`);
 
     // Apply font size
-    root.classList.remove("font-small", "font-medium", "font-large");
-    root.classList.add(`font-${fontSize}`);
+    root.classList.remove(
+      "font-size-small",
+      "font-size-medium",
+      "font-size-large",
+    );
+    root.classList.add(`font-size-${fontSize}`);
   }, [fontFamily, fontSize]);
 
   return (
