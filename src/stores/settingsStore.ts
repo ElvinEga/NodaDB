@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 export type Theme = "light" | "dark" | "system";
 export type ColorTheme = string;
 export type FontSize = "small" | "medium" | "large";
-export type FontFamily = "Outfit" | "JetBrains Mono";
+export type FontFamily = "Outfit" | "JetBrains Mono" | "System";
 
 interface SettingsStore {
   // Appearance
