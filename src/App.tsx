@@ -74,7 +74,7 @@ function App() {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
-  const { fontFamily, fontSize } = useSettingsStore();
+  const { fontFamily, fontSize, colorTheme } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
@@ -442,6 +442,11 @@ function App() {
     );
     root.classList.add(`font-size-${fontSize}`);
   }, [fontFamily, fontSize]);
+
+  // Apply color theme on load and when changed
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", colorTheme);
+  }, [colorTheme]);
 
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
