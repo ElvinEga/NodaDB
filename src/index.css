@@ -162,15 +162,15 @@
     }
 
     /* Font size classes */
-    .font-small {
+    .font-size-small {
         font-size: 14px !important;
     }
 
-    .font-medium {
+    .font-size-medium {
         font-size: 16px !important;
     }
 
-    .font-large {
+    .font-size-large {
         font-size: 18px !important;
     }
 
