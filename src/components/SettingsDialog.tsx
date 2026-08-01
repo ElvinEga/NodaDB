@@ -5,6 +5,8 @@ import {
   Database,
   FileText,
   Download,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,13 +35,60 @@ import {
   FontSize,
   FontFamily,
 } from "@/stores/settingsStore";
+import { THEMES, ThemeDefinition } from "@/lib/themes";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   appUpdate: ReturnType<typeof useAppUpdate>;
+}
+
+interface ThemeCardProps {
+  theme: ThemeDefinition;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}
+
+function ThemeCard({ theme, selected, onSelect }: ThemeCardProps) {
+  return (
+    <button
+      onClick={() => onSelect(theme.id)}
+      className={cn(
+        "flex items-center gap-3 rounded-lg border p-3 text-left w-full transition-all duration-150",
+        selected
+          ? "border-primary ring-2 ring-primary/25 bg-accent/60"
+          : "border-border hover:border-primary/40 hover:bg-accent/30"
+      )}
+    >
+      {/* Color swatch preview */}
+      <div
+        className="flex gap-[3px] rounded-md p-1.5 shrink-0 border border-white/10"
+        style={{ background: theme.previewColors[0] }}
+      >
+        {theme.previewColors.map((c, i) => (
+          <div
+            key={i}
+            className="h-5 w-[7px] rounded-full"
+            style={{ background: c }}
+          />
+        ))}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-sm truncate leading-tight">
+          {theme.name}
+        </p>
+        <p className="text-xs text-muted-foreground truncate mt-0.5 leading-tight">
+          {theme.description}
+        </p>
+      </div>
+      {selected && (
+        <Check className="h-3.5 w-3.5 text-primary ml-auto shrink-0" />
+      )}
+    </button>
+  );
 }
 
 export function SettingsDialog({
@@ -49,6 +98,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const {
     theme,
+    colorTheme,
     fontSize,
     fontFamily,
     autoSave,
@@ -62,6 +112,7 @@ export function SettingsDialog({
     showRowNumbers,
     autoCheckForUpdates,
     setTheme,
+    setColorTheme,
     setFontSize,
     setFontFamily,
     setAutoSave,
@@ -77,7 +128,7 @@ export function SettingsDialog({
     resetToDefaults,
   } = useSettingsStore();
 
-  // Apply theme to document
+  // Apply appearance mode (light/dark/system)
   useEffect(() => {
     const root = window.document.documentElement;
 
@@ -93,6 +144,11 @@ export function SettingsDialog({
       root.classList.add(theme);
     }
   }, [theme]);
+
+  // Apply color theme via data-theme attribute
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", colorTheme);
+  }, [colorTheme]);
 
   // Apply font size
   useEffect(() => {
@@ -136,10 +192,14 @@ export function SettingsDialog({
           defaultValue="appearance"
           className="flex-1 overflow-hidden flex flex-col"
         >
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="appearance" className="!text-sm">
               <Palette className="h-4 w-4 mr-2" />
               Appearance
+            </TabsTrigger>
+            <TabsTrigger value="themes" className="!text-sm">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Themes
             </TabsTrigger>
             <TabsTrigger value="editor" className="!text-sm">
               <Code className="h-4 w-4 mr-2" />
@@ -166,7 +226,7 @@ export function SettingsDialog({
           >
             <div className="space-y-4 mx-2">
               <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
+                <Label htmlFor="theme">Appearance</Label>
                 <Select
                   value={theme}
                   onValueChange={(v) => setTheme(v as Theme)}
@@ -181,7 +241,7 @@ export function SettingsDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Choose your color theme preference
+                  Choose your light or dark mode preference
                 </p>
               </div>
 
@@ -224,6 +284,32 @@ export function SettingsDialog({
                 <p className="text-xs text-muted-foreground">
                   Choose the font family for the application
                 </p>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Themes Tab */}
+          <TabsContent
+            value="themes"
+            className="flex-1 overflow-y-auto pt-4"
+          >
+            <div className="space-y-3 mx-2">
+              <div>
+                <p className="text-sm font-medium">Color Theme</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Choose a color palette. Adapts automatically to your
+                  Appearance setting (light/dark).
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {THEMES.map((t) => (
+                  <ThemeCard
+                    key={t.id}
+                    theme={t}
+                    selected={colorTheme === t.id}
+                    onSelect={setColorTheme}
+                  />
+                ))}
               </div>
             </div>
           </TabsContent>

@@ -2,12 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type Theme = "light" | "dark" | "system";
+export type ColorTheme = string;
 export type FontSize = "small" | "medium" | "large";
 export type FontFamily = "Outfit" | "JetBrains Mono";
 
 interface SettingsStore {
   // Appearance
   theme: Theme;
+  colorTheme: ColorTheme;
   fontSize: FontSize;
   fontFamily: FontFamily;
 
@@ -31,6 +33,7 @@ interface SettingsStore {
 
   // Actions
   setTheme: (theme: Theme) => void;
+  setColorTheme: (colorTheme: ColorTheme) => void;
   setFontSize: (fontSize: FontSize) => void;
   setFontFamily: (fontFamily: FontFamily) => void;
   setAutoSave: (enabled: boolean) => void;
@@ -48,6 +51,7 @@ interface SettingsStore {
 
 const defaultSettings = {
   theme: "system" as Theme,
+  colorTheme: "default" as ColorTheme,
   fontSize: "small" as FontSize,
   fontFamily: "Outfit" as FontFamily,
   autoSave: true,
@@ -68,6 +72,7 @@ export const useSettingsStore = create<SettingsStore>()(
       ...defaultSettings,
 
       setTheme: (theme) => set({ theme }),
+      setColorTheme: (colorTheme) => set({ colorTheme }),
       setFontSize: (fontSize) => set({ fontSize }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setAutoSave: (autoSave) => set({ autoSave }),
