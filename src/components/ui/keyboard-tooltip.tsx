@@ -61,7 +61,7 @@ export function KeyboardTooltip({
       <Tooltip>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipContent side={side} className="max-w-xs">
-          <div className="text-sm">
+          <div className="text-sm text-muted-foreground">
             {description}
             {renderKeys()}
           </div>
