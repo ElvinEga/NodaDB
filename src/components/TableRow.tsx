@@ -71,9 +71,9 @@ export function TableRow({
             )}
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right" className="text-xs">
+        <TooltipContent side="right" className="text-xs border border-border">
           <div className="space-y-1">
-            <div className="font-semibold">{table.name}</div>
+            <div className="font-semibold text-foreground">{table.name}</div>
             <div className="text-muted-foreground">
               Type: {table.table_type || "TABLE"}
             </div>
