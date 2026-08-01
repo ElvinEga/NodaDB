@@ -431,8 +431,8 @@ function App() {
     const root = window.document.documentElement;
 
     // Apply font family
-    root.classList.remove("font-outfit", "font-jetbrains-mono");
-    root.classList.add(`font-${fontFamily.toLowerCase().replace(" ", "-")}`);
+    root.classList.remove("font-outfit", "font-jetbrains-mono", "font-system");
+    root.classList.add(`font-${fontFamily.toLowerCase().replace(/ /g, "-")}`);
 
     // Apply font size
     root.classList.remove(

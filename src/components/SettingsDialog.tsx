@@ -164,8 +164,8 @@ export function SettingsDialog({
   // Apply font family
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove("font-outfit", "font-jetbrains");
-    root.classList.add(`font-${fontFamily.toLowerCase().replace(" ", "-")}`);
+    root.classList.remove("font-outfit", "font-jetbrains-mono", "font-system");
+    root.classList.add(`font-${fontFamily.toLowerCase().replace(/ /g, "-")}`);
   }, [fontFamily]);
 
   const handleResetDefaults = () => {
@@ -275,6 +275,7 @@ export function SettingsDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="System">System Default</SelectItem>
                     <SelectItem value="Outfit">Outfit</SelectItem>
                     <SelectItem value="JetBrains Mono">
                       JetBrains Mono
