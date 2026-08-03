@@ -66,4 +66,16 @@ export const THEMES: ThemeDefinition[] = [
     description: "Ethan Schoonover's precision palette.",
     previewColors: ["#002b36", "#073642", "#2aa198"],
   },
+  {
+    id: "monochrome",
+    name: "Monochrome",
+    description: "Pure black dark, pure white light.",
+    previewColors: ["#000000", "#111111", "#ffffff"],
+  },
+  {
+    id: "material",
+    name: "Material",
+    description: "Google Material Design — clean & modern.",
+    previewColors: ["#263238", "#37474f", "#89ddff"],
+  },
 ];
