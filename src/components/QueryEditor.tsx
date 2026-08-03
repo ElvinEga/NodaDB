@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor from '@monaco-editor/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
@@ -27,6 +27,8 @@ import {
 import { formatSQL, toggleComment } from '@/lib/sqlFormatter';
 import { exportToCSV, exportToJSON, exportToExcel, copyToClipboard } from '@/lib/exportUtils';
 import { useQueryHistoryStore } from '@/stores/queryHistoryStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { MONACO_THEMES, getMonacoThemeId } from '@/lib/monacoThemes';
 import { toast } from 'sonner';
 
 interface QueryEditorProps {
@@ -45,8 +47,21 @@ export function QueryEditor({ connection }: QueryEditorProps) {
   const [pgInfo, setPgInfo] = useState<PostgresConnectionInfo | null>(null);
   const [pgExtensions, setPgExtensions] = useState<PostgresExtension[]>([]);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monacoRef = useRef<any>(null);
   const addQueryToHistory = useQueryHistoryStore((state) => state.addQuery);
+  const { colorTheme, theme: appearancePref } = useSettingsStore();
 
+  // Detect dark mode from the html element class (set by appearance effect in App.tsx)
+  const isDark = () => document.documentElement.classList.contains('dark');
+
+  // Re-apply Monaco theme when colorTheme or appearance preference changes
+  useEffect(() => {
+    if (!monacoRef.current || !editorRef.current) return;
+    const dark = isDark();
+    const themeId = getMonacoThemeId(colorTheme, dark);
+    monacoRef.current.editor.setTheme(themeId);
+  }, [colorTheme, appearancePref]);
   const handleExecuteQuery = async () => {
     if (!query.trim()) {
       toast.error('Please enter a query');
@@ -498,7 +513,17 @@ export function QueryEditor({ connection }: QueryEditorProps) {
             }}
             onMount={(editor, monaco) => {
               editorRef.current = editor;
+              monacoRef.current = monaco;
 
+              // Register all custom themes
+              Object.entries(MONACO_THEMES).forEach(([id, variants]) => {
+                monaco.editor.defineTheme(getMonacoThemeId(id, true), variants.dark);
+                monaco.editor.defineTheme(getMonacoThemeId(id, false), variants.light);
+              });
+
+              // Apply the current theme immediately
+              const dark = isDark();
+              monaco.editor.setTheme(getMonacoThemeId(colorTheme, dark));
               // Ctrl+Enter - Execute Query
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
