@@ -61,7 +61,7 @@ export function TableRow({
     <div className="flex items-center gap-1 group w-full">
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex-1 flex items-center min-w-0">
+          <div className="flex-1 flex items-center min-w-0 max-w-60">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -73,7 +73,7 @@ export function TableRow({
                   }`}
                 >
                   <Table className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{table.name}</span>
+                  <span className="text-left truncate w-36">{table.name}</span>
                   {table.table_type === "VIEW" && (
                     <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground">
                       VIEW
