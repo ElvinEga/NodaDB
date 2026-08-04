@@ -19,6 +19,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { DatabaseTable } from "@/types";
 
 interface TableRowProps {
@@ -51,49 +58,93 @@ export function TableRow({
   showSize,
 }: TableRowProps) {
   return (
-    <div className="flex items-center gap-1 group">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={() => onTableSelect(table)}
-            className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-              selectedTable?.name === table.name
-                ? "bg-primary text-primary-foreground font-extrabold"
-                : "hover:bg-muted"
-            }`}
-          >
-            <Table className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{table.name}</span>
-            {table.table_type === "VIEW" && (
-              <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground">
-                VIEW
-              </span>
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right" className="text-xs border border-border">
-          <div className="space-y-1">
-            <div className="font-semibold text-foreground">{table.name}</div>
-            <div className="text-muted-foreground">
-              Type: {table.table_type || "TABLE"}
-            </div>
-            <div className="text-muted-foreground">
-              Rows: {formatRowCount(table.row_count)}
-            </div>
-            {showSize && table.size_kb !== undefined && (
-              <div className="text-muted-foreground">
-                Size: {formatSize(table.size_kb)}
-              </div>
-            )}
+    <div className="flex items-center gap-1 group w-full">
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="flex-1 flex items-center min-w-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onTableSelect(table)}
+                  className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    selectedTable?.name === table.name
+                      ? "bg-primary text-primary-foreground font-extrabold"
+                      : "hover:bg-muted"
+                  }`}
+                >
+                  <Table className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{table.name}</span>
+                  {table.table_type === "VIEW" && (
+                    <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground">
+                      VIEW
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs border border-border">
+                <div className="space-y-1">
+                  <div className="font-semibold text-foreground">{table.name}</div>
+                  <div className="text-muted-foreground">
+                    Type: {table.table_type || "TABLE"}
+                  </div>
+                  <div className="text-muted-foreground">
+                    Rows: {formatRowCount(table.row_count)}
+                  </div>
+                  {showSize && table.size_kb !== undefined && (
+                    <div className="text-muted-foreground">
+                      Size: {formatSize(table.size_kb)}
+                    </div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
           </div>
-        </TooltipContent>
-      </Tooltip>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onClick={() => onTableSelect(table)}>
+            <Table className="h-4 w-4 mr-2" />
+            View Data
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setTableToExport(table);
+              setExportDialogOpen(true);
+            }}
+          >
+            <FileCode className="h-4 w-4 mr-2" />
+            Export Structure
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={() => handleRenameTable(table.name)}>
+            <Edit className="h-4 w-4 mr-2" />
+            Rename
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setTableForTag(table.name);
+              setTagSelectOpen(true);
+            }}
+          >
+            <TagIcon className="h-4 w-4 mr-2" />
+            Assign Tag
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onClick={() => handleDropTable(table.name)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Drop Table
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             size="sm"
             variant="ghost"
             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+            title="More actions"
           >
             <MoreVertical className="h-3 w-3" />
           </Button>

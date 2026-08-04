@@ -35,6 +35,8 @@ import {
   Filter,
   X,
   Calendar as CalendarIcon,
+  Eye,
+  FileJson,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +49,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -225,9 +235,11 @@ export function TanStackTableViewer({
   const [addRowDialogOpen, setAddRowDialogOpen] = useState(false);
   const [dataGeneratorDialogOpen, setDataGeneratorDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] =
-    useState(false);
+  const [batchOperationsDialogOpen, setBatchOperationsDialogOpen] = useState(false);
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
+  const [jsonPreviewOpen, setJsonPreviewOpen] = useState(false);
+  const [jsonPreviewValue, setJsonPreviewValue] = useState("");
+  const [jsonPreviewColumn, setJsonPreviewColumn] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [contextMenuCell, setContextMenuCell] = useState<{
@@ -938,29 +950,51 @@ Sum: ${stats.sum}`
                 });
               }}
             >
-              <div className="flex-1 min-w-0">
-                {getCellRenderer(col, value)}
-              </div>
-              <div className="flex items-center gap-1 shrink-0 ml-1">
+
+              <div className="flex items-center gap-1 shrink-0 mr-1">
                 {hasIdRelations && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onViewFlow) onViewFlow(String(value));
                     }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
                     title="View related data"
                   >
                     <Workflow className="h-3 w-3" />
                   </button>
                 )}
+                {col.type_family === "json" && value !== null && value !== undefined && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      let prettyJson = "";
+                      try {
+                        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+                        prettyJson = JSON.stringify(parsed, null, 2);
+                      } catch {
+                        prettyJson = String(value);
+                      }
+                      setJsonPreviewColumn(col.name);
+                      setJsonPreviewValue(prettyJson);
+                      setJsonPreviewOpen(true);
+                    }}
+                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
+                    title="Preview JSON"
+                  >
+                    <Eye className="h-3 w-3" />
+                  </button>
+                )}
                 <button
                   onClick={handleEditClick}
-                  className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                  className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
                   title="Click to edit"
                 >
                   <Edit2 className="h-3 w-3" />
                 </button>
+              </div>
+              <div className="flex-1 min-w-0">
+                {getCellRenderer(col, value)}
               </div>
             </div>
           );
@@ -2539,6 +2573,57 @@ Sum: ${stats.sum}`
             }
           />
         )}
+
+        {columnEditContext && (
+          <EditCellDialog
+            open={columnEditDialogOpen}
+            onOpenChange={(open) => {
+              setColumnEditDialogOpen(open);
+              if (!open) {
+                setColumnEditContext(null);
+              }
+            }}
+            columnName={columnEditContext.column.name}
+            columnType={columnEditContext.column.data_type}
+            column={columnEditContext.column}
+            currentValue={columnEditContext.currentValue}
+            onSave={handleSaveColumnEdit}
+            confirmMessage={(newValue) =>
+              `Update column "${columnEditContext.column.name}" for ${columnEditContext.scopeLabel} to ${describePendingValue(newValue)}?`
+            }
+            title="Edit Column Value"
+          />
+        )}
+
+        <Dialog open={jsonPreviewOpen} onOpenChange={setJsonPreviewOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileJson className="h-5 w-5 text-primary" />
+                JSON Preview — <span className="font-mono text-sm">{jsonPreviewColumn}</span>
+              </DialogTitle>
+              <DialogDescription>
+                Pretty-printed read-only view of the cell's JSON content
+              </DialogDescription>
+            </DialogHeader>
+            <pre className="flex-1 overflow-auto max-h-[50vh] p-4 bg-muted/40 rounded-md border font-mono text-xs text-foreground whitespace-pre-wrap break-all select-text">
+              {jsonPreviewValue}
+            </pre>
+            <DialogFooter className="flex justify-between items-center sm:justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(jsonPreviewValue);
+                  toast.success("JSON copied to clipboard");
+                }}
+              >
+                Copy to Clipboard
+              </Button>
+              <Button onClick={() => setJsonPreviewOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {columnEditContext && (
           <EditCellDialog

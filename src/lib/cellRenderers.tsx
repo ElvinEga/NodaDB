@@ -143,21 +143,13 @@ export const JsonCell = memo(({ value }: { value: any }) => {
       jsonObj = JSON.parse(value);
     }
 
-    const jsonStr = JSON.stringify(jsonObj, null, 2);
-    const preview =
-      jsonStr.length > 50 ? jsonStr.substring(0, 50) + "..." : jsonStr;
+    const jsonStr = JSON.stringify(jsonObj);
+    const preview = jsonStr.length > 80 ? jsonStr.substring(0, 80) + "..." : jsonStr;
 
     return (
-      <div className="font-mono text-xs">
-        <details className="cursor-pointer">
-          <summary className="text-muted-foreground hover:text-foreground">
-            {preview.split("\n")[0]}
-          </summary>
-          <pre className="mt-2 p-2 bg-secondary rounded text-[10px] overflow-auto max-h-48">
-            {jsonStr}
-          </pre>
-        </details>
-      </div>
+      <span className="font-mono text-xs text-muted-foreground truncate" title="Double click to edit, click Eye icon to preview">
+        {preview}
+      </span>
     );
   } catch {
     return <span className="font-mono text-xs">{String(value)}</span>;
