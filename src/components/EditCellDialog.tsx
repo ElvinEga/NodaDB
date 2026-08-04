@@ -83,7 +83,18 @@ export function EditCellDialog({
           setValue(''); // Default/Null
         }
       } else {
-        const displayValue = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+        let displayValue = '';
+        if (currentValue !== null && currentValue !== undefined) {
+          if (typeof currentValue === 'object') {
+            try {
+              displayValue = JSON.stringify(currentValue, null, 2);
+            } catch (e) {
+              displayValue = String(currentValue);
+            }
+          } else {
+            displayValue = String(currentValue);
+          }
+        }
         setValue(displayValue);
       }
     }
