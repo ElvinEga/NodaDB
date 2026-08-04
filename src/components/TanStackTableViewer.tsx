@@ -958,7 +958,7 @@ Sum: ${stats.sum}`
                       e.stopPropagation();
                       if (onViewFlow) onViewFlow(String(value));
                     }}
-                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
+                    className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
                     title="View related data"
                   >
                     <Workflow className="h-3 w-3" />
@@ -979,7 +979,7 @@ Sum: ${stats.sum}`
                       setJsonPreviewValue(prettyJson);
                       setJsonPreviewOpen(true);
                     }}
-                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
+                    className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
                     title="Preview JSON"
                   >
                     <Eye className="h-3 w-3" />
@@ -987,7 +987,7 @@ Sum: ${stats.sum}`
                 )}
                 <button
                   onClick={handleEditClick}
-                  className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
+                  className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
                   title="Click to edit"
                 >
                   <Edit2 className="h-3 w-3" />
