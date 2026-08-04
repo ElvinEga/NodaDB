@@ -912,7 +912,7 @@ Sum: ${stats.sum}`
                       e.stopPropagation();
                       if (onViewFlow) onViewFlow(String(value));
                     }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity shrink-0 ml-1"
+                    className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
                     title="View related data"
                   >
                     <Workflow className="h-3 w-3" />
