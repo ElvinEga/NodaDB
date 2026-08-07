@@ -25,6 +25,7 @@ interface AppSidebarProps {
   onTableSelect: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
   onNewQuery: () => void;
+  onOpenQueryBuilder?: () => void;
 }
 
 export function AppSidebar({
@@ -35,6 +36,7 @@ export function AppSidebar({
   onTableSelect,
   selectedTable,
   onNewQuery,
+  onOpenQueryBuilder,
 }: AppSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
@@ -107,6 +109,7 @@ export function AppSidebar({
           onTableSelect={onTableSelect}
           selectedTable={selectedTable}
           onNewQuery={onNewQuery}
+          onOpenQueryBuilder={onOpenQueryBuilder}
         />
       </SidebarContent>
 
