@@ -48,7 +48,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CreateTableDialog } from "@/components/CreateTableDialog";
+import { EditTableDialog } from "@/components/EditTableDialog";
 import { ExportTableDialog } from "@/components/ExportTableDialog";
 import { ExportDatabaseDialog } from "@/components/ExportDatabaseDialog";
 import { ForeignKeyManagerDialog } from "@/components/ForeignKeyManagerDialog";
@@ -90,6 +101,9 @@ const colorClasses: Record<TagColor, string> = {
 interface DatabaseExplorerProps {
   connection: ConnectionConfig;
   onTableSelect: (table: DatabaseTable) => void;
+  onOpenInNewTab?: (table: DatabaseTable) => void;
+  onOpenInSqlEditor?: (table: DatabaseTable) => void;
+  onEditTable?: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
   onNewQuery?: () => void;
   onOpenQueryBuilder?: () => void;
@@ -98,6 +112,9 @@ interface DatabaseExplorerProps {
 export function DatabaseExplorer({
   connection,
   onTableSelect,
+  onOpenInNewTab,
+  onOpenInSqlEditor,
+  onEditTable,
   selectedTable,
   onNewQuery,
   onOpenQueryBuilder,
@@ -118,6 +135,18 @@ export function DatabaseExplorer({
   const [newTableName, setNewTableName] = useState("");
   const [foreignKeyDialogOpen, setForeignKeyDialogOpen] = useState(false);
   const [migrationDialogOpen, setMigrationDialogOpen] = useState(false);
+
+  // Empty table state & handlers
+  const [emptyTableTarget, setEmptyTableTarget] = useState<DatabaseTable | null>(null);
+  const [isEmptying, setIsEmptying] = useState(false);
+
+  // Edit table state
+  const [editTableTarget, setEditTableTarget] = useState<DatabaseTable | null>(null);
+
+  // Duplicate table state & handlers
+  const [duplicateTableTarget, setDuplicateTableTarget] = useState<DatabaseTable | null>(null);
+  const [duplicateName, setDuplicateName] = useState("");
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   // Tag-related state
   const [tags, setTags] = useState<TableTag[]>([]);
@@ -195,6 +224,52 @@ export function DatabaseExplorer({
     } catch (error) {
       toast.error(`Failed to rename table: ${error}`);
       console.error("Rename table error:", error);
+    }
+  };
+
+  const handlePromptDuplicateTable = (table: DatabaseTable) => {
+    setDuplicateTableTarget(table);
+    setDuplicateName(`${table.name}_copy`);
+  };
+
+  const executeDuplicateTable = async () => {
+    if (!duplicateTableTarget || !duplicateName.trim()) return;
+    setIsDuplicating(true);
+    try {
+      const query = `CREATE TABLE "${duplicateName.trim()}" AS SELECT * FROM "${duplicateTableTarget.name}";`;
+      await invoke("execute_query", {
+        connectionId: connection.id,
+        query,
+      });
+      toast.success(`Table "${duplicateTableTarget.name}" duplicated as "${duplicateName.trim()}"`);
+      setDuplicateTableTarget(null);
+      setDuplicateName("");
+      loadTables();
+    } catch (error) {
+      toast.error(`Failed to duplicate table: ${error}`);
+      console.error("Duplicate table error:", error);
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
+  const executeEmptyTable = async () => {
+    if (!emptyTableTarget) return;
+    setIsEmptying(true);
+    try {
+      const query = `DELETE FROM "${emptyTableTarget.name}";`;
+      await invoke("execute_query", {
+        connectionId: connection.id,
+        query,
+      });
+      toast.success(`Table "${emptyTableTarget.name}" emptied successfully`);
+      setEmptyTableTarget(null);
+      loadTables();
+    } catch (error) {
+      toast.error(`Failed to empty table: ${error}`);
+      console.error("Empty table error:", error);
+    } finally {
+      setIsEmptying(false);
     }
   };
 
@@ -438,6 +513,11 @@ export function DatabaseExplorer({
                             table={table}
                             selectedTable={selectedTable}
                             onTableSelect={onTableSelect}
+                            onOpenInNewTab={onOpenInNewTab}
+                            onOpenInSqlEditor={onOpenInSqlEditor}
+                            onEditTable={(tbl) => setEditTableTarget(tbl)}
+                            onDuplicateTable={handlePromptDuplicateTable}
+                            onEmptyTable={(tbl) => setEmptyTableTarget(tbl)}
                             setTableToExport={setTableToExport}
                             setExportDialogOpen={setExportDialogOpen}
                             handleRenameTable={handleRenameTable}
@@ -490,6 +570,11 @@ export function DatabaseExplorer({
                           table={table}
                           selectedTable={selectedTable}
                           onTableSelect={onTableSelect}
+                          onOpenInNewTab={onOpenInNewTab}
+                          onOpenInSqlEditor={onOpenInSqlEditor}
+                          onEditTable={(tbl) => setEditTableTarget(tbl)}
+                          onDuplicateTable={handlePromptDuplicateTable}
+                          onEmptyTable={(tbl) => setEmptyTableTarget(tbl)}
                           setTableToExport={setTableToExport}
                           setExportDialogOpen={setExportDialogOpen}
                           handleRenameTable={handleRenameTable}
@@ -549,6 +634,14 @@ export function DatabaseExplorer({
         connection={connection}
       />
 
+      <EditTableDialog
+        open={editTableTarget !== null}
+        onOpenChange={(open) => !open && setEditTableTarget(null)}
+        connection={connection}
+        table={editTableTarget}
+        onSuccess={loadTables}
+      />
+
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -596,6 +689,72 @@ export function DatabaseExplorer({
         onTagChange={refreshTags}
         onOpenTagManager={() => setTagManagerOpen(true)}
       />
+
+      {/* Duplicate Table Dialog */}
+      <Dialog
+        open={duplicateTableTarget !== null}
+        onOpenChange={(open) => !open && setDuplicateTableTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Duplicate Table</DialogTitle>
+            <DialogDescription>
+              Create a duplicate of table "{duplicateTableTarget?.name}" including its structure and data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase">New Table Name</label>
+            <Input
+              value={duplicateName}
+              onChange={(e) => setDuplicateName(e.target.value)}
+              placeholder="New table name"
+              className="w-full text-sm font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDuplicateTableTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={executeDuplicateTable}
+              disabled={isDuplicating || !duplicateName.trim() || duplicateName.trim() === duplicateTableTarget?.name}
+            >
+              {isDuplicating ? "Duplicating..." : "Duplicate Table"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Empty Table Confirmation AlertDialog */}
+      <AlertDialog
+        open={emptyTableTarget !== null}
+        onOpenChange={(open) => !open && setEmptyTableTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Empty Table "{emptyTableTarget?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to empty table <strong className="font-semibold text-foreground">{emptyTableTarget?.name}</strong>?
+              All rows in this table will be permanently deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isEmptying}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeEmptyTable}
+              disabled={isEmptying}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isEmptying ? "Emptying..." : "Empty Table"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
