@@ -1,3 +1,4 @@
+import { DbIcon } from "@/components/DbIcon";
 import { useState, useEffect } from "react";
 import {
   Database,
@@ -455,12 +456,15 @@ function App() {
           <>
             <AppSidebar
               connection={activeConnection}
+              recentConnections={recentConnections}
+              onConnectToConnection={(conn) => void connectToConnection(conn)}
+              onOpenConnectionSwitcher={openConnectionSwitcher}
               onTableSelect={handleTableSelect}
               selectedTable={activeTab?.table || null}
               onNewQuery={openQueryTab}
             />
 
-            <SidebarInset className="flex flex-col flex-1">
+            <SidebarInset className="flex flex-col flex-1 min-w-0">
               {/* MenuBar for Linux/Windows (macOS uses native menu) */}
               {!navigator.userAgent.includes("Mac") && (
                 <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -470,7 +474,7 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className={`py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
+                className={`border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
@@ -479,83 +483,6 @@ function App() {
                   </div>
                 )}
 
-                {/* Connection Selector */}
-                {activeConnection ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 mt-0.5 text-sm transition-colors hover:bg-secondary/80"
-                      >
-                        <div className="h-2 w-2 rounded-full bg-green-500/50 animate-pulse" />
-                        <span className="text-sm">{activeConnection.name}</span>
-                        <span className="text-muted-foreground text-xs">
-                          ({activeConnection.db_type})
-                        </span>
-                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-72">
-                      <DropdownMenuLabel>Recent Connections</DropdownMenuLabel>
-                      {recentConnections.length > 0 ? (
-                        recentConnections.map((connection) => {
-                          const isActive =
-                            connection.id === activeConnection.id;
-
-                          return (
-                            <DropdownMenuItem
-                              key={connection.id}
-                              onClick={() => {
-                                if (!isActive) {
-                                  void connectToConnection(connection);
-                                }
-                              }}
-                              className="items-start py-2"
-                            >
-                              <div className="flex min-w-0 flex-1 items-start gap-2">
-                                <div className="pt-0.5">
-                                  {isActive ? (
-                                    <Check className="h-4 w-4 text-primary" />
-                                  ) : (
-                                    <Database className="h-4 w-4 text-muted-foreground" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="truncate  text-sm">
-                                      {connection.name}
-                                    </span>
-                                    {isActive ? (
-                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                                        Current
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <div className="truncate text-xs text-muted-foreground">
-                                    {connection.db_type.toUpperCase()}
-                                    {connection.file_path
-                                      ? ` • ${connection.file_path}`
-                                      : connection.host
-                                        ? ` • ${connection.host}:${connection.port}`
-                                        : ""}
-                                  </div>
-                                </div>
-                              </div>
-                            </DropdownMenuItem>
-                          );
-                        })
-                      ) : (
-                        <div className="px-2 py-3 text-sm text-muted-foreground">
-                          No recent connections yet.
-                        </div>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={openConnectionSwitcher}>
-                        Browse all connections
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : null}
                 <div className="flex-1" />
 
                 {/* Right Actions */}
@@ -834,7 +761,7 @@ function App() {
                       >
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Database className="h-6 w-6 text-primary" />
+                            <DbIcon dbType={conn.db_type} className="h-6 w-6 shrink-0" />
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold mb-1 text-left">
@@ -934,19 +861,22 @@ function App() {
                 Create Your First Connection
               </Button>
               <div className="mt-8 grid grid-cols-3 gap-4 text-sm text-muted-foreground">
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="sqlite" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     SQLite
                   </div>
                   <div className="text-xs">Local databases</div>
                 </div>
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="postgresql" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     PostgreSQL
                   </div>
                   <div className="text-xs">Remote servers</div>
                 </div>
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="mysql" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     MySQL
                   </div>

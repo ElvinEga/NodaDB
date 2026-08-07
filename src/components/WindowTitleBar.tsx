@@ -1,3 +1,4 @@
+import { DbIcon } from "@/components/DbIcon";
 import { useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -93,10 +94,8 @@ export function WindowTitleBar({
 
       <div className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1 text-sm">
         <div className="h-2 w-2 animate-pulse rounded-full bg-green-500/50" />
-        <span className="text-sm">{connection.name}</span>
-        <span className="text-xs text-muted-foreground">
-          ({connection.db_type})
-        </span>
+        <DbIcon dbType={connection.db_type} className="h-4 w-4 shrink-0" />
+        <span className="text-sm font-semibold">{connection.name}</span>
       </div>
 
       <div className="flex items-center">

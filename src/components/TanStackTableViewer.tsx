@@ -37,6 +37,7 @@ import {
   Calendar as CalendarIcon,
   Eye,
   FileJson,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -1690,6 +1691,7 @@ Sum: ${stats.sum}`
               <Plus className="h-3.5 w-3.5" />
               Insert
             </Button>
+
             {selectedCount === 1 && (
               <Button
                 variant="destructive"
@@ -1702,6 +1704,28 @@ Sum: ${stats.sum}`
                 Delete
               </Button>
             )}
+          </div>
+          {/* Styled Global Search right next to Insert */}
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchInputRef}
+              placeholder="Search"
+              value={globalFilter ?? ""}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="pl-8 pr-8 text-xs w-60  md:w-96  border-2 border-input focus-visible:ring-primary"
+              title="Search table rows (Ctrl+F)"
+            />
+            <span className="absolute right-2 text-[8px] text-muted-foreground">
+
+              <span className="pointer-events-none rounded-full border bg-secondary px-1 py-0.5 font-mono text-[8px] text-muted-foreground shadow-xs">
+                Ctrl
+              </span>{" "}+{" "}
+              <span className="pointer-events-none rounded-full border bg-secondary px-1 py-0.5 font-mono text-[8px] text-muted-foreground shadow-xs">
+                F
+              </span>
+            </span>
+
           </div>
 
           <div className="flex items-center gap-2">
@@ -2118,15 +2142,6 @@ Sum: ${stats.sum}`
                   })}
               </DropdownMenuContent>
             </DropdownMenu>
-
-            {/* Global search */}
-            <Input
-              ref={searchInputRef}
-              placeholder="Search... (Ctrl+F)"
-              value={globalFilter ?? ""}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              className="h-8 w-48 text-xs"
-            />
           </div>
         </div>
 
