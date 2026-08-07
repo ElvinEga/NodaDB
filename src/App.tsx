@@ -512,7 +512,7 @@ function App() {
                   </Button>
                 </KeyboardTooltip>
 
-                <KeyboardTooltip
+                {/*<KeyboardTooltip
                   description="Open Connections"
                   keys={["Ctrl", "Shift", "C"]}
                 >
@@ -523,7 +523,7 @@ function App() {
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
-                </KeyboardTooltip>
+                </KeyboardTooltip>*/}
                 <KeyboardTooltip description="Query History">
                   <Button
                     variant="ghost"
