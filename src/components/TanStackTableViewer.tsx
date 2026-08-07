@@ -1646,6 +1646,29 @@ Sum: ${stats.sum}`
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setAddRowDialogOpen(true)}
+              className="h-8"
+              title="Insert new row into table"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Insert
+            </Button>
+
+            {selectedCount === 1 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteRows}
+                className="h-8"
+                title="Delete selected row"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            )}
             <KeyboardTooltip description="Refresh" keys={["Ctrl", "R"]}>
               <Button
                 variant="ghost"
@@ -1681,29 +1704,7 @@ Sum: ${stats.sum}`
                 <Redo2 className="h-3.5 w-3.5" />
               </Button>
             </KeyboardTooltip>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setAddRowDialogOpen(true)}
-              className="h-8"
-              title="Insert new row into table"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Insert
-            </Button>
 
-            {selectedCount === 1 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDeleteRows}
-                className="h-8"
-                title="Delete selected row"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </Button>
-            )}
           </div>
           {/* Styled Global Search right next to Insert */}
           <div className="relative flex items-center">

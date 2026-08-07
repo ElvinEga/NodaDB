@@ -25,6 +25,7 @@ interface AppSidebarProps {
   onTableSelect: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
   onNewQuery: () => void;
+  onOpenQueryBuilder?: () => void;
 }
 
 export function AppSidebar({
@@ -35,6 +36,7 @@ export function AppSidebar({
   onTableSelect,
   selectedTable,
   onNewQuery,
+  onOpenQueryBuilder,
 }: AppSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
@@ -67,11 +69,10 @@ export function AppSidebar({
                         onConnectToConnection(conn);
                       }
                     }}
-                    className="items-start py-2 cursor-pointer"
+                    className={`items-start py-2 cursor-pointer ${isActive ? 'bg-primary/20' : ''}`}
                   >
                     <div className="flex min-w-0 flex-1 items-start gap-2">
                       <div className="pt-0.5 flex items-center gap-1.5">
-                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                         <DbIcon dbType={conn.db_type} className="h-4 w-4 shrink-0" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -79,21 +80,9 @@ export function AppSidebar({
                           <span className="truncate text-sm font-medium">
                             {conn.name}
                           </span>
-                          {isActive && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                              Current
-                            </span>
-                          )}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground font-mono">
-                          {conn.db_type.toUpperCase()}
-                          {conn.file_path
-                            ? ` • ${conn.file_path}`
-                            : conn.host
-                              ? ` • ${conn.host}:${conn.port}`
-                              : ""}
                         </div>
                       </div>
+                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                     </div>
                   </DropdownMenuItem>
                 );
@@ -120,6 +109,7 @@ export function AppSidebar({
           onTableSelect={onTableSelect}
           selectedTable={selectedTable}
           onNewQuery={onNewQuery}
+          onOpenQueryBuilder={onOpenQueryBuilder}
         />
       </SidebarContent>
 

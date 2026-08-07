@@ -15,6 +15,7 @@ import {
   Tag as TagIcon,
   ChevronDown,
   ChevronRight,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -91,6 +92,7 @@ interface DatabaseExplorerProps {
   onTableSelect: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
   onNewQuery?: () => void;
+  onOpenQueryBuilder?: () => void;
 }
 
 export function DatabaseExplorer({
@@ -98,6 +100,7 @@ export function DatabaseExplorer({
   onTableSelect,
   selectedTable,
   onNewQuery,
+  onOpenQueryBuilder,
 }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<DatabaseTable[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -289,6 +292,18 @@ export function DatabaseExplorer({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {onOpenQueryBuilder && (
+                  <>
+                    <DropdownMenuItem onClick={onOpenQueryBuilder}>
+                      <Network className="mr-2 h-3.5 w-3.5" />
+                      Visual Query Builder
+                      <span className="ml-auto text-[10px] text-muted-foreground font-mono pl-2">
+                        Ctrl+B
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => setTagManagerOpen(true)}>
                   <TagIcon className="mr-2 h-3.5 w-3.5" />
                   Manage tags

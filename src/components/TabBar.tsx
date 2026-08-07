@@ -264,7 +264,7 @@ export function TabBar({
               className="flex items-center gap-2 text-xs py-1.5 cursor-pointer"
             >
               {tab.type === "table" ? (
-                <Table2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <Table2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               ) : tab.type === "query-builder" ? (
                 <Network className="h-3.5 w-3.5 text-purple-400 shrink-0" />
               ) : tab.type === "schema" ? (
