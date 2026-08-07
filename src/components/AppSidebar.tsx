@@ -1,4 +1,5 @@
-import { Database, Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { DbIcon } from "@/components/DbIcon";
 import {
   Sidebar,
   SidebarContent,
@@ -46,11 +47,8 @@ export function AppSidebar({
               className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-secondary"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                {/*<div className="h-2 w-2 shrink-0 rßounded-full bg-green-500/80 animate-pulse" />*/}
+                <DbIcon dbType={connection.db_type} className="h-4 w-4 shrink-0" />
                 <span className="truncate text-xs font-semibold">{connection.name}</span>
-                <span className="truncate text-muted-foreground text-xs font-mono">
-                  ({connection.db_type})
-                </span>
               </div>
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
@@ -72,12 +70,9 @@ export function AppSidebar({
                     className="items-start py-2 cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-start gap-2">
-                      <div className="pt-0.5">
-                        {isActive ? (
-                          <Check className="h-4 w-4 text-primary" />
-                        ) : (
-                          <Database className="h-4 w-4 text-muted-foreground" />
-                        )}
+                      <div className="pt-0.5 flex items-center gap-1.5">
+                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                        <DbIcon dbType={conn.db_type} className="h-4 w-4 shrink-0" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
