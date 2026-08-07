@@ -67,7 +67,7 @@ export function AppSidebar({
                         onConnectToConnection(conn);
                       }
                     }}
-                    className="items-start py-2 cursor-pointer"
+                    className={`items-start py-2 cursor-pointer ${isActive ? 'bg-primary/20' : ''}`}
                   >
                     <div className="flex min-w-0 flex-1 items-start gap-2">
                       <div className="pt-0.5 flex items-center gap-1.5">
@@ -78,14 +78,9 @@ export function AppSidebar({
                           <span className="truncate text-sm font-medium">
                             {conn.name}
                           </span>
-                          {isActive && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                              Current
-                            </span>
-                          )}
-                                {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </div>
                       </div>
+                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                     </div>
                   </DropdownMenuItem>
                 );
