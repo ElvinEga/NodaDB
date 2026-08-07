@@ -23,6 +23,9 @@ interface AppSidebarProps {
   onConnectToConnection: (connection: ConnectionConfig) => void;
   onOpenConnectionSwitcher: () => void;
   onTableSelect: (table: DatabaseTable) => void;
+  onOpenInNewTab?: (table: DatabaseTable) => void;
+  onOpenInSqlEditor?: (table: DatabaseTable) => void;
+  onEditTable?: (table: DatabaseTable) => void;
   selectedTable: DatabaseTable | null;
   onNewQuery: () => void;
   onOpenQueryBuilder?: () => void;
@@ -34,6 +37,9 @@ export function AppSidebar({
   onConnectToConnection,
   onOpenConnectionSwitcher,
   onTableSelect,
+  onOpenInNewTab,
+  onOpenInSqlEditor,
+  onEditTable,
   selectedTable,
   onNewQuery,
   onOpenQueryBuilder,
@@ -107,6 +113,9 @@ export function AppSidebar({
         <DatabaseExplorer
           connection={connection}
           onTableSelect={onTableSelect}
+          onOpenInNewTab={onOpenInNewTab}
+          onOpenInSqlEditor={onOpenInSqlEditor}
+          onEditTable={onEditTable}
           selectedTable={selectedTable}
           onNewQuery={onNewQuery}
           onOpenQueryBuilder={onOpenQueryBuilder}
