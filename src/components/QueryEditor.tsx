@@ -33,10 +33,19 @@ import { toast } from 'sonner';
 
 interface QueryEditorProps {
   connection: ConnectionConfig;
+  initialQuery?: string;
 }
 
-export function QueryEditor({ connection }: QueryEditorProps) {
-  const [query, setQuery] = useState('-- Enter your SQL query here\nSELECT * FROM sqlite_master WHERE type=\'table\';');
+export function QueryEditor({ connection, initialQuery }: QueryEditorProps) {
+  const [query, setQuery] = useState(
+    initialQuery ?? '-- Enter your SQL query here\nSELECT * FROM sqlite_master WHERE type=\'table\';'
+  );
+
+  useEffect(() => {
+    if (initialQuery !== undefined) {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery]);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);

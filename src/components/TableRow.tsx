@@ -5,6 +5,11 @@ import {
   Edit,
   Trash2,
   Tag as TagIcon,
+  ExternalLink,
+  FileCode2,
+  Shapes,
+  Copy,
+  Eraser,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +37,11 @@ interface TableRowProps {
   table: DatabaseTable;
   selectedTable: DatabaseTable | null;
   onTableSelect: (table: DatabaseTable) => void;
+  onOpenInNewTab?: (table: DatabaseTable) => void;
+  onOpenInSqlEditor?: (table: DatabaseTable) => void;
+  onEditTable?: (table: DatabaseTable) => void;
+  onDuplicateTable?: (table: DatabaseTable) => void;
+  onEmptyTable?: (table: DatabaseTable) => void;
   setTableToExport: (table: DatabaseTable) => void;
   setExportDialogOpen: (open: boolean) => void;
   handleRenameTable: (name: string) => void;
@@ -47,6 +57,11 @@ export function TableRow({
   table,
   selectedTable,
   onTableSelect,
+  onOpenInNewTab,
+  onOpenInSqlEditor,
+  onEditTable,
+  onDuplicateTable,
+  onEmptyTable,
   setTableToExport,
   setExportDialogOpen,
   handleRenameTable,
@@ -100,11 +115,44 @@ export function TableRow({
             </Tooltip>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
+
+        {/* Context Menu Items */}
+        <ContextMenuContent className="w-52">
           <ContextMenuItem onClick={() => onTableSelect(table)}>
             <Table className="h-4 w-4 mr-2" />
             View Data
           </ContextMenuItem>
+
+          {onOpenInNewTab && (
+            <ContextMenuItem onClick={() => onOpenInNewTab(table)}>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open in New Tab
+            </ContextMenuItem>
+          )}
+
+          {onOpenInSqlEditor && (
+            <ContextMenuItem onClick={() => onOpenInSqlEditor(table)}>
+              <FileCode2 className="h-4 w-4 mr-2" />
+              Open in SQL Editor
+            </ContextMenuItem>
+          )}
+
+          {onEditTable && (
+            <ContextMenuItem onClick={() => onEditTable(table)}>
+              <Shapes className="h-4 w-4 mr-2" />
+              Edit Table Structure
+            </ContextMenuItem>
+          )}
+
+          <ContextMenuSeparator />
+
+          {onDuplicateTable && (
+            <ContextMenuItem onClick={() => onDuplicateTable(table)}>
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate Table
+            </ContextMenuItem>
+          )}
+
           <ContextMenuItem
             onClick={() => {
               setTableToExport(table);
@@ -114,11 +162,14 @@ export function TableRow({
             <FileCode className="h-4 w-4 mr-2" />
             Export Structure
           </ContextMenuItem>
+
           <ContextMenuSeparator />
+
           <ContextMenuItem onClick={() => handleRenameTable(table.name)}>
             <Edit className="h-4 w-4 mr-2" />
             Rename
           </ContextMenuItem>
+
           <ContextMenuItem
             onClick={() => {
               setTableForTag(table.name);
@@ -128,7 +179,19 @@ export function TableRow({
             <TagIcon className="h-4 w-4 mr-2" />
             Assign Tag
           </ContextMenuItem>
+
           <ContextMenuSeparator />
+
+          {onEmptyTable && (
+            <ContextMenuItem
+              onClick={() => onEmptyTable(table)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Eraser className="h-4 w-4 mr-2" />
+              Empty Table
+            </ContextMenuItem>
+          )}
+
           <ContextMenuItem
             onClick={() => handleDropTable(table.name)}
             className="text-destructive focus:text-destructive"
@@ -138,6 +201,8 @@ export function TableRow({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {/* Hover Dropdown Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -149,11 +214,42 @@ export function TableRow({
             <MoreVertical className="h-3 w-3" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem onClick={() => onTableSelect(table)}>
             <Table className="h-4 w-4 mr-2" />
             View Data
           </DropdownMenuItem>
+
+          {onOpenInNewTab && (
+            <DropdownMenuItem onClick={() => onOpenInNewTab(table)}>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open in New Tab
+            </DropdownMenuItem>
+          )}
+
+          {onOpenInSqlEditor && (
+            <DropdownMenuItem onClick={() => onOpenInSqlEditor(table)}>
+              <FileCode2 className="h-4 w-4 mr-2" />
+              Open in SQL Editor
+            </DropdownMenuItem>
+          )}
+
+          {onEditTable && (
+            <DropdownMenuItem onClick={() => onEditTable(table)}>
+              <Shapes className="h-4 w-4 mr-2" />
+              Edit Table Structure
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuSeparator />
+
+          {onDuplicateTable && (
+            <DropdownMenuItem onClick={() => onDuplicateTable(table)}>
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate Table
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuItem
             onClick={() => {
               setTableToExport(table);
@@ -163,11 +259,14 @@ export function TableRow({
             <FileCode className="h-4 w-4 mr-2" />
             Export Structure
           </DropdownMenuItem>
+
           <DropdownMenuSeparator />
+
           <DropdownMenuItem onClick={() => handleRenameTable(table.name)}>
             <Edit className="h-4 w-4 mr-2" />
             Rename
           </DropdownMenuItem>
+
           <DropdownMenuItem
             onClick={() => {
               setTableForTag(table.name);
@@ -177,10 +276,22 @@ export function TableRow({
             <TagIcon className="h-4 w-4 mr-2" />
             Assign Tag
           </DropdownMenuItem>
+
           <DropdownMenuSeparator />
+
+          {onEmptyTable && (
+            <DropdownMenuItem
+              onClick={() => onEmptyTable(table)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Eraser className="h-4 w-4 mr-2" />
+              Empty Table
+            </DropdownMenuItem>
+          )}
+
           <DropdownMenuItem
             onClick={() => handleDropTable(table.name)}
-            className="text-destructive"
+            className="text-destructive focus:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Drop Table

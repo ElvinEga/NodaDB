@@ -174,9 +174,36 @@ function App() {
         isPinned: false,
         isDirty: false,
       };
-      setTabs([...tabs, newTab]);
+      setTabs((prev) => [...prev, newTab]);
       setActiveTabId(newTab.id);
     }
+  };
+
+  const handleOpenTableInNewTab = (table: DatabaseTable) => {
+    const newTab: TabType = {
+      id: `table-${table.name}-${Date.now()}`,
+      type: "table",
+      title: table.name,
+      table,
+      isPinned: false,
+      isDirty: false,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const handleOpenTableInSqlEditor = (table: DatabaseTable) => {
+    const query = `SELECT * FROM ${table.name};`;
+    const newTab: TabType = {
+      id: `query-${Date.now()}`,
+      type: "query",
+      title: `SELECT ${table.name}`,
+      isPinned: false,
+      isDirty: true,
+      queryContent: query,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
   };
 
   const connectToConnection = async (
@@ -460,6 +487,9 @@ function App() {
               onConnectToConnection={(conn) => void connectToConnection(conn)}
               onOpenConnectionSwitcher={openConnectionSwitcher}
               onTableSelect={handleTableSelect}
+              onOpenInNewTab={handleOpenTableInNewTab}
+              onOpenInSqlEditor={handleOpenTableInSqlEditor}
+              onEditTable={() => openSchemaDesignerTab()}
               selectedTable={activeTab?.table || null}
               onNewQuery={openQueryTab}
               onOpenQueryBuilder={openQueryBuilderTab}
@@ -475,7 +505,7 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className={`border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
+                className={`py-1.5 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
@@ -488,7 +518,7 @@ function App() {
 
                 {/* Right Actions */}
                 <KeyboardTooltip
-                  description="Open Schema Designer"
+                  description="Schema Designer"
                   keys={["Ctrl", "Shift", "E"]}
                 >
                   <Button
@@ -664,7 +694,7 @@ function App() {
                           />
                         ) : (
                           // "query" tabs: always keep mounted to preserve state
-                          <QueryEditor connection={activeConnection} />
+                          <QueryEditor connection={activeConnection} initialQuery={tab.queryContent} />
                         )}
                       </div>
                     );
