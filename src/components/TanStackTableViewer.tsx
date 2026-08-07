@@ -1691,21 +1691,7 @@ Sum: ${stats.sum}`
               <Plus className="h-3.5 w-3.5" />
               Insert
             </Button>
-            {/* Styled Global Search right next to Insert */}
-            <div className="relative flex items-center">
-              <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                ref={searchInputRef}
-                placeholder="Search"
-                value={globalFilter ?? ""}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                className="h-8 pl-8 pr-16 text-xs w-48 sm:w-60 border-2 border-input focus-visible:ring-primary/20"
-                title="Search table rows (Ctrl+F)"
-              />
-              <span className="absolute right-2 pointer-events-none rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-xs">
-                Ctrl + F
-              </span>
-            </div>
+
             {selectedCount === 1 && (
               <Button
                 variant="destructive"
@@ -1718,6 +1704,28 @@ Sum: ${stats.sum}`
                 Delete
               </Button>
             )}
+          </div>
+          {/* Styled Global Search right next to Insert */}
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchInputRef}
+              placeholder="Search"
+              value={globalFilter ?? ""}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="h-9 pl-8 pr-8 text-xs w-48  md:w-80  border-2 border-input focus-visible:ring-primary"
+              title="Search table rows (Ctrl+F)"
+            />
+            <span className="absolute right-2 text-[8px] text-muted-foreground">
+
+              <span className="pointer-events-none rounded-full border bg-secondary px-1 py-0.5 font-mono text-[8px] text-muted-foreground shadow-xs">
+                Ctrl
+              </span>{" "}+{" "}
+              <span className="pointer-events-none rounded-full border bg-secondary px-1 py-0.5 font-mono text-[8px] text-muted-foreground shadow-xs">
+                F
+              </span>
+            </span>
+
           </div>
 
           <div className="flex items-center gap-2">
