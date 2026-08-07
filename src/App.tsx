@@ -193,7 +193,7 @@ function App() {
   };
 
   const handleOpenTableInSqlEditor = (table: DatabaseTable) => {
-    const query = `SELECT * FROM "${table.name}" LIMIT 100;`;
+    const query = `SELECT * FROM ${table.name};`;
     const newTab: TabType = {
       id: `query-${Date.now()}`,
       type: "query",
@@ -694,7 +694,7 @@ function App() {
                           />
                         ) : (
                           // "query" tabs: always keep mounted to preserve state
-                          <QueryEditor connection={activeConnection} />
+                          <QueryEditor connection={activeConnection} initialQuery={tab.queryContent} />
                         )}
                       </div>
                     );
