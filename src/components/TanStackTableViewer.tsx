@@ -58,6 +58,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -807,6 +813,7 @@ Sum: ${stats.sum}`
                   onClick={() =>
                     column.toggleSorting(column.getIsSorted() === "asc")
                   }
+                  title="Click to sort column"
                 >
                   <div className="flex justify-between items-center w-full">
                     <span className="font-normal">{col.name}</span>
@@ -907,16 +914,24 @@ Sum: ${stats.sum}`
                   {String(value)}
                 </span>
                 {hasIdRelations && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onViewFlow) onViewFlow(String(value));
-                    }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity shrink-0 ml-1"
-                    title="View related data"
-                  >
-                    <Workflow className="h-3 w-3" />
-                  </button>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onViewFlow) onViewFlow(String(value));
+                          }}
+                          className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
+                        >
+                          <Workflow className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="px-1.5 py-0.5 text-[10px] bg-popover text-popover-foreground border border-border shadow-sm z-[150]">
+                        View related data (Relation flow)
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
             );
@@ -953,45 +968,69 @@ Sum: ${stats.sum}`
 
               <div className="flex items-center gap-1 shrink-0 mr-1">
                 {hasIdRelations && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onViewFlow) onViewFlow(String(value));
-                    }}
-                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
-                    title="View related data"
-                  >
-                    <Workflow className="h-3 w-3" />
-                  </button>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onViewFlow) onViewFlow(String(value));
+                          }}
+                          className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
+                        >
+                          <Workflow className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="px-1.5 py-0.5 text-[10px] bg-popover text-popover-foreground border border-border shadow-sm z-[150]">
+                        View related data (Relation flow)
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
                 {col.type_family === "json" && value !== null && value !== undefined && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      let prettyJson = "";
-                      try {
-                        const parsed = typeof value === "string" ? JSON.parse(value) : value;
-                        prettyJson = JSON.stringify(parsed, null, 2);
-                      } catch {
-                        prettyJson = String(value);
-                      }
-                      setJsonPreviewColumn(col.name);
-                      setJsonPreviewValue(prettyJson);
-                      setJsonPreviewOpen(true);
-                    }}
-                    className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
-                    title="Preview JSON"
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            let prettyJson = "";
+                            try {
+                              const parsed = typeof value === "string" ? JSON.parse(value) : value;
+                              prettyJson = JSON.stringify(parsed, null, 2);
+                            } catch {
+                              prettyJson = String(value);
+                            }
+                            setJsonPreviewColumn(col.name);
+                            setJsonPreviewValue(prettyJson);
+                            setJsonPreviewOpen(true);
+                          }}
+                          className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
+                        >
+                          <Eye className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="px-1.5 py-0.5 text-[10px] bg-popover text-popover-foreground border border-border shadow-sm z-[150]">
+                        Preview JSON data
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
-                <button
-                  onClick={handleEditClick}
-                  className="hidden group-hover:inline hover:text-primary hover:bg-muted-foreground rounded transition-opacity p-1"
-                  title="Click to edit"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </button>
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleEditClick}
+                        className="hidden group-hover:inline hover:text-primary hover:bg-primary/30 rounded transition-opacity p-1"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="px-1.5 py-0.5 text-[10px] bg-popover text-popover-foreground border border-border shadow-sm z-[150]">
+                      Edit cell value
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <div className="flex-1 min-w-0">
                 {getCellRenderer(col, value)}
@@ -1619,31 +1658,34 @@ Sum: ${stats.sum}`
                 />
               </Button>
             </KeyboardTooltip>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleUndo}
-              disabled={!canUndo}
-              className="h-8"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRedo}
-              disabled={!canRedo}
-              className="h-8"
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 className="h-3.5 w-3.5" />
-            </Button>
+            <KeyboardTooltip description="Undo" keys={["Ctrl", "Z"]}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleUndo}
+                disabled={!canUndo}
+                className="h-8"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+            </KeyboardTooltip>
+            <KeyboardTooltip description="Redo" keys={["Ctrl", "Y"]}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRedo}
+                disabled={!canRedo}
+                className="h-8"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </KeyboardTooltip>
             <Button
               variant="default"
               size="sm"
               onClick={() => setAddRowDialogOpen(true)}
               className="h-8"
+              title="Insert new row into table"
             >
               <Plus className="h-3.5 w-3.5" />
               Insert
@@ -1654,6 +1696,7 @@ Sum: ${stats.sum}`
                 size="sm"
                 onClick={handleDeleteRows}
                 className="h-8"
+                title="Delete selected row"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete
@@ -2049,7 +2092,7 @@ Sum: ${stats.sum}`
             {/* Column visibility dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8">
+                <Button variant="ghost" size="sm" className="h-8" title="Toggle column visibility">
                   <Columns3 className="h-3.5 w-3.5 mr-1" />
                   Columns
                   <ChevronDown className="h-3.5 w-3.5 ml-1" />
