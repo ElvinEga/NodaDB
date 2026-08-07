@@ -1,3 +1,4 @@
+import { DbIcon } from "@/components/DbIcon";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -235,7 +236,7 @@ export function DatabaseExplorer({
       <div className="p-3 border-b border-border">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-primary" />
+            <DbIcon dbType={connection.db_type} className="h-4 w-4 shrink-0" />
             <h2 className="font-semibold text-sm">Tables</h2>
             {tables.length > 0 && (
               <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-mono">
