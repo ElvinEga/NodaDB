@@ -488,7 +488,7 @@ function App() {
 
                 {/* Right Actions */}
                 <KeyboardTooltip
-                  description="Open Schema Designer"
+                  description="Schema Designer"
                   keys={["Ctrl", "Shift", "E"]}
                 >
                   <Button

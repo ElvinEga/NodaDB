@@ -123,7 +123,7 @@ export function WindowTitleBar({
             <Network className="h-4 w-4" />
           </Button>
         </KeyboardTooltip>
-        <KeyboardTooltip description="Open Schema Designer" keys={["Ctrl", "Shift", "E"]}>
+        <KeyboardTooltip description="Schema Designer" keys={["Ctrl", "Shift", "E"]}>
           <Button variant="ghost" size="icon" onClick={onOpenSchemaDesigner}>
             <Shapes className="h-4 w-4" />
           </Button>
@@ -174,4 +174,3 @@ export function WindowTitleBar({
     </header>
   );
 }
-
