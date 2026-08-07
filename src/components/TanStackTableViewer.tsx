@@ -37,6 +37,7 @@ import {
   Calendar as CalendarIcon,
   Eye,
   FileJson,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -1690,15 +1691,21 @@ Sum: ${stats.sum}`
               <Plus className="h-3.5 w-3.5" />
               Insert
             </Button>
-            {/* Global search right next to Insert */}
-            <Input
-              ref={searchInputRef}
-              placeholder="Search... (Ctrl+F)"
-              value={globalFilter ?? ""}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              className="h-8 w-44 sm:w-52 text-xs"
-              title="Search table rows (Ctrl+F)"
-            />
+            {/* Styled Global Search right next to Insert */}
+            <div className="relative flex items-center">
+              <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Search"
+                value={globalFilter ?? ""}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                className="h-8 pl-8 pr-16 text-xs w-48 sm:w-60 border-2 border-input focus-visible:ring-primary/20"
+                title="Search table rows (Ctrl+F)"
+              />
+              <span className="absolute right-2 pointer-events-none rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-xs">
+                Ctrl + F
+              </span>
+            </div>
             {selectedCount === 1 && (
               <Button
                 variant="destructive"
