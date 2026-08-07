@@ -71,7 +71,6 @@ export function AppSidebar({
                   >
                     <div className="flex min-w-0 flex-1 items-start gap-2">
                       <div className="pt-0.5 flex items-center gap-1.5">
-                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                         <DbIcon dbType={conn.db_type} className="h-4 w-4 shrink-0" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -84,14 +83,7 @@ export function AppSidebar({
                               Current
                             </span>
                           )}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground font-mono">
-                          {conn.db_type.toUpperCase()}
-                          {conn.file_path
-                            ? ` • ${conn.file_path}`
-                            : conn.host
-                              ? ` • ${conn.host}:${conn.port}`
-                              : ""}
+                                {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                         </div>
                       </div>
                     </div>
