@@ -462,6 +462,7 @@ function App() {
               onTableSelect={handleTableSelect}
               selectedTable={activeTab?.table || null}
               onNewQuery={openQueryTab}
+              onOpenQueryBuilder={openQueryBuilderTab}
             />
 
             <SidebarInset className="flex flex-col flex-1 min-w-0">
@@ -486,19 +487,6 @@ function App() {
                 <div className="flex-1" />
 
                 {/* Right Actions */}
-
-                <KeyboardTooltip
-                  description="Open Visual Query Builder"
-                  keys={["Ctrl", "B"]}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={openQueryBuilderTab}
-                  >
-                    <Network className="h-4 w-4" />
-                  </Button>
-                </KeyboardTooltip>
                 <KeyboardTooltip
                   description="Open Schema Designer"
                   keys={["Ctrl", "Shift", "E"]}
