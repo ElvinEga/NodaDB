@@ -1,3 +1,4 @@
+import { DbIcon } from "@/components/DbIcon";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -382,7 +383,7 @@ export function ConnectionDialog({
                 <SelectContent>
                   <SelectItem value="sqlite">
                     <div className="flex items-center gap-2">
-                      <Database className="h-3.5 w-3.5" />
+                      <DbIcon dbType="sqlite" className="h-4 w-4 shrink-0" />
                       <div>
                         <span>SQLite</span>
                         <span className="text-[10px] text-muted-foreground ml-2">
@@ -393,7 +394,7 @@ export function ConnectionDialog({
                   </SelectItem>
                   <SelectItem value="postgresql">
                     <div className="flex items-center gap-2">
-                      <Database className="h-3.5 w-3.5" />
+                      <DbIcon dbType="postgresql" className="h-4 w-4 shrink-0" />
                       <div>
                         <span>PostgreSQL</span>
                         <span className="text-[10px] text-muted-foreground ml-2">
@@ -404,7 +405,7 @@ export function ConnectionDialog({
                   </SelectItem>
                   <SelectItem value="mysql">
                     <div className="flex items-center gap-2">
-                      <Database className="h-3.5 w-3.5" />
+                      <DbIcon dbType="mysql" className="h-4 w-4 shrink-0" />
                       <div>
                         <span>MySQL</span>
                         <span className="text-[10px] text-muted-foreground ml-2">
