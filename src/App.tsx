@@ -1,3 +1,4 @@
+import { DbIcon } from "@/components/DbIcon";
 import { useState, useEffect } from "react";
 import {
   Database,
@@ -760,7 +761,7 @@ function App() {
                       >
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <Database className="h-6 w-6 text-primary" />
+                            <DbIcon dbType={conn.db_type} className="h-6 w-6 shrink-0" />
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold mb-1 text-left">
@@ -860,19 +861,22 @@ function App() {
                 Create Your First Connection
               </Button>
               <div className="mt-8 grid grid-cols-3 gap-4 text-sm text-muted-foreground">
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="sqlite" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     SQLite
                   </div>
                   <div className="text-xs">Local databases</div>
                 </div>
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="postgresql" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     PostgreSQL
                   </div>
                   <div className="text-xs">Remote servers</div>
                 </div>
-                <div>
+                <div className="flex flex-col items-center">
+                  <DbIcon dbType="mysql" className="h-6 w-6 mb-1.5 shrink-0" />
                   <div className="font-semibold text-foreground mb-1">
                     MySQL
                   </div>
