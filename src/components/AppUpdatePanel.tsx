@@ -71,7 +71,7 @@ export function AppUpdatePanel({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border bg-card p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
