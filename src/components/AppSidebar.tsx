@@ -37,18 +37,18 @@ export function AppSidebar({
 }: AppSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
-      <SidebarHeader data-tauri-drag-region className="border-b border-border p-2">
+      <SidebarHeader data-tauri-drag-region className="p-0 pl-20">
         {/* Connection Selector Header */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 rounded-md bg-secondary/80 px-3 py-2 text-sm transition-colors hover:bg-secondary border border-border/50"
+              className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-secondary"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="h-2 w-2 shrink-0 rounded-full bg-green-500/80 animate-pulse" />
-                <span className="truncate text-sm font-semibold">{connection.name}</span>
-                <span className="shrink-0 text-muted-foreground text-xs font-mono">
+                {/*<div className="h-2 w-2 shrink-0 rßounded-full bg-green-500/80 animate-pulse" />*/}
+                <span className="truncate text-xs font-semibold">{connection.name}</span>
+                <span className="truncate text-muted-foreground text-xs font-mono">
                   ({connection.db_type})
                 </span>
               </div>
