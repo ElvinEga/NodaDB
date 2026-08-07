@@ -1713,7 +1713,7 @@ Sum: ${stats.sum}`
               placeholder="Search"
               value={globalFilter ?? ""}
               onChange={(e) => setGlobalFilter(e.target.value)}
-              className="h-9 pl-8 pr-8 text-xs w-48  md:w-80  border-2 border-input focus-visible:ring-primary"
+              className="pl-8 pr-8 text-xs w-60  md:w-80  border-2 border-input focus-visible:ring-primary"
               title="Search table rows (Ctrl+F)"
             />
             <span className="absolute right-2 text-[8px] text-muted-foreground">
