@@ -174,9 +174,36 @@ function App() {
         isPinned: false,
         isDirty: false,
       };
-      setTabs([...tabs, newTab]);
+      setTabs((prev) => [...prev, newTab]);
       setActiveTabId(newTab.id);
     }
+  };
+
+  const handleOpenTableInNewTab = (table: DatabaseTable) => {
+    const newTab: TabType = {
+      id: `table-${table.name}-${Date.now()}`,
+      type: "table",
+      title: table.name,
+      table,
+      isPinned: false,
+      isDirty: false,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const handleOpenTableInSqlEditor = (table: DatabaseTable) => {
+    const query = `SELECT * FROM "${table.name}" LIMIT 100;`;
+    const newTab: TabType = {
+      id: `query-${Date.now()}`,
+      type: "query",
+      title: `SELECT ${table.name}`,
+      isPinned: false,
+      isDirty: true,
+      queryContent: query,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
   };
 
   const connectToConnection = async (
@@ -460,6 +487,9 @@ function App() {
               onConnectToConnection={(conn) => void connectToConnection(conn)}
               onOpenConnectionSwitcher={openConnectionSwitcher}
               onTableSelect={handleTableSelect}
+              onOpenInNewTab={handleOpenTableInNewTab}
+              onOpenInSqlEditor={handleOpenTableInSqlEditor}
+              onEditTable={() => openSchemaDesignerTab()}
               selectedTable={activeTab?.table || null}
               onNewQuery={openQueryTab}
               onOpenQueryBuilder={openQueryBuilderTab}
