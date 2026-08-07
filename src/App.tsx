@@ -460,7 +460,7 @@ function App() {
               onNewQuery={openQueryTab}
             />
 
-            <SidebarInset className="flex flex-col flex-1">
+            <SidebarInset className="flex flex-col flex-1 min-w-0">
               {/* MenuBar for Linux/Windows (macOS uses native menu) */}
               {!navigator.userAgent.includes("Mac") && (
                 <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
