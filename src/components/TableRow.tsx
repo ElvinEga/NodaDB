@@ -58,24 +58,24 @@ export function TableRow({
   showSize,
 }: TableRowProps) {
   return (
-    <div className="flex items-center gap-1 group w-full">
+    <div className="flex items-center gap-1 group w-full min-w-0">
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex-1 flex items-center min-w-0 max-w-60">
+          <div className="flex-1 flex items-center min-w-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onTableSelect(table)}
-                  className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
+                  className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors min-w-0 ${
                     selectedTable?.name === table.name
                       ? "bg-primary text-primary-foreground font-extrabold"
                       : "hover:bg-muted"
                   }`}
                 >
-                  <Table className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-left truncate w-36">{table.name}</span>
+                  <Table className="h-4 w-4 shrink-0" />
+                  <span className="text-left truncate flex-1 min-w-0">{table.name}</span>
                   {table.table_type === "VIEW" && (
-                    <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground">
+                    <span className="ml-auto text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground shrink-0">
                       VIEW
                     </span>
                   )}
@@ -143,7 +143,7 @@ export function TableRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 shrink-0"
             title="More actions"
           >
             <MoreVertical className="h-3 w-3" />
