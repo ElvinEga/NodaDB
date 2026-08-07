@@ -1690,6 +1690,15 @@ Sum: ${stats.sum}`
               <Plus className="h-3.5 w-3.5" />
               Insert
             </Button>
+            {/* Global search right next to Insert */}
+            <Input
+              ref={searchInputRef}
+              placeholder="Search... (Ctrl+F)"
+              value={globalFilter ?? ""}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="h-8 w-44 sm:w-52 text-xs"
+              title="Search table rows (Ctrl+F)"
+            />
             {selectedCount === 1 && (
               <Button
                 variant="destructive"
@@ -2118,15 +2127,6 @@ Sum: ${stats.sum}`
                   })}
               </DropdownMenuContent>
             </DropdownMenu>
-
-            {/* Global search */}
-            <Input
-              ref={searchInputRef}
-              placeholder="Search... (Ctrl+F)"
-              value={globalFilter ?? ""}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              className="h-8 w-48 text-xs"
-            />
           </div>
         </div>
 
