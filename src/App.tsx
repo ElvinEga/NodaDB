@@ -505,12 +505,16 @@ function App() {
               {/* Top Navigation Bar */}
               <header
                 data-tauri-drag-region
-                className={`py-1.5 border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
+                className={`border-b border-border bg-background text-foreground flex items-center px-4 gap-4 ${sidebarOpen ? "pl-0" : "pl-20"}`}
               >
                 {/* Logo & App Name */}
                 {activeConnectionId && activeConnection && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center gap-2">
                     <SidebarTrigger />
+                    {!navigator.userAgent.includes("Mac") && (
+                      <header className="w-full">
+                        <MenuBar onOpenAbout={() => setAboutDialogOpen(true)} />
+                      </header>)}
                   </div>
                 )}
 
