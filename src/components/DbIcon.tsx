@@ -2,6 +2,7 @@ import mysqlIcon from "@/assets/icons/db/mysql-icon.svg";
 import postgresIcon from "@/assets/icons/db/postgresql-icon.svg";
 import sqliteIcon from "@/assets/icons/db/sqlite-icon.svg";
 import supabaseIcon from "@/assets/icons/db/supabase-icon.svg";
+import neonIcon from "@/assets/icons/db/neon-icon.svg";
 import { Database } from "lucide-react";
 
 export function getDbIconSrc(dbType?: string): string | null {
@@ -11,19 +12,23 @@ export function getDbIconSrc(dbType?: string): string | null {
   if (type.includes("mysql") || type.includes("maria")) return mysqlIcon;
   if (type.includes("sqlite")) return sqliteIcon;
   if (type.includes("supabase")) return supabaseIcon;
+  if (type.includes("neon")) return neonIcon;
   return null;
 }
 
 export function DbIcon({
   dbType,
+  provider,
   className = "h-4 w-4 shrink-0",
 }: {
   dbType?: string;
+  provider?: string;
   className?: string;
 }) {
-  const iconSrc = getDbIconSrc(dbType);
+  // Provider overrides db_type icon (e.g. Supabase/Neon are postgresql underneath)
+  const iconSrc = provider ? getDbIconSrc(provider) : getDbIconSrc(dbType);
   if (!iconSrc) {
     return <Database className={className} />;
   }
-  return <img src={iconSrc} alt={dbType} className={className} />;
+  return <img src={iconSrc} alt={provider ?? dbType} className={className} />;
 }
