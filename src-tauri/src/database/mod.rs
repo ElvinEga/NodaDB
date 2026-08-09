@@ -22,6 +22,8 @@ pub enum DatabasePool {
     MongoDB { client: mongodb::Client, database: String },
     ClickHouse { client: reqwest::Client, url: String, database: String },
     LibSQL { client: reqwest::Client, url: String, token: String },
+    Redis { client: redis::Client, db: u8 },
+    CloudflareD1 { client: reqwest::Client, account_id: String, database_id: String, api_token: String },
 }
 
 macro_rules! decimal_json_value {
@@ -226,6 +228,14 @@ macro_rules! execute_query {
                 let res = ConnectionManager::libsql_http_pipeline(client, url, token, $query).await?;
                 res.rows_affected
             }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let res = ConnectionManager::cloudflare_d1_query(client, account_id, database_id, api_token, $query).await?;
+                res.rows_affected
+            }
+            DatabasePool::Redis { client, db } => {
+                let res = ConnectionManager::redis_execute_cmd(client, *db, $query).await?;
+                res.rows_affected
+            }
         };
         Ok::<u64, anyhow::Error>(rows_affected)
     }};
@@ -286,7 +296,7 @@ impl ConnectionManager {
                 format!("\"{}\"", identifier.replace('"', "\"\""))
             }
             DatabaseType::MySQL | DatabaseType::ClickHouse => format!("`{}`", identifier.replace('`', "``")),
-            DatabaseType::MongoDB => identifier.to_string(),
+            DatabaseType::MongoDB | DatabaseType::Redis => identifier.to_string(),
         }
     }
 
@@ -315,7 +325,7 @@ impl ConnectionManager {
                     Self::quote_identifier(table_name.trim_matches('`'), db_type)
                 }
             }
-            DatabaseType::MongoDB => table_name.to_string(),
+            DatabaseType::MongoDB | DatabaseType::Redis => table_name.to_string(),
         }
     }
 
@@ -834,6 +844,182 @@ impl ConnectionManager {
         })
     }
 
+    async fn cloudflare_d1_query(
+        client: &reqwest::Client,
+        account_id: &str,
+        database_id: &str,
+        api_token: &str,
+        sql: &str,
+    ) -> Result<QueryResult> {
+        let endpoint = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/d1/database/{}/query",
+            account_id, database_id
+        );
+
+        let body = serde_json::json!({
+            "sql": sql,
+            "params": []
+        });
+
+        let resp = client
+            .post(&endpoint)
+            .header("Authorization", format!("Bearer {}", api_token))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_else(|_| "Cloudflare D1 HTTP error".to_string());
+            return Err(anyhow!("Cloudflare D1 Error: {}", err_text));
+        }
+
+        let json_resp: serde_json::Value = resp.json().await?;
+        if json_resp.get("success").and_then(|s| s.as_bool()) == Some(false) {
+            let err_msg = json_resp.get("errors")
+                .and_then(|e| e.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|f| f.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("D1 Query Error");
+            return Err(anyhow!("Cloudflare D1 Error: {}", err_msg));
+        }
+
+        let first_res = json_resp.get("result")
+            .and_then(|r| r.as_array())
+            .and_then(|arr| arr.first());
+
+        let mut columns = Vec::new();
+        let mut rows = Vec::new();
+        let mut rows_affected = 0_u64;
+
+        if let Some(res) = first_res {
+            if let Some(meta) = res.get("meta") {
+                if let Some(changes) = meta.get("changes").and_then(|c| c.as_u64()) {
+                    rows_affected = changes;
+                }
+            }
+
+            if let Some(row_arr) = res.get("results").and_then(|r| r.as_array()) {
+                if let Some(first_row) = row_arr.first().and_then(|r| r.as_object()) {
+                    for key in first_row.keys() {
+                        columns.push(key.clone());
+                    }
+                }
+                for row_val in row_arr {
+                    rows.push(row_val.clone());
+                }
+            }
+        }
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            rows_affected,
+        })
+    }
+
+    async fn redis_execute_cmd(
+        client: &redis::Client,
+        db: u8,
+        query: &str,
+    ) -> Result<QueryResult> {
+        use redis::AsyncCommands;
+        let mut conn = client.get_multiplexed_async_connection().await?;
+        if db > 0 {
+            let _: () = redis::cmd("SELECT").arg(db).query_async(&mut conn).await?;
+        }
+
+        let trimmed = query.trim();
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let cmd = parts.first().unwrap_or(&"KEYS").to_uppercase();
+
+        let mut columns = vec!["key".to_string(), "type".to_string(), "value".to_string(), "ttl".to_string()];
+        let mut rows = Vec::new();
+
+        if cmd == "KEYS" || cmd == "SCAN" {
+            let pattern = parts.get(1).copied().unwrap_or("*");
+            let keys: Vec<String> = conn.keys(pattern).await.unwrap_or_default();
+            for key in keys {
+                let key_type: String = redis::cmd("TYPE").arg(&key).query_async(&mut conn).await.unwrap_or_else(|_| "unknown".to_string());
+                let ttl: i64 = conn.ttl(&key).await.unwrap_or(-1);
+                let val_str: String = match key_type.as_str() {
+                    "string" => conn.get(&key).await.unwrap_or_default(),
+                    "hash" => {
+                        let h: HashMap<String, String> = conn.hgetall(&key).await.unwrap_or_default();
+                        serde_json::to_string(&h).unwrap_or_default()
+                    }
+                    "list" => {
+                        let l: Vec<String> = conn.lrange(&key, 0, 100).await.unwrap_or_default();
+                        serde_json::to_string(&l).unwrap_or_default()
+                    }
+                    "set" => {
+                        let s: Vec<String> = conn.smembers(&key).await.unwrap_or_default();
+                        serde_json::to_string(&s).unwrap_or_default()
+                    }
+                    "zset" => {
+                        let z: Vec<(String, f64)> = conn.zrange_withscores(&key, 0, 100).await.unwrap_or_default();
+                        serde_json::to_string(&z).unwrap_or_default()
+                    }
+                    _ => String::new(),
+                };
+
+                let mut row_map = serde_json::Map::new();
+                row_map.insert("key".to_string(), serde_json::Value::String(key));
+                row_map.insert("type".to_string(), serde_json::Value::String(key_type));
+                row_map.insert("value".to_string(), serde_json::Value::String(val_str));
+                row_map.insert("ttl".to_string(), serde_json::Value::Number(ttl.into()));
+                rows.push(serde_json::Value::Object(row_map));
+            }
+        } else if cmd == "GET" {
+            if let Some(&key) = parts.get(1) {
+                let val: Option<String> = conn.get(key).await.ok();
+                let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
+                let key_type: String = redis::cmd("TYPE").arg(key).query_async(&mut conn).await.unwrap_or_else(|_| "string".to_string());
+                let mut row_map = serde_json::Map::new();
+                row_map.insert("key".to_string(), serde_json::Value::String(key.to_string()));
+                row_map.insert("type".to_string(), serde_json::Value::String(key_type));
+                row_map.insert("value".to_string(), val.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null));
+                row_map.insert("ttl".to_string(), serde_json::Value::Number(ttl.into()));
+                rows.push(serde_json::Value::Object(row_map));
+            }
+        } else if cmd == "SET" {
+            if parts.len() >= 3 {
+                let key = parts[1];
+                let val = parts[2..].join(" ");
+                let _: () = conn.set(key, &val).await?;
+                return Ok(QueryResult {
+                    columns: vec!["result".to_string()],
+                    rows: vec![serde_json::json!({ "result": "OK", "key": key, "value": val })],
+                    rows_affected: 1,
+                });
+            }
+        } else if cmd == "DEL" {
+            if let Some(&key) = parts.get(1) {
+                let deleted: u64 = conn.del(key).await?;
+                return Ok(QueryResult {
+                    columns: vec!["deleted".to_string()],
+                    rows: vec![serde_json::json!({ "key": key, "deleted": deleted })],
+                    rows_affected: deleted,
+                });
+            }
+        } else {
+            let mut redis_cmd = redis::cmd(&cmd);
+            for p in &parts[1..] {
+                redis_cmd.arg(p);
+            }
+            let res_val: redis::Value = redis_cmd.query_async(&mut conn).await?;
+            columns = vec!["result".to_string()];
+            rows = vec![serde_json::json!({ "result": format!("{:?}", res_val) })];
+        }
+
+        let rows_affected = rows.len() as u64;
+        Ok(QueryResult {
+            columns,
+            rows,
+            rows_affected,
+        })
+    }
+
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
         let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
@@ -871,13 +1057,32 @@ impl ConnectionManager {
 
         let pool = match config.db_type {
             DatabaseType::SQLite => {
-                let path = config
-                    .file_path
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("SQLite file path is required"))?;
-                let connection_string = format!("sqlite://{}", path);
-                let pool = sqlx::SqlitePool::connect(&connection_string).await?;
-                DatabasePool::Sqlite(pool)
+                if config.provider.as_deref() == Some("cloudflare") {
+                    let account_id = config.cloudflare_account_id.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare Account ID is required"))?
+                        .to_string();
+                    let database_id = config.cloudflare_database_id.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare Database ID is required"))?
+                        .to_string();
+                    let api_token = config.cloudflare_api_token.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare API Token is required"))?
+                        .to_string();
+                    let client = reqwest::Client::builder().build()?;
+                    DatabasePool::CloudflareD1 {
+                        client,
+                        account_id,
+                        database_id,
+                        api_token,
+                    }
+                } else {
+                    let path = config
+                        .file_path
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("SQLite file path is required"))?;
+                    let connection_string = format!("sqlite://{}", path);
+                    let pool = sqlx::SqlitePool::connect(&connection_string).await?;
+                    DatabasePool::Sqlite(pool)
+                }
             }
             DatabaseType::PostgreSQL => {
                 let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
@@ -992,6 +1197,21 @@ impl ConnectionManager {
                     token,
                 }
             }
+            DatabaseType::Redis => {
+                let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host };
+                let port = if actual_port == 0 { 6379 } else { actual_port };
+                let db = config.redis_db.unwrap_or(0);
+
+                let user_pass = match (config.username.as_deref(), config.password.as_deref()) {
+                    (Some(u), Some(p)) if !u.is_empty() && !p.is_empty() => format!("{}:{}@", u, urlencoding::encode(p)),
+                    (None, Some(p)) if !p.is_empty() => format!(":{}@", urlencoding::encode(p)),
+                    (Some(u), None) if !u.is_empty() => format!("{}@", u),
+                    _ => "".to_string(),
+                };
+                let redis_url = format!("redis://{}{}:{}/{}", user_pass, host, port, db);
+                let client = redis::Client::open(redis_url)?;
+                DatabasePool::Redis { client, db }
+            }
         };
 
         let mut connections = self.connections.write().await;
@@ -1068,35 +1288,77 @@ impl ConnectionManager {
 
         let result = match config.db_type {
             DatabaseType::SQLite => {
-                let path = config
-                    .file_path
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("SQLite file path is required"))?;
-                let connection_string = format!("sqlite://{}", path);
+                if config.provider.as_deref() == Some("cloudflare") {
+                    let account_id = config.cloudflare_account_id.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare Account ID is required"))?;
+                    let database_id = config.cloudflare_database_id.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare Database ID is required"))?;
+                    let api_token = config.cloudflare_api_token.as_deref()
+                        .ok_or_else(|| anyhow!("Cloudflare API Token is required"))?;
 
-                match sqlx::SqlitePool::connect(&connection_string).await {
-                    Ok(pool) => {
-                        let version_query = "SELECT sqlite_version()";
-                        let row = sqlx::query(version_query).fetch_one(&pool).await?;
-                        let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
-
-                        let latency_ms = start.elapsed().as_millis() as u64;
-
-                        pool.close().await;
-
-                        ConnectionTestResult {
-                            success: true,
-                            latency_ms,
-                            db_version: format!("SQLite {}", version),
-                            error: None,
+                    match reqwest::Client::builder().build() {
+                        Ok(client) => {
+                            match Self::cloudflare_d1_query(&client, account_id, database_id, api_token, "SELECT sqlite_version()").await {
+                                Ok(res) => {
+                                    let version = res.rows.first()
+                                        .and_then(|r| r.as_object())
+                                        .and_then(|obj| obj.values().next())
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("Unknown");
+                                    let latency_ms = start.elapsed().as_millis() as u64;
+                                    ConnectionTestResult {
+                                        success: true,
+                                        latency_ms,
+                                        db_version: format!("Cloudflare D1 (SQLite {})", version),
+                                        error: None,
+                                    }
+                                }
+                                Err(e) => ConnectionTestResult {
+                                    success: false,
+                                    latency_ms: 0,
+                                    db_version: String::new(),
+                                    error: Some(e.to_string()),
+                                },
+                            }
                         }
+                        Err(e) => ConnectionTestResult {
+                            success: false,
+                            latency_ms: 0,
+                            db_version: String::new(),
+                            error: Some(e.to_string()),
+                        },
                     }
-                    Err(e) => ConnectionTestResult {
-                        success: false,
-                        latency_ms: 0,
-                        db_version: String::new(),
-                        error: Some(e.to_string()),
-                    },
+                } else {
+                    let path = config
+                        .file_path
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("SQLite file path is required"))?;
+                    let connection_string = format!("sqlite://{}", path);
+
+                    match sqlx::SqlitePool::connect(&connection_string).await {
+                        Ok(pool) => {
+                            let version_query = "SELECT sqlite_version()";
+                            let row = sqlx::query(version_query).fetch_one(&pool).await?;
+                            let version: String = row.try_get(0).unwrap_or_else(|_| "Unknown".to_string());
+
+                            let latency_ms = start.elapsed().as_millis() as u64;
+
+                            pool.close().await;
+
+                            ConnectionTestResult {
+                                success: true,
+                                latency_ms,
+                                db_version: format!("SQLite {}", version),
+                                error: None,
+                            }
+                        }
+                        Err(e) => ConnectionTestResult {
+                            success: false,
+                            latency_ms: 0,
+                            db_version: String::new(),
+                            error: Some(e.to_string()),
+                        },
+                    }
                 }
             }
             DatabaseType::PostgreSQL => {
@@ -1345,6 +1607,52 @@ impl ConnectionManager {
                     },
                 }
             }
+            DatabaseType::Redis => {
+                let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host };
+                let port = if actual_port == 0 { 6379 } else { actual_port };
+                let db = config.redis_db.unwrap_or(0);
+
+                let user_pass = match (config.username.as_deref(), config.password.as_deref()) {
+                    (Some(u), Some(p)) if !u.is_empty() && !p.is_empty() => format!("{}:{}@", u, urlencoding::encode(p)),
+                    (None, Some(p)) if !p.is_empty() => format!(":{}@", urlencoding::encode(p)),
+                    (Some(u), None) if !u.is_empty() => format!("{}@", u),
+                    _ => "".to_string(),
+                };
+                let redis_url = format!("redis://{}{}:{}/{}", user_pass, host, port, db);
+                match redis::Client::open(redis_url) {
+                    Ok(client) => {
+                        match client.get_multiplexed_async_connection().await {
+                            Ok(mut conn) => {
+                                let info: String = redis::cmd("INFO").arg("server").query_async(&mut conn).await.unwrap_or_default();
+                                let redis_ver = info.lines()
+                                    .find(|l| l.starts_with("redis_version:"))
+                                    .and_then(|l| l.split(':').nth(1))
+                                    .unwrap_or("Server");
+
+                                let latency_ms = start.elapsed().as_millis() as u64;
+                                ConnectionTestResult {
+                                    success: true,
+                                    latency_ms,
+                                    db_version: format!("Redis v{} (DB {})", redis_ver.trim(), db),
+                                    error: None,
+                                }
+                            }
+                            Err(e) => ConnectionTestResult {
+                                success: false,
+                                latency_ms: 0,
+                                db_version: String::new(),
+                                error: Some(e.to_string()),
+                            },
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
         };
 
         Ok(result)
@@ -1530,6 +1838,46 @@ impl ConnectionManager {
                 }
                 tables
             }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let query = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name";
+                let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, query).await?;
+                let mut tables = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let table_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("table").to_string();
+                        tables.push(DatabaseTable {
+                            name: name.clone(),
+                            schema: None,
+                            full_name: Some(name),
+                            row_count: None,
+                            size_kb: None,
+                            table_type: Some(table_type.to_uppercase()),
+                        });
+                    }
+                }
+                tables
+            }
+            DatabasePool::Redis { client, db } => {
+                let res = Self::redis_execute_cmd(client, *db, "KEYS *").await?;
+                let mut tables = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        if let Some(k) = obj.get("key").and_then(|v| v.as_str()) {
+                            let k_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("KEY").to_string();
+                            tables.push(DatabaseTable {
+                                name: k.to_string(),
+                                schema: None,
+                                full_name: Some(k.to_string()),
+                                row_count: Some(1),
+                                size_kb: None,
+                                table_type: Some(k_type.to_uppercase()),
+                            });
+                        }
+                    }
+                }
+                tables
+            }
         };
 
         Ok(tables)
@@ -1563,6 +1911,7 @@ impl ConnectionManager {
             }
             DatabaseType::MongoDB => String::new(),
             DatabaseType::ClickHouse => String::new(),
+            DatabaseType::Redis => String::new(),
         };
 
         let columns = match pool {
@@ -1888,6 +2237,158 @@ impl ConnectionManager {
                 }
                 columns
             }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &query).await?;
+                let mut columns = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let data_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("TEXT").to_string();
+                        let not_null = obj.get("notnull").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let default_value = obj.get("dflt_value").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        let is_pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
+                        let normalized_type = normalize_type_name(&data_type);
+                        let type_family = classify_sqlite_type(&data_type);
+
+                        columns.push(TableColumn {
+                            name,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type),
+                            normalized_type,
+                            type_family: type_family.clone(),
+                            db_type: DatabaseType::SQLite,
+                            is_nullable: not_null == 0,
+                            default_value,
+                            is_primary_key: is_pk,
+                            is_boolean_like: matches!(type_family, ColumnTypeFamily::Boolean),
+                            is_array: false,
+                            enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
+                        });
+                    }
+                }
+                columns
+            }
+            DatabasePool::Redis { client, db } => {
+                let res = Self::redis_execute_cmd(client, *db, &format!("GET {}", table_name)).await;
+                let k_type = if let Ok(ref r) = res {
+                    r.rows.first()
+                        .and_then(|row| row.get("type"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("string")
+                        .to_string()
+                } else {
+                    "string".to_string()
+                };
+
+                vec![
+                    TableColumn {
+                        name: "key".to_string(),
+                        data_type: "STRING".to_string(),
+                        raw_type: Some("STRING".to_string()),
+                        normalized_type: "STRING".to_string(),
+                        type_family: ColumnTypeFamily::Text,
+                        db_type: DatabaseType::Redis,
+                        is_nullable: false,
+                        default_value: None,
+                        is_primary_key: true,
+                        is_boolean_like: false,
+                        is_array: false,
+                        enum_values: None,
+                        identity_kind: None,
+                        generated_kind: None,
+                        generation_expression: None,
+                        column_comment: None,
+                        collation_name: None,
+                        domain_name: None,
+                        domain_schema: None,
+                        domain_base_type: None,
+                        array_dimensions: None,
+                        element_raw_type: None,
+                    },
+                    TableColumn {
+                        name: "type".to_string(),
+                        data_type: "STRING".to_string(),
+                        raw_type: Some("STRING".to_string()),
+                        normalized_type: "STRING".to_string(),
+                        type_family: ColumnTypeFamily::Text,
+                        db_type: DatabaseType::Redis,
+                        is_nullable: false,
+                        default_value: Some(k_type),
+                        is_primary_key: false,
+                        is_boolean_like: false,
+                        is_array: false,
+                        enum_values: None,
+                        identity_kind: None,
+                        generated_kind: None,
+                        generation_expression: None,
+                        column_comment: None,
+                        collation_name: None,
+                        domain_name: None,
+                        domain_schema: None,
+                        domain_base_type: None,
+                        array_dimensions: None,
+                        element_raw_type: None,
+                    },
+                    TableColumn {
+                        name: "value".to_string(),
+                        data_type: "TEXT".to_string(),
+                        raw_type: Some("TEXT".to_string()),
+                        normalized_type: "TEXT".to_string(),
+                        type_family: ColumnTypeFamily::Text,
+                        db_type: DatabaseType::Redis,
+                        is_nullable: true,
+                        default_value: None,
+                        is_primary_key: false,
+                        is_boolean_like: false,
+                        is_array: false,
+                        enum_values: None,
+                        identity_kind: None,
+                        generated_kind: None,
+                        generation_expression: None,
+                        column_comment: None,
+                        collation_name: None,
+                        domain_name: None,
+                        domain_schema: None,
+                        domain_base_type: None,
+                        array_dimensions: None,
+                        element_raw_type: None,
+                    },
+                    TableColumn {
+                        name: "ttl".to_string(),
+                        data_type: "INTEGER".to_string(),
+                        raw_type: Some("INTEGER".to_string()),
+                        normalized_type: "INTEGER".to_string(),
+                        type_family: ColumnTypeFamily::Integer,
+                        db_type: DatabaseType::Redis,
+                        is_nullable: false,
+                        default_value: None,
+                        is_primary_key: false,
+                        is_boolean_like: false,
+                        is_array: false,
+                        enum_values: None,
+                        identity_kind: None,
+                        generated_kind: None,
+                        generation_expression: None,
+                        column_comment: None,
+                        collation_name: None,
+                        domain_name: None,
+                        domain_schema: None,
+                        domain_base_type: None,
+                        array_dimensions: None,
+                        element_raw_type: None,
+                    },
+                ]
+            }
         };
 
         Ok(columns)
@@ -1946,6 +2447,12 @@ impl ConnectionManager {
             }
             DatabasePool::LibSQL { client, url, token } => {
                 Self::libsql_http_pipeline(client, url, token, query).await
+            }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                Self::cloudflare_d1_query(client, account_id, database_id, api_token, query).await
+            }
+            DatabasePool::Redis { client, db } => {
+                Self::redis_execute_cmd(client, *db, query).await
             }
         }
     }
@@ -2053,6 +2560,29 @@ impl ConnectionManager {
 
                 (steps, None)
             }
+            (DatabasePool::CloudflareD1 { client, account_id, database_id, api_token }, _) => {
+                let explain_query = format!("EXPLAIN QUERY PLAN {}", query);
+                let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &explain_query).await?;
+
+                let mut steps = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let detail = obj.get("detail").and_then(|v| v.as_str()).unwrap_or("Query Step");
+                        steps.push(PlanStep {
+                            step_type: detail.to_string(),
+                            table_name: None,
+                            rows: None,
+                            cost: None,
+                            filter_condition: None,
+                            index_used: None,
+                            children: vec![],
+                        });
+                    }
+                }
+
+                (steps, None)
+            }
+            (DatabasePool::Redis { .. }, _) => (vec![], None),
             _ => return Err(anyhow!("Database type mismatch")),
         };
 
@@ -2620,7 +3150,7 @@ impl ConnectionManager {
                 format!("ALTER TABLE {} ADD COLUMN {} {}{}", 
                     target_table, target_column, data_type, nullable_clause)
             }
-            DatabaseType::MongoDB => String::new(),
+            DatabaseType::MongoDB | DatabaseType::Redis => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -2640,8 +3170,8 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
-        if matches!(pool, DatabasePool::MongoDB { .. }) {
-            return Err(anyhow!("MongoDB is schemaless. Column operations are not applicable."));
+        if matches!(pool, DatabasePool::MongoDB { .. } | DatabasePool::Redis { .. }) {
+            return Err(anyhow!("Schema column operations are not applicable."));
         }
 
         let query = match db_type {
@@ -2661,7 +3191,7 @@ impl ConnectionManager {
                 };
                 format!("ALTER TABLE {} DROP COLUMN {}", target_table, target_column)
             }
-            DatabaseType::MongoDB => String::new(),
+            DatabaseType::MongoDB | DatabaseType::Redis => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -2690,6 +3220,12 @@ impl ConnectionManager {
             return Ok(format!("Successfully renamed collection {} to {}", old_name, new_name));
         }
 
+        if let DatabasePool::Redis { client, db } = pool {
+            let sql = format!("RENAME {} {}", old_name, new_name);
+            Self::redis_execute_cmd(client, *db, &sql).await?;
+            return Ok(format!("Successfully renamed key {} to {}", old_name, new_name));
+        }
+
         if let DatabasePool::ClickHouse { client, url, database } = pool {
             let sql = format!("RENAME TABLE {} TO {}", old_name, new_name);
             Self::clickhouse_http_execute(client, url, database, &sql).await?;
@@ -2704,7 +3240,7 @@ impl ConnectionManager {
                 let quoted_new = Self::quote_pg_ident(new_name);
                 format!("ALTER TABLE {} RENAME TO {}", quoted_old, quoted_new)
             }
-            DatabaseType::MongoDB => String::new(),
+            DatabaseType::MongoDB | DatabaseType::Redis => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -2770,6 +3306,18 @@ impl ConnectionManager {
             DatabasePool::LibSQL { client, url, token } => {
                 for query in queries {
                     let res = Self::libsql_http_pipeline(client, url, token, query).await?;
+                    total_rows_affected += res.rows_affected;
+                }
+            }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                for query in queries {
+                    let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, query).await?;
+                    total_rows_affected += res.rows_affected;
+                }
+            }
+            DatabasePool::Redis { client, db } => {
+                for query in queries {
+                    let res = Self::redis_execute_cmd(client, *db, query).await?;
                     total_rows_affected += res.rows_affected;
                 }
             }
@@ -2967,7 +3515,7 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => vec![],
             DatabasePool::ClickHouse { .. } => vec![],
-            DatabasePool::LibSQL { .. } => vec![],
+            DatabasePool::LibSQL { .. } | DatabasePool::CloudflareD1 { .. } | DatabasePool::Redis { .. } => vec![],
         };
 
         Ok(constraints)
@@ -3120,8 +3668,8 @@ impl ConnectionManager {
                 );
                 execute_query!(pool, &sql)?;
             }
-            DatabaseType::MongoDB => {
-                return Err(anyhow!("Foreign keys are not supported for MongoDB"));
+            DatabaseType::MongoDB | DatabaseType::Redis => {
+                return Err(anyhow!("Foreign keys are not supported for MongoDB/Redis"));
             }
             DatabaseType::ClickHouse => {
                 return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
@@ -3180,8 +3728,8 @@ impl ConnectionManager {
                 );
                 execute_query!(pool, &sql)?;
             }
-            DatabaseType::MongoDB => {
-                return Err(anyhow!("Foreign keys are not supported for MongoDB"));
+            DatabaseType::MongoDB | DatabaseType::Redis => {
+                return Err(anyhow!("Foreign keys are not supported for MongoDB/Redis"));
             }
             DatabaseType::ClickHouse => {
                 return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
@@ -3213,7 +3761,7 @@ impl ConnectionManager {
             DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::MySQL | DatabaseType::ClickHouse | DatabaseType::LibSQL => {
                 "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
             }
-            DatabaseType::MongoDB => "",
+            DatabaseType::MongoDB | DatabaseType::Redis => "",
         };
 
         let migrations = match pool {
@@ -3276,6 +3824,21 @@ impl ConnectionManager {
                     Err(_) => vec![],
                 }
             }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, sql).await;
+                match res {
+                    Ok(r) => r.rows.into_iter().filter_map(|row| {
+                        let obj = row.as_object()?;
+                        let id = obj.get("id")?.as_str()?.to_string();
+                        let name = obj.get("name")?.as_str()?.to_string();
+                        let applied_at = obj.get("applied_at").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let checksum = obj.get("checksum").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        Some(AppliedMigration { id, name, applied_at, checksum })
+                    }).collect(),
+                    Err(_) => vec![],
+                }
+            }
+            DatabasePool::Redis { .. } => vec![],
         };
 
         Ok(migrations)
@@ -3571,7 +4134,7 @@ impl ConnectionManager {
         connection_id: &str,
         db_type: &DatabaseType,
     ) -> Result<()> {
-        if db_type == &DatabaseType::MongoDB {
+        if db_type == &DatabaseType::MongoDB || db_type == &DatabaseType::Redis {
             return Ok(());
         }
 
@@ -3605,7 +4168,7 @@ impl ConnectionManager {
                     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             "#,
-            DatabaseType::MongoDB => "",
+            DatabaseType::MongoDB | DatabaseType::Redis => "",
             DatabaseType::ClickHouse => r#"
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     id String,
@@ -3932,7 +4495,7 @@ impl ConnectionManager {
                     table_name
                 )
             }
-            DatabaseType::MongoDB => String::new(),
+            DatabaseType::MongoDB | DatabaseType::Redis => String::new(),
             DatabaseType::ClickHouse => String::new(),
         };
 
@@ -3986,6 +4549,22 @@ impl ConnectionManager {
                 }
                 pks
             }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &query).await?;
+                let mut pks = Vec::new();
+                for r in res.rows {
+                    if let Some(obj) = r.as_object() {
+                        let pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if pk > 0 {
+                            if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                                pks.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+                pks
+            }
+            DatabasePool::Redis { .. } => vec!["key".to_string()],
         };
 
         Ok(primary_keys)
@@ -4018,7 +4597,7 @@ impl ConnectionManager {
                     table_name
                 )
             }
-            DatabaseType::MongoDB => String::new(),
+            DatabaseType::MongoDB | DatabaseType::Redis => String::new(),
             DatabaseType::ClickHouse => String::new(),
         };
 
@@ -4093,6 +4672,32 @@ impl ConnectionManager {
             DatabasePool::MongoDB { .. } => vec![],
             DatabasePool::ClickHouse { .. } => vec![],
             DatabasePool::LibSQL { .. } => vec![],
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let rows = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &query).await?;
+                let mut index_sqls = Vec::new();
+                for row in rows.rows {
+                    if let Some(obj) = row.as_object() {
+                        let index_name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                        let is_unique = obj.get("unique").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if index_name.starts_with("sqlite_autoindex") {
+                            continue;
+                        }
+                        let info_query = format!("PRAGMA index_info({})", index_name);
+                        let info_res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &info_query).await;
+                        if let Ok(info_rows) = info_res {
+                            let columns: Vec<String> = info_rows.rows.into_iter().filter_map(|r| {
+                                r.as_object()?.get("name")?.as_str().map(|s| s.to_string())
+                            }).collect();
+                            if !columns.is_empty() {
+                                let unique = if is_unique == 1 { "UNIQUE " } else { "" };
+                                index_sqls.push(format!("CREATE {}INDEX {} ON {} ({})", unique, index_name, table_name, columns.join(", ")));
+                            }
+                        }
+                    }
+                }
+                index_sqls
+            }
+            DatabasePool::Redis { .. } => vec![],
         };
 
         Ok(indexes)
@@ -4527,7 +5132,7 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => {}
             DatabasePool::ClickHouse { .. } => {}
-            DatabasePool::LibSQL { .. } => {}
+            DatabasePool::LibSQL { .. } | DatabasePool::CloudflareD1 { .. } | DatabasePool::Redis { .. } => {}
         }
 
         Ok(matches)
@@ -4679,6 +5284,20 @@ impl ConnectionManager {
                     offset
                 );
                 Self::libsql_http_pipeline(client, url, token, &query).await
+            }
+            DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let query = format!(
+                    "SELECT * FROM \"{}\" WHERE \"{}\" = '{}' LIMIT {} OFFSET {}",
+                    table_name.replace('"', "\"\""),
+                    column_name.replace('"', "\"\""),
+                    clean_value.replace('\'', "''"),
+                    limit,
+                    offset
+                );
+                Self::cloudflare_d1_query(client, account_id, database_id, api_token, &query).await
+            }
+            DatabasePool::Redis { client, db } => {
+                Self::redis_execute_cmd(client, *db, &format!("GET {}", table_name)).await
             }
         }
     }

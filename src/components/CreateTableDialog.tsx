@@ -123,6 +123,14 @@ const DATA_TYPES = {
     "DATE",
     "DATETIME",
   ],
+  redis: [
+    "String",
+    "Hash",
+    "List",
+    "Set",
+    "ZSet",
+    "JSON",
+  ],
 };
 
 export function CreateTableDialog({
