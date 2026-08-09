@@ -29,6 +29,7 @@ import {
   ConnectionConfig,
   DatabaseType,
   DatabaseProvider,
+  MariaDBAuthMethod,
   ConnectionTestResult,
   SSHAuthMethod,
 } from "@/types";
@@ -77,8 +78,16 @@ export function ConnectionDialog({
   const [sshAuthMethod, setSshAuthMethod] = useState<SSHAuthMethod>("password");
   const [sshPassword, setSshPassword] = useState("");
   const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState("");
-  // Cloud provider (supabase | neon). When set, dbType is always "postgresql".
+  // Cloud provider (supabase | neon | mariadb). When set, dbType is always "postgresql"/"mysql".
   const [provider, setProvider] = useState<DatabaseProvider | undefined>(undefined);
+  // MariaDB auth method + cloud credential fields
+  const [authMethod, setAuthMethod] = useState<MariaDBAuthMethod>('password');
+  const [awsRegion, setAwsRegion] = useState('');
+  const [awsDbUser, setAwsDbUser] = useState('');
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState('');
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('');
+  const [azureTenantId, setAzureTenantId] = useState('');
+  const [gcpProject, setGcpProject] = useState('');
 
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
@@ -92,6 +101,13 @@ export function ConnectionDialog({
       setName(editConnection.name);
       setDbType(editConnection.db_type);
       setProvider(editConnection.provider);
+      setAuthMethod(editConnection.auth_method ?? 'password');
+      setAwsRegion(editConnection.aws_region ?? '');
+      setAwsDbUser(editConnection.aws_db_user ?? '');
+      setAwsAccessKeyId(editConnection.aws_access_key_id ?? '');
+      setAwsSecretAccessKey(editConnection.aws_secret_access_key ?? '');
+      setAzureTenantId(editConnection.azure_tenant_id ?? '');
+      setGcpProject(editConnection.gcp_project ?? '');
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
@@ -119,6 +135,13 @@ export function ConnectionDialog({
         setName('');
         setDbType('sqlite');
         setProvider(undefined);
+        setAuthMethod('password');
+        setAwsRegion('');
+        setAwsDbUser('');
+        setAwsAccessKeyId('');
+        setAwsSecretAccessKey('');
+        setAzureTenantId('');
+        setGcpProject('');
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -143,7 +166,8 @@ export function ConnectionDialog({
    */
   const selectValue =
     provider === 'supabase' ? 'supabase' :
-    provider === 'neon'      ? 'neon'      :
+    provider === 'neon'     ? 'neon'     :
+    provider === 'mariadb'  ? 'mariadb'  :
     dbType;
 
   const handleDbTypeOrProviderChange = (value: string) => {
@@ -157,9 +181,16 @@ export function ConnectionDialog({
       setProvider('neon');
       setPort('5432');
       setConnectionType('connectionString');
+    } else if (value === 'mariadb') {
+      setDbType('mysql');
+      setProvider('mariadb');
+      setPort('3306');
+      setAuthMethod('password');
+      setConnectionType('direct');
     } else {
       setDbType(value as DatabaseType);
       setProvider(undefined);
+      setAuthMethod('password');
       if (value === 'postgresql') setPort('5432');
       if (value === 'mysql') setPort('3306');
     }
@@ -248,6 +279,14 @@ export function ConnectionDialog({
         id: "test",
         name: "test",
         db_type: dbType,
+        provider,
+        auth_method: provider === 'mariadb' ? authMethod : undefined,
+        aws_region: awsRegion || undefined,
+        aws_db_user: awsDbUser || undefined,
+        aws_access_key_id: awsAccessKeyId || undefined,
+        aws_secret_access_key: awsSecretAccessKey || undefined,
+        azure_tenant_id: azureTenantId || undefined,
+        gcp_project: gcpProject || undefined,
         ...(dbType === "sqlite"
           ? { file_path: filePath }
           : {
@@ -389,6 +428,13 @@ export function ConnectionDialog({
           name,
           db_type: dbType,
           provider,
+          auth_method: provider === 'mariadb' ? authMethod : undefined,
+          aws_region: awsRegion || undefined,
+          aws_db_user: awsDbUser || undefined,
+          aws_access_key_id: awsAccessKeyId || undefined,
+          aws_secret_access_key: awsSecretAccessKey || undefined,
+          azure_tenant_id: azureTenantId || undefined,
+          gcp_project: gcpProject || undefined,
           ...(dbType === "sqlite"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
             : { host, port: parseInt(port), username, password, database, file_path: undefined }),
@@ -404,6 +450,13 @@ export function ConnectionDialog({
           name,
           db_type: dbType,
           provider,
+          auth_method: provider === 'mariadb' ? authMethod : undefined,
+          aws_region: awsRegion || undefined,
+          aws_db_user: awsDbUser || undefined,
+          aws_access_key_id: awsAccessKeyId || undefined,
+          aws_secret_access_key: awsSecretAccessKey || undefined,
+          azure_tenant_id: azureTenantId || undefined,
+          gcp_project: gcpProject || undefined,
           ...(dbType === "sqlite"
             ? { file_path: filePath }
             : { host, port: parseInt(port), username, password, database }),
@@ -522,6 +575,17 @@ export function ConnectionDialog({
                         </div>
                       </div>
                     </SelectItem>
+                    <SelectItem value="mariadb">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="mariadb" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>MariaDB</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Server
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                   </SelectGroup>
                   <SelectSeparator />
                   <SelectGroup>
@@ -618,6 +682,132 @@ export function ConnectionDialog({
                     >
                       Neon databases sleep after <strong>5 minutes</strong> of inactivity. Long-running transactions may be interrupted.
                     </CollapsibleAlert>
+                  </div>
+                )}\n                {/* ── MariaDB auth ─────────────────────────────────── */}
+                {provider === 'mariadb' && (
+                  <div className="space-y-3">
+                    {/* Auth method selector */}
+                    <div className="grid gap-2">
+                      <label className="!text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                        Authentication Method
+                      </label>
+                      <Select value={authMethod} onValueChange={(v) => setAuthMethod(v as MariaDBAuthMethod)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="password">User &amp; Password</SelectItem>
+                          <SelectItem value="aws_iam">AWS IAM</SelectItem>
+                          <SelectItem value="azure_ad">Azure AD</SelectItem>
+                          <SelectItem value="gcp_iam">GCP IAM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Per-method info alerts */}
+                    {authMethod === 'aws_iam' && (
+                      <CollapsibleAlert
+                        variant="info"
+                        icon={<Info className="h-3.5 w-3.5" />}
+                        title="AWS IAM — RDS Auth Token"
+                      >
+                        <p className="mb-1">Requires the <strong>AWS CLI</strong> (<code className="bg-muted px-1 rounded">aws configure</code>) to be installed and authenticated. SSL is enabled automatically.</p>
+                        <p>The DB user must have IAM authentication enabled in RDS/Aurora MariaDB.</p>
+                      </CollapsibleAlert>
+                    )}
+                    {authMethod === 'azure_ad' && (
+                      <CollapsibleAlert
+                        variant="info"
+                        icon={<Info className="h-3.5 w-3.5" />}
+                        title="Azure AD — Access Token"
+                      >
+                        <p className="mb-1">Requires the <strong>Azure CLI</strong> (<code className="bg-muted px-1 rounded">az login</code>) to be installed and authenticated.</p>
+                        <p>The user must be added as an Azure AD admin in the Azure Database for MariaDB resource.</p>
+                      </CollapsibleAlert>
+                    )}
+                    {authMethod === 'gcp_iam' && (
+                      <CollapsibleAlert
+                        variant="info"
+                        icon={<Info className="h-3.5 w-3.5" />}
+                        title="GCP IAM — Cloud SQL Auth"
+                      >
+                        <p className="mb-1">Requires the <strong>gcloud CLI</strong> (<code className="bg-muted px-1 rounded">gcloud auth login</code>) to be installed and authenticated.</p>
+                        <p>IAM database authentication must be enabled on the Cloud SQL instance.</p>
+                      </CollapsibleAlert>
+                    )}
+
+                    {/* AWS IAM fields */}
+                    {authMethod === 'aws_iam' && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">AWS Region <span className="text-destructive">*</span></label>
+                            <Input
+                              value={awsRegion}
+                              onChange={(e) => setAwsRegion(e.target.value)}
+                              placeholder="us-east-1"
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">DB IAM User <span className="text-destructive">*</span></label>
+                            <Input
+                              value={awsDbUser}
+                              onChange={(e) => setAwsDbUser(e.target.value)}
+                              placeholder="iam_db_user"
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Access Key ID <span className="text-[10px] text-muted-foreground">(optional)</span></label>
+                            <Input
+                              value={awsAccessKeyId}
+                              onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                              placeholder="AKIA… (uses env/profile if blank)"
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                          <div className="grid gap-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Secret Access Key <span className="text-[10px] text-muted-foreground">(optional)</span></label>
+                            <Input
+                              type="password"
+                              value={awsSecretAccessKey}
+                              onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                              placeholder="••••••••"
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Azure AD fields */}
+                    {authMethod === 'azure_ad' && (
+                      <div className="grid gap-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Tenant ID <span className="text-[10px] text-muted-foreground">(optional — uses default tenant if blank)</span></label>
+                        <Input
+                          value={azureTenantId}
+                          onChange={(e) => setAzureTenantId(e.target.value)}
+                          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    )}
+
+                    {/* GCP IAM fields */}
+                    {authMethod === 'gcp_iam' && (
+                      <div className="grid gap-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">GCP Project ID <span className="text-[10px] text-muted-foreground">(optional)</span></label>
+                        <Input
+                          value={gcpProject}
+                          onChange={(e) => setGcpProject(e.target.value)}
+                          placeholder="my-gcp-project"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
                 <Tabs
