@@ -1,5 +1,5 @@
 import { DbIcon } from "@/components/DbIcon";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Database, Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -36,12 +36,15 @@ import { parsePostgresConnectionString } from "@/lib/connectionStringParser";
 interface ConnectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editConnection?: ConnectionConfig;
 }
 
 export function ConnectionDialog({
   open,
   onOpenChange,
+  editConnection,
 }: ConnectionDialogProps) {
+  const isEditMode = Boolean(editConnection);
   const [name, setName] = useState("");
   const [dbType, setDbType] = useState<DatabaseType>("sqlite");
   const [host, setHost] = useState("localhost");
@@ -71,9 +74,59 @@ export function ConnectionDialog({
   const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState("");
 
   const addConnection = useConnectionStore((state) => state.addConnection);
+  const updateConnection = useConnectionStore((state) => state.updateConnection);
   const setActiveConnection = useConnectionStore(
     (state) => state.setActiveConnection,
   );
+
+  // Populate form when editing an existing connection
+  useEffect(() => {
+    if (open && editConnection) {
+      setName(editConnection.name);
+      setDbType(editConnection.db_type);
+      if (editConnection.db_type === 'sqlite') {
+        setFilePath(editConnection.file_path ?? '');
+      } else {
+        setHost(editConnection.host ?? 'localhost');
+        setPort(String(editConnection.port ?? 5432));
+        setUsername(editConnection.username ?? '');
+        setPassword(editConnection.password ?? '');
+        setDatabase(editConnection.database ?? '');
+      }
+      const ssh = editConnection.ssh_config;
+      if (ssh?.enabled) {
+        setConnectionType('ssh');
+        setSshHost(ssh.host ?? '');
+        setSshPort(String(ssh.port ?? 22));
+        setSshUsername(ssh.username ?? '');
+        setSshAuthMethod(ssh.authMethod ?? 'password');
+        setSshPassword(ssh.password ?? '');
+        setSshPrivateKeyPath(ssh.privateKeyPath ?? '');
+      } else {
+        setConnectionType('direct');
+      }
+    } else if (!open) {
+      // Reset when closing (only in create mode)
+      if (!editConnection) {
+        setName('');
+        setDbType('sqlite');
+        setHost('localhost');
+        setPort('5432');
+        setUsername('');
+        setPassword('');
+        setDatabase('');
+        setFilePath('');
+        setConnectionType('direct');
+        setSshHost('');
+        setSshPort('22');
+        setSshUsername('');
+        setSshAuthMethod('password');
+        setSshPassword('');
+        setSshPrivateKeyPath('');
+        setTestResult(null);
+      }
+    }
+  }, [open, editConnection]);
 
   const handleParseConnectionString = () => {
     if (!connectionString.trim()) {
@@ -275,61 +328,71 @@ export function ConnectionDialog({
 
     setIsConnecting(true);
 
+    const sshConfigPartial =
+      connectionType === "ssh" && dbType !== "sqlite"
+        ? {
+            ssh_config: {
+              enabled: true,
+              host: sshHost,
+              port: parseInt(sshPort),
+              username: sshUsername,
+              authMethod: sshAuthMethod,
+              password: sshAuthMethod === "password" ? sshPassword : undefined,
+              privateKeyPath:
+                sshAuthMethod === "privateKey" ? sshPrivateKeyPath : undefined,
+            },
+          }
+        : {};
+
     try {
-      const config: ConnectionConfig = {
-        id: crypto.randomUUID(),
-        name,
-        db_type: dbType,
-        ...(dbType === "sqlite"
-          ? { file_path: filePath }
-          : {
-              host,
-              port: parseInt(port),
-              username,
-              password,
-              database,
-            }),
-        ...(connectionType === "ssh" && dbType !== "sqlite"
-          ? {
-              ssh_config: {
-                enabled: true,
-                host: sshHost,
-                port: parseInt(sshPort),
-                username: sshUsername,
-                authMethod: sshAuthMethod,
-                password:
-                  sshAuthMethod === "password" ? sshPassword : undefined,
-                privateKeyPath:
-                  sshAuthMethod === "privateKey"
-                    ? sshPrivateKeyPath
-                    : undefined,
-              },
-            }
-          : {}),
-      };
+      if (isEditMode && editConnection) {
+        // Edit mode: update store and reconnect with new config
+        const updatedConfig: ConnectionConfig = {
+          ...editConnection,
+          name,
+          db_type: dbType,
+          ...(dbType === "sqlite"
+            ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
+            : { host, port: parseInt(port), username, password, database, file_path: undefined }),
+          ...sshConfigPartial,
+        };
+        updateConnection(editConnection.id, updatedConfig);
+        toast.success("Connection updated successfully");
+        onOpenChange(false);
+      } else {
+        // Create mode: connect and add
+        const config: ConnectionConfig = {
+          id: crypto.randomUUID(),
+          name,
+          db_type: dbType,
+          ...(dbType === "sqlite"
+            ? { file_path: filePath }
+            : { host, port: parseInt(port), username, password, database }),
+          ...sshConfigPartial,
+        };
 
-      const result = await invoke<string>("connect_database", { config });
+        const result = await invoke<string>("connect_database", { config });
+        addConnection(config);
+        setActiveConnection(config.id);
+        toast.success(result);
 
-      addConnection(config);
-      setActiveConnection(config.id);
-      toast.success(result);
-
-      // Reset form
-      setName("");
-      setFilePath("");
-      setHost("localhost");
-      setPort("5432");
-      setUsername("");
-      setPassword("");
-      setDatabase("");
-      setConnectionType("direct");
-      setSshHost("");
-      setSshPort("22");
-      setSshUsername("");
-      setSshAuthMethod("password");
-      setSshPassword("");
-      setSshPrivateKeyPath("");
-      onOpenChange(false);
+        // Reset form
+        setName("");
+        setFilePath("");
+        setHost("localhost");
+        setPort("5432");
+        setUsername("");
+        setPassword("");
+        setDatabase("");
+        setConnectionType("direct");
+        setSshHost("");
+        setSshPort("22");
+        setSshUsername("");
+        setSshAuthMethod("password");
+        setSshPassword("");
+        setSshPrivateKeyPath("");
+        onOpenChange(false);
+      }
     } catch (error) {
       toast.error(String(error));
       console.error("Connection error:", error);
@@ -342,9 +405,13 @@ export function ConnectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="text-lg">New Database Connection</DialogTitle>
+          <DialogTitle className="text-lg">
+            {isEditMode ? "Edit Connection" : "New Database Connection"}
+          </DialogTitle>
           <DialogDescription className="text-xs">
-            Configure your database connection settings
+            {isEditMode
+              ? "Update your database connection settings"
+              : "Configure your database connection settings"}
           </DialogDescription>
         </DialogHeader>
 
@@ -944,12 +1011,12 @@ export function ConnectionDialog({
             {isConnecting ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                Connecting...
+                {isEditMode ? "Saving..." : "Connecting..."}
               </>
             ) : (
               <>
                 <Database className="h-3.5 w-3.5 mr-2" />
-                Connect
+                {isEditMode ? "Save Changes" : "Connect"}
               </>
             )}
           </Button>
