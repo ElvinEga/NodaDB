@@ -1,5 +1,5 @@
-export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mongodb' | 'clickhouse' | 'libsql';
-export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb' | 'planetscale' | 'planetscale_postgres' | 'prisma' | 'turso' | 'valtown';
+export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mongodb' | 'clickhouse' | 'libsql' | 'redis';
+export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb' | 'planetscale' | 'planetscale_postgres' | 'prisma' | 'turso' | 'valtown' | 'cloudflare';
 export type MariaDBAuthMethod = 'password' | 'aws_iam' | 'azure_ad' | 'gcp_iam';
 export type MongoDBAuthMethod = 'password' | 'atlas';
 
@@ -49,7 +49,7 @@ export interface ConnectionConfig {
   database?: string;
   file_path?: string;
   ssh_config?: SSHConfig;
-  /** Set for cloud providers (supabase, neon, planetscale, prisma, turso, valtown) or mariadb. */
+  /** Set for cloud providers (supabase, neon, planetscale, prisma, turso, valtown, cloudflare) or mariadb. */
   provider?: DatabaseProvider;
   /** Auth method — only relevant when provider === 'mariadb' */
   auth_method?: MariaDBAuthMethod;
@@ -74,6 +74,14 @@ export interface ConnectionConfig {
   libsql_url?: string;
   /** LibSQL / Turso / Val Town Auth Token */
   libsql_auth_token?: string;
+  /** Redis database index (0 - 15) */
+  redis_db?: number;
+  /** Cloudflare D1 Account ID */
+  cloudflare_account_id?: string;
+  /** Cloudflare D1 Database ID (UUID) */
+  cloudflare_database_id?: string;
+  /** Cloudflare D1 API Token */
+  cloudflare_api_token?: string;
 }
 
 export interface DatabaseTable {
