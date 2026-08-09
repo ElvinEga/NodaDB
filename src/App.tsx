@@ -15,6 +15,10 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  Pin,
+  PinOff,
+  Copy,
+  Edit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,11 +54,11 @@ import { VisualQueryBuilder } from "@/components/VisualQueryBuilder";
 import { SchemaDesigner } from "@/components/SchemaDesigner";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import { TabBar, type TabType } from "@/components/TabBar";
 import { useTabKeyboardShortcuts } from "@/hooks/useTabKeyboardShortcuts";
 import { KeyboardTooltip } from "@/components/ui/keyboard-tooltip";
-import { DatabaseTable, TableColumn } from "@/types";
+import { DatabaseTable, TableColumn, ConnectionConfig } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import {
   SidebarProvider,
@@ -75,6 +79,7 @@ function App() {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
+  const [editConnectionId, setEditConnectionId] = useState<string | null>(null);
   const { fontFamily, fontSize, colorTheme } = useSettingsStore();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -111,6 +116,12 @@ function App() {
   const updateConnection = useConnectionStore(
     (state) => state.updateConnection,
   );
+  const pinnedConnectionIds = useConnectionStore(
+    (state) => state.pinnedConnectionIds,
+  );
+  const togglePinConnection = useConnectionStore(
+    (state) => state.togglePinConnection,
+  );
   const setAutoCheckForUpdates = useSettingsStore(
     (state) => state.setAutoCheckForUpdates,
   );
@@ -128,6 +139,47 @@ function App() {
     .filter((connection): connection is (typeof connections)[number] =>
       Boolean(connection),
     );
+
+  // Connections sorted with pinned at top
+  const sortedConnections = [
+    ...connections.filter((c) => pinnedConnectionIds.includes(c.id)),
+    ...connections.filter((c) => !pinnedConnectionIds.includes(c.id)),
+  ];
+
+  const editConnection = editConnectionId
+    ? connections.find((c) => c.id === editConnectionId)
+    : undefined;
+
+  const handleDuplicateConnection = (conn: ConnectionConfig) => {
+    const duplicate: ConnectionConfig = {
+      ...conn,
+      id: crypto.randomUUID(),
+      name: `${conn.name} (Copy)`,
+    };
+    const addConnection = useConnectionStore.getState().addConnection;
+    addConnection(duplicate);
+    toast.success(`Duplicated "${conn.name}"`);
+  };
+
+  const handleCopyConnectionUrl = (conn: ConnectionConfig) => {
+    let url = "";
+    if (conn.db_type === "sqlite") {
+      url = conn.file_path ?? "";
+    } else {
+      const user = conn.username ?? "";
+      const pass = conn.password ? `:${conn.password}` : "";
+      const host = conn.host ?? "localhost";
+      const port = conn.port ? `:${conn.port}` : "";
+      const db = conn.database ?? "";
+      const scheme = conn.db_type === "mysql" ? "mysql" : "postgresql";
+      url = `${scheme}://${user}${pass}@${host}${port}/${db}`;
+    }
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success("Connection URL copied to clipboard");
+    }).catch(() => {
+      toast.error("Failed to copy to clipboard");
+    });
+  };
 
   // Clear all tabs when active connection changes
   useEffect(() => {
@@ -770,10 +822,14 @@ function App() {
                   Select a connection to start exploring your database
                 </p>
                 <div className="grid gap-3">
-                  {connections.map((conn) => (
+                  {sortedConnections.map((conn) => {
+                    const isPinned = pinnedConnectionIds.includes(conn.id);
+                    return (
                     <div
                       key={conn.id}
-                      className="relative group text-left p-5 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-all duration-150"
+                      className={`relative group text-left p-5 rounded-lg border bg-card hover:border-primary hover:bg-accent transition-all duration-150 ${
+                        isPinned ? 'border-primary/50' : 'border-border'
+                      }`}
                     >
                       <button
                         onClick={async () => {
@@ -786,8 +842,14 @@ function App() {
                             <DbIcon dbType={conn.db_type} className="h-6 w-6 shrink-0" />
                           </div>
                           <div className="flex-1">
-                            <div className="font-semibold mb-1 text-left">
+                            <div className="font-semibold mb-1 text-left flex items-center gap-2">
                               {conn.name}
+                              {isPinned && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                  <Pin className="h-2.5 w-2.5" />
+                                  Pinned
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-muted-foreground flex items-center gap-2">
                               <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
@@ -822,6 +884,28 @@ function App() {
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
+                              togglePinConnection(conn.id);
+                            }}
+                          >
+                            {isPinned ? (
+                              <><PinOff className="h-4 w-4 mr-2" />Unpin from Home</>
+                            ) : (
+                              <><Pin className="h-4 w-4 mr-2" />Pin to Home</>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditConnectionId(conn.id);
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setRenameConnectionId(conn.id);
                               setRenameValue(conn.name);
                             }}
@@ -829,6 +913,25 @@ function App() {
                             <Pencil className="h-4 w-4 mr-2" />
                             Rename
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopyConnectionUrl(conn);
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy URL
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDuplicateConnection(conn);
+                            }}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Duplicate
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
@@ -842,7 +945,8 @@ function App() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Add New Connection Card */}
                   <button
@@ -985,6 +1089,11 @@ function App() {
         <ConnectionDialog
           open={connectionDialogOpen}
           onOpenChange={setConnectionDialogOpen}
+        />
+        <ConnectionDialog
+          open={editConnectionId !== null}
+          onOpenChange={(open) => !open && setEditConnectionId(null)}
+          editConnection={editConnection}
         />
         <KeyboardShortcutsDialog
           open={shortcutsDialogOpen}
