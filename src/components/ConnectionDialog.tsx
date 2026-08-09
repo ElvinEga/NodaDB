@@ -94,6 +94,13 @@ export function ConnectionDialog({
   const [mongoConnectionString, setMongoConnectionString] = useState('');
   const [mongoAuthSource, setMongoAuthSource] = useState('');
 
+  // ClickHouse SSL state
+  const [clickhouseUseSsl, setClickhouseUseSsl] = useState(false);
+
+  // LibSQL / Turso / Val Town state
+  const [libsqlUrl, setLibsqlUrl] = useState('');
+  const [libsqlAuthToken, setLibsqlAuthToken] = useState('');
+
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
   const setActiveConnection = useConnectionStore(
@@ -116,11 +123,14 @@ export function ConnectionDialog({
       setMongoAuthMethod(editConnection.mongo_auth_method ?? 'password');
       setMongoConnectionString(editConnection.mongo_connection_string ?? '');
       setMongoAuthSource(editConnection.mongo_auth_source ?? '');
+      setClickhouseUseSsl(editConnection.clickhouse_use_ssl ?? false);
+      setLibsqlUrl(editConnection.libsql_url ?? '');
+      setLibsqlAuthToken(editConnection.libsql_auth_token ?? '');
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
         setHost(editConnection.host ?? 'localhost');
-        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : 5432)));
+        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : editConnection.db_type === 'clickhouse' ? 8123 : 5432)));
         setUsername(editConnection.username ?? '');
         setPassword(editConnection.password ?? '');
         setDatabase(editConnection.database ?? '');
@@ -153,6 +163,9 @@ export function ConnectionDialog({
         setMongoAuthMethod('password');
         setMongoConnectionString('');
         setMongoAuthSource('');
+        setClickhouseUseSsl(false);
+        setLibsqlUrl('');
+        setLibsqlAuthToken('');
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -176,13 +189,35 @@ export function ConnectionDialog({
    * and "sqlite" / "postgresql" / "mysql" for core databases.
    */
   const selectValue =
+    provider === 'prisma'   ? 'prisma'   :
+    provider === 'turso'    ? 'turso'    :
+    provider === 'valtown'  ? 'valtown'  :
     provider === 'supabase' ? 'supabase' :
     provider === 'neon'     ? 'neon'     :
     provider === 'mariadb'  ? 'mariadb'  :
+    provider === 'planetscale' ? 'planetscale' :
+    provider === 'planetscale_postgres' ? 'planetscale_postgres' :
     dbType;
 
   const handleDbTypeOrProviderChange = (value: string) => {
-    if (value === 'supabase') {
+    if (value === 'prisma') {
+      setDbType('postgresql');
+      setProvider('prisma');
+      setPort('5432');
+      setConnectionType('connectionString');
+    } else if (value === 'turso') {
+      setDbType('libsql');
+      setProvider('turso');
+      setConnectionType('direct');
+    } else if (value === 'valtown') {
+      setDbType('libsql');
+      setProvider('valtown');
+      setConnectionType('direct');
+    } else if (value === 'libsql') {
+      setDbType('libsql');
+      setProvider(undefined);
+      setConnectionType('direct');
+    } else if (value === 'supabase') {
       setDbType('postgresql');
       setProvider('supabase');
       setPort('5432');
@@ -198,11 +233,26 @@ export function ConnectionDialog({
       setPort('3306');
       setAuthMethod('password');
       setConnectionType('direct');
+    } else if (value === 'planetscale') {
+      setDbType('mysql');
+      setProvider('planetscale');
+      setPort('3306');
+      setConnectionType('direct');
+    } else if (value === 'planetscale_postgres') {
+      setDbType('postgresql');
+      setProvider('planetscale_postgres');
+      setPort('5432');
+      setConnectionType('direct');
     } else if (value === 'mongodb') {
       setDbType('mongodb');
       setProvider(undefined);
       setPort('27017');
       setMongoAuthMethod('password');
+      setConnectionType('direct');
+    } else if (value === 'clickhouse') {
+      setDbType('clickhouse');
+      setProvider(undefined);
+      setPort('8123');
       setConnectionType('direct');
     } else {
       setDbType(value as DatabaseType);
@@ -267,7 +317,12 @@ export function ConnectionDialog({
       return;
     }
 
-    if (dbType === "mongodb") {
+    if (dbType === "libsql") {
+      if (!libsqlUrl.trim()) {
+        toast.error("Please enter a LibSQL Connection URI");
+        return;
+      }
+    } else if (dbType === "mongodb") {
       if (mongoAuthMethod === "atlas" && !mongoConnectionString.trim()) {
         toast.error("Please enter an Atlas connection string");
         return;
@@ -282,7 +337,7 @@ export function ConnectionDialog({
     }
 
     // Validate SSH config if using SSH tunnel
-    if (connectionType === "ssh" && dbType !== "sqlite") {
+    if (connectionType === "ssh" && dbType !== "sqlite" && dbType !== "libsql") {
       if (!sshHost || !sshUsername) {
         toast.error("Please fill in SSH host and username");
         return;
@@ -316,6 +371,9 @@ export function ConnectionDialog({
         mongo_auth_method: dbType === 'mongodb' ? mongoAuthMethod : undefined,
         mongo_connection_string: dbType === 'mongodb' && mongoAuthMethod === 'atlas' ? mongoConnectionString : undefined,
         mongo_auth_source: dbType === 'mongodb' && mongoAuthSource ? mongoAuthSource : undefined,
+        clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
+        libsql_url: dbType === 'libsql' ? libsqlUrl : undefined,
+        libsql_auth_token: dbType === 'libsql' ? libsqlAuthToken : undefined,
         ...(dbType === "sqlite"
           ? { file_path: filePath }
           : {
@@ -405,12 +463,12 @@ export function ConnectionDialog({
       return;
     }
 
-    if (dbType === "sqlite" && !filePath) {
-      toast.error("Please select a database file");
-      return;
-    }
-
-    if (dbType === "mongodb") {
+    if (dbType === "libsql") {
+      if (!libsqlUrl.trim()) {
+        toast.error("Please enter a LibSQL Connection URI");
+        return;
+      }
+    } else if (dbType === "mongodb") {
       if (mongoAuthMethod === "atlas" && !mongoConnectionString.trim()) {
         toast.error("Please enter an Atlas connection string");
         return;
@@ -425,7 +483,7 @@ export function ConnectionDialog({
     }
 
     // Validate SSH config if using SSH tunnel
-    if (connectionType === "ssh" && dbType !== "sqlite") {
+    if (connectionType === "ssh" && dbType !== "sqlite" && dbType !== "libsql") {
       if (!sshHost || !sshUsername) {
         toast.error("Please fill in SSH host and username");
         return;
@@ -443,7 +501,7 @@ export function ConnectionDialog({
     setIsConnecting(true);
 
     const sshConfigPartial =
-      connectionType === "ssh" && dbType !== "sqlite"
+      connectionType === "ssh" && dbType !== "sqlite" && dbType !== "libsql"
         ? {
             ssh_config: {
               enabled: true,
@@ -464,6 +522,11 @@ export function ConnectionDialog({
       mongo_auth_source: dbType === 'mongodb' && mongoAuthSource ? mongoAuthSource : undefined,
     };
 
+    const libsqlFields = {
+      libsql_url: dbType === 'libsql' ? libsqlUrl : undefined,
+      libsql_auth_token: dbType === 'libsql' ? libsqlAuthToken : undefined,
+    };
+
     try {
       if (isEditMode && editConnection) {
         // Edit mode: update store and reconnect with new config
@@ -480,7 +543,9 @@ export function ConnectionDialog({
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
           ...mongoFields,
-          ...(dbType === "sqlite"
+          ...libsqlFields,
+          clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
+          ...(dbType === "sqlite" || dbType === "libsql"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
             : { host, port: parseInt(port), username, password, database, file_path: undefined }),
           ...sshConfigPartial,
@@ -503,7 +568,9 @@ export function ConnectionDialog({
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
           ...mongoFields,
-          ...(dbType === "sqlite"
+          ...libsqlFields,
+          clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
+          ...(dbType === "sqlite" || dbType === "libsql"
             ? { file_path: filePath }
             : { host, port: parseInt(port), username, password, database: database || 'admin' }),
           ...sshConfigPartial,
@@ -643,10 +710,65 @@ export function ConnectionDialog({
                         </div>
                       </div>
                     </SelectItem>
+                    <SelectItem value="clickhouse">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="clickhouse" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>ClickHouse</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Columnar OLAP
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="libsql">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="turso" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>LibSQL</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Embedded / HTTP SQLite
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                   </SelectGroup>
                   <SelectSeparator />
                   <SelectGroup>
                     <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Cloud Providers</SelectLabel>
+                    <SelectItem value="prisma">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="prisma" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Prisma</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Prisma Postgres / Accelerate
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="turso">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="turso" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Turso</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Hosted LibSQL Database
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="valtown">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="valtown" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Val Town</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Hosted LibSQL / SQLite
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                     <SelectItem value="supabase">
                       <div className="flex items-center gap-2">
                         <DbIcon dbType="supabase" className="h-4 w-4 shrink-0" />
@@ -665,6 +787,28 @@ export function ConnectionDialog({
                           <span>Neon</span>
                           <span className="text-[10px] text-muted-foreground ml-2">
                             Serverless PostgreSQL
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="planetscale">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="planetscale" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>PlanetScale (MySQL)</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Vitess / MySQL Wire
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="planetscale_postgres">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="planetscale" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>PlanetScale (Postgres)</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            PostgreSQL Wire
                           </span>
                         </div>
                       </div>
@@ -703,8 +847,104 @@ export function ConnectionDialog({
                   Select an existing .db file or enter a new path to create one
                 </p>
               </div>
+            ) : dbType === "libsql" ? (
+              <div className="space-y-3">
+                {/* ── Turso alert ───────────────────────────── */}
+                {provider === 'turso' && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="Turso Connection Setup"
+                  >
+                    <p className="mb-1">
+                      Provide your Turso database URL (e.g. <code className="bg-muted px-1 rounded">libsql://my-db-org.turso.io</code>) and your auth token generated via <code className="bg-muted px-1 rounded">turso db tokens create &lt;db&gt;</code>.
+                    </p>
+                  </CollapsibleAlert>
+                )}
+                {/* ── Val Town alert ────────────────────────── */}
+                {provider === 'valtown' && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="Val Town SQLite Setup"
+                  >
+                    <p className="mb-1">
+                      Val Town SQLite is powered by LibSQL. Get your database Connection URI and API / Auth Token from Val Town settings or <code className="bg-muted px-1 rounded">@std/sqlite</code> environment variables.
+                    </p>
+                  </CollapsibleAlert>
+                )}
+                {/* ── Generic LibSQL alert ───────────────────── */}
+                {!provider && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="LibSQL Connection URI & Token"
+                  >
+                    <p className="mb-1">
+                      Connect to any LibSQL / hrana HTTP endpoint using your database URL (<code className="bg-muted px-1 rounded">https://...</code> or <code className="bg-muted px-1 rounded">libsql://...</code>) and Bearer auth token.
+                    </p>
+                  </CollapsibleAlert>
+                )}
+
+                <div className="grid gap-2">
+                  <label
+                    htmlFor="libsqlUrl"
+                    className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
+                  >
+                    Connection URI <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="libsqlUrl"
+                    value={libsqlUrl}
+                    onChange={(e) => setLibsqlUrl(e.target.value)}
+                    placeholder={provider === 'turso' ? "libsql://my-db-org.turso.io" : provider === 'valtown' ? "https://my-valtown-db.turso.io" : "libsql://my-database.turso.io"}
+                    className="h-9 text-sm font-mono"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label
+                    htmlFor="libsqlAuthToken"
+                    className="!text-sm font-medium text-muted-foreground uppercase tracking-wide"
+                  >
+                    Auth Token <span className="text-muted-foreground text-[10px] lowercase">(optional if local)</span>
+                  </label>
+                  <Input
+                    id="libsqlAuthToken"
+                    type="password"
+                    value={libsqlAuthToken}
+                    onChange={(e) => setLibsqlAuthToken(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="h-9 text-sm font-mono"
+                  />
+                </div>
+              </div>
             ) : (
               <>
+                {/* ── Prisma alerts ────────────────────────────────── */}
+                {provider === 'prisma' && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="Prisma Postgres & Accelerate"
+                  >
+                    <p className="mb-1">
+                      Use your Prisma Postgres or Prisma Accelerate connection string (<code className="bg-muted px-1 rounded">prisma://...</code> or direct <code className="bg-muted px-1 rounded">postgres://...</code>) in the Connection String tab.
+                    </p>
+                  </CollapsibleAlert>
+                )}
+                {/* ── PlanetScale alerts ───────────────────────────── */}
+                {(provider === 'planetscale' || provider === 'planetscale_postgres') && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="PlanetScale Secure TLS Connection"
+                  >
+                    <p className="mb-1">
+                      PlanetScale requires secure TLS (<code className="bg-muted px-1 rounded">ssl-mode=required</code>). Standard authentication works with branch connection credentials.
+                    </p>
+                  </CollapsibleAlert>
+                )}
                 {/* ── Supabase alerts ──────────────────────────────── */}
                 {provider === 'supabase' && (
                   <CollapsibleAlert
@@ -1143,6 +1383,21 @@ export function ConnectionDialog({
                             className="h-9 text-sm"
                           />
                         </div>
+
+                        {dbType === 'clickhouse' && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <input
+                              type="checkbox"
+                              id="clickhouseUseSsl"
+                              checked={clickhouseUseSsl}
+                              onChange={(e) => setClickhouseUseSsl(e.target.checked)}
+                              className="h-4 w-4 rounded border-gray-300 accent-primary cursor-pointer"
+                            />
+                            <label htmlFor="clickhouseUseSsl" className="text-xs font-medium cursor-pointer">
+                              Use HTTPS / SSL (Recommended for ClickHouse Cloud, port 8443)
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TabsContent>

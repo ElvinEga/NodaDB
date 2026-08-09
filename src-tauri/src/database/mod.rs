@@ -20,6 +20,8 @@ pub enum DatabasePool {
     Postgres(sqlx::PgPool),
     MySql(sqlx::MySqlPool),
     MongoDB { client: mongodb::Client, database: String },
+    ClickHouse { client: reqwest::Client, url: String, database: String },
+    LibSQL { client: reqwest::Client, url: String, token: String },
 }
 
 macro_rules! decimal_json_value {
@@ -217,6 +219,13 @@ macro_rules! execute_query {
             DatabasePool::MongoDB { .. } => {
                 return Err(anyhow::anyhow!("Raw SQL execution is not supported for MongoDB"));
             }
+            DatabasePool::ClickHouse { client, url, database } => {
+                ConnectionManager::clickhouse_http_execute(client, url, database, $query).await?
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = ConnectionManager::libsql_http_pipeline(client, url, token, $query).await?;
+                res.rows_affected
+            }
         };
         Ok::<u64, anyhow::Error>(rows_affected)
     }};
@@ -273,10 +282,10 @@ impl ConnectionManager {
 
     fn quote_identifier(identifier: &str, db_type: &DatabaseType) -> String {
         match db_type {
-            DatabaseType::PostgreSQL | DatabaseType::SQLite => {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("\"{}\"", identifier.replace('"', "\"\""))
             }
-            DatabaseType::MySQL => format!("`{}`", identifier.replace('`', "``")),
+            DatabaseType::MySQL | DatabaseType::ClickHouse => format!("`{}`", identifier.replace('`', "``")),
             DatabaseType::MongoDB => identifier.to_string(),
         }
     }
@@ -284,7 +293,7 @@ impl ConnectionManager {
     fn quote_table_name(table_name: &str, db_type: &DatabaseType) -> String {
         match db_type {
             DatabaseType::PostgreSQL => Self::quote_pg_table(table_name),
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 if table_name.contains('.') {
                     let parts: Vec<String> = table_name
                         .split('.')
@@ -295,7 +304,7 @@ impl ConnectionManager {
                     Self::quote_identifier(table_name.trim_matches('"'), db_type)
                 }
             }
-            DatabaseType::MySQL => {
+            DatabaseType::MySQL | DatabaseType::ClickHouse => {
                 if table_name.contains('.') {
                     let parts: Vec<String> = table_name
                         .split('.')
@@ -660,6 +669,171 @@ impl ConnectionManager {
         }
     }
 
+    async fn clickhouse_http_query(
+        client: &reqwest::Client,
+        base_url: &str,
+        database: &str,
+        query: &str,
+    ) -> Result<QueryResult> {
+        let trimmed = query.trim();
+        let mut final_query = trimmed.to_string();
+        if !final_query.to_uppercase().contains("FORMAT ") {
+            final_query.push_str(" FORMAT JSONCompact");
+        }
+
+        let url = format!("{}/?database={}", base_url, urlencoding::encode(database));
+        let resp = client.post(&url).body(final_query).send().await?;
+
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_else(|_| "Unknown ClickHouse error".to_string());
+            return Err(anyhow!("ClickHouse Error: {}", err_text));
+        }
+
+        let json_resp: serde_json::Value = resp.json().await?;
+        
+        let mut columns = Vec::new();
+        if let Some(meta) = json_resp.get("meta").and_then(|m| m.as_array()) {
+            for item in meta {
+                if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                    columns.push(name.to_string());
+                }
+            }
+        }
+
+        let mut rows = Vec::new();
+        if let Some(data) = json_resp.get("data").and_then(|d| d.as_array()) {
+            for row_arr in data {
+                if let Some(arr) = row_arr.as_array() {
+                    let mut map = serde_json::Map::new();
+                    for (i, val) in arr.iter().enumerate() {
+                        if let Some(col_name) = columns.get(i) {
+                            map.insert(col_name.clone(), val.clone());
+                        }
+                    }
+                    rows.push(serde_json::Value::Object(map));
+                }
+            }
+        }
+
+        let rows_affected = json_resp.get("rows").and_then(|r| r.as_u64()).unwrap_or(rows.len() as u64);
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            rows_affected,
+        })
+    }
+
+    async fn clickhouse_http_execute(
+        client: &reqwest::Client,
+        base_url: &str,
+        database: &str,
+        query: &str,
+    ) -> Result<u64> {
+        let url = format!("{}/?database={}", base_url, urlencoding::encode(database));
+        let resp = client.post(&url).body(query.to_string()).send().await?;
+
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_else(|_| "Unknown ClickHouse error".to_string());
+            return Err(anyhow!("ClickHouse Error: {}", err_text));
+        }
+
+        Ok(1)
+    }
+
+    async fn libsql_http_pipeline(
+        client: &reqwest::Client,
+        base_url: &str,
+        token: &str,
+        sql: &str,
+    ) -> Result<QueryResult> {
+        let http_url = if base_url.starts_with("libsql://") {
+            format!("https://{}", &base_url["libsql://".len()..])
+        } else if base_url.starts_with("http://") || base_url.starts_with("https://") {
+            base_url.to_string()
+        } else {
+            format!("https://{}", base_url)
+        };
+
+        let endpoint = format!("{}/v2/pipeline", http_url.trim_end_matches('/'));
+
+        let body = serde_json::json!({
+            "baton": null,
+            "requests": [
+                {
+                    "type": "execute",
+                    "stmt": {
+                        "sql": sql
+                    }
+                }
+            ]
+        });
+
+        let mut req = client.post(&endpoint).json(&body);
+        if !token.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+
+        let resp = req.send().await?;
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_else(|_| "LibSQL HTTP error".to_string());
+            return Err(anyhow!("LibSQL Error: {}", err_text));
+        }
+
+        let json_resp: serde_json::Value = resp.json().await?;
+
+        let result_obj = json_resp.get("results")
+            .and_then(|r| r.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|first| first.get("response"))
+            .and_then(|resp| resp.get("result"));
+
+        let mut columns = Vec::new();
+        let mut rows = Vec::new();
+        let mut rows_affected = 0_u64;
+
+        if let Some(res) = result_obj {
+            if let Some(cols) = res.get("cols").and_then(|c| c.as_array()) {
+                for c in cols {
+                    if let Some(name) = c.get("name").and_then(|n| n.as_str()) {
+                        columns.push(name.to_string());
+                    }
+                }
+            }
+
+            if let Some(r_affected) = res.get("affected_row_count").and_then(|a| a.as_u64()) {
+                rows_affected = r_affected;
+            }
+
+            if let Some(row_list) = res.get("rows").and_then(|r| r.as_array()) {
+                for row_item in row_list {
+                    if let Some(cells) = row_item.as_array() {
+                        let mut map = serde_json::Map::new();
+                        for (i, cell) in cells.iter().enumerate() {
+                            let col_name = columns.get(i).cloned().unwrap_or_else(|| format!("col_{}", i));
+                            let val = match cell.get("type").and_then(|t| t.as_str()) {
+                                Some("integer") => cell.get("value").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("float") => cell.get("value").and_then(|v| v.as_f64()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("text") => cell.get("value").and_then(|v| v.as_str()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("blob") => cell.get("value").and_then(|v| v.as_str()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("null") | None => serde_json::Value::Null,
+                                _ => cell.get("value").cloned().unwrap_or(serde_json::Value::Null),
+                            };
+                            map.insert(col_name, val);
+                        }
+                        rows.push(serde_json::Value::Object(map));
+                    }
+                }
+            }
+        }
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            rows_affected,
+        })
+    }
+
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
         let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
@@ -710,9 +884,14 @@ impl ConnectionManager {
                 let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                 let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
 
+                let ssl_mode = if config.provider.as_deref() == Some("planetscale_postgres") {
+                    "?sslmode=require"
+                } else {
+                    ""
+                };
                 let connection_string = format!(
-                    "postgresql://{}:{}@{}:{}/{}",
-                    username, password, actual_host, actual_port, database
+                    "postgresql://{}:{}@{}:{}/{}{}",
+                    username, password, actual_host, actual_port, database, ssl_mode
                 );
                 let pool = sqlx::PgPool::connect(&connection_string).await?;
                 DatabasePool::Postgres(pool)
@@ -721,14 +900,17 @@ impl ConnectionManager {
                 let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
                 let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
 
-                // Determine password: plain or cloud IAM token
                 let is_cloud_auth = matches!(
                     config.auth_method.as_ref(),
                     Some(MariaDBAuthMethod::AwsIam) | Some(MariaDBAuthMethod::AzureAd) | Some(MariaDBAuthMethod::GcpIam)
                 );
+                let is_planetscale = config.provider.as_deref() == Some("planetscale") || actual_host.contains("psdb.cloud");
                 let (password, ssl_suffix) = if is_cloud_auth {
                     let token = Self::fetch_cloud_token(&config).await?;
                     (token, "?ssl-mode=required")
+                } else if is_planetscale {
+                    let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    (pw.clone(), "?ssl-mode=required")
                 } else {
                     let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                     (pw.clone(), "")
@@ -760,6 +942,55 @@ impl ConnectionManager {
                 let client = mongodb::Client::with_uri_str(&uri).await?;
                 let database = config.database.clone().or(config.mongo_database.clone()).unwrap_or_else(|| "admin".to_string());
                 DatabasePool::MongoDB { client, database }
+            }
+            DatabaseType::ClickHouse => {
+                let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host };
+                let port = if actual_port == 0 { 8123 } else { actual_port };
+                let use_ssl = config.clickhouse_use_ssl.unwrap_or(false);
+                let scheme = if use_ssl { "https" } else { "http" };
+                let base_url = format!("{}://{}:{}", scheme, host, port);
+
+                let mut headers = reqwest::header::HeaderMap::new();
+                if let Some(user) = &config.username {
+                    if !user.is_empty() {
+                        headers.insert("X-ClickHouse-User", reqwest::header::HeaderValue::from_str(user)?);
+                    }
+                }
+                if let Some(pass) = &config.password {
+                    if !pass.is_empty() {
+                        headers.insert("X-ClickHouse-Key", reqwest::header::HeaderValue::from_str(pass)?);
+                    }
+                }
+
+                let client = reqwest::Client::builder()
+                    .default_headers(headers)
+                    .build()?;
+
+                let database = config.database.as_deref().unwrap_or("default").to_string();
+
+                DatabasePool::ClickHouse {
+                    client,
+                    url: base_url,
+                    database,
+                }
+            }
+            DatabaseType::LibSQL => {
+                let url = config.libsql_url.as_deref()
+                    .or(config.host.as_deref())
+                    .ok_or_else(|| anyhow!("LibSQL Connection URI is required"))?
+                    .to_string();
+                let token = config.libsql_auth_token.as_deref()
+                    .or(config.password.as_deref())
+                    .unwrap_or_default()
+                    .to_string();
+
+                let client = reqwest::Client::builder().build()?;
+
+                DatabasePool::LibSQL {
+                    client,
+                    url,
+                    token,
+                }
             }
         };
 
@@ -873,9 +1104,14 @@ impl ConnectionManager {
                 let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                 let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
 
+                let ssl_mode = if config.provider.as_deref() == Some("planetscale_postgres") {
+                    "?sslmode=require"
+                } else {
+                    ""
+                };
                 let connection_string = format!(
-                    "postgresql://{}:{}@{}:{}/{}",
-                    username, password, actual_host, actual_port, database
+                    "postgresql://{}:{}@{}:{}/{}{}",
+                    username, password, actual_host, actual_port, database, ssl_mode
                 );
 
                 match sqlx::PgPool::connect(&connection_string).await {
@@ -914,9 +1150,13 @@ impl ConnectionManager {
                     config.auth_method.as_ref(),
                     Some(MariaDBAuthMethod::AwsIam) | Some(MariaDBAuthMethod::AzureAd) | Some(MariaDBAuthMethod::GcpIam)
                 );
+                let is_planetscale = config.provider.as_deref() == Some("planetscale") || actual_host.contains("psdb.cloud");
                 let (password, ssl_suffix) = if is_cloud_auth {
                     let token = Self::fetch_cloud_token(&config).await?;
                     (token, "?ssl-mode=required")
+                } else if is_planetscale {
+                    let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    (pw.clone(), "?ssl-mode=required")
                 } else {
                     let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                     (pw.clone(), "")
@@ -986,6 +1226,115 @@ impl ConnectionManager {
                                 db_version: "MongoDB".to_string(),
                                 error: None,
                             }
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+            DatabaseType::ClickHouse => {
+                let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host };
+                let port = if actual_port == 0 { 8123 } else { actual_port };
+                let use_ssl = config.clickhouse_use_ssl.unwrap_or(false);
+                let scheme = if use_ssl { "https" } else { "http" };
+                let base_url = format!("{}://{}:{}", scheme, host, port);
+
+                let mut headers = reqwest::header::HeaderMap::new();
+                if let Some(user) = &config.username {
+                    if !user.is_empty() {
+                        if let Ok(hv) = reqwest::header::HeaderValue::from_str(user) {
+                            headers.insert("X-ClickHouse-User", hv);
+                        }
+                    }
+                }
+                if let Some(pass) = &config.password {
+                    if !pass.is_empty() {
+                        if let Ok(hv) = reqwest::header::HeaderValue::from_str(pass) {
+                            headers.insert("X-ClickHouse-Key", hv);
+                        }
+                    }
+                }
+
+                let client_res = reqwest::Client::builder()
+                    .default_headers(headers)
+                    .build();
+
+                match client_res {
+                    Ok(client) => {
+                        let database = config.database.as_deref().unwrap_or("default");
+                        match Self::clickhouse_http_query(&client, &base_url, database, "SELECT version()").await {
+                            Ok(res) => {
+                                let version = res.rows.first()
+                                    .and_then(|r| r.as_object())
+                                    .and_then(|obj| obj.values().next())
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown");
+                                let latency_ms = start.elapsed().as_millis() as u64;
+                                ConnectionTestResult {
+                                    success: true,
+                                    latency_ms,
+                                    db_version: format!("ClickHouse {}", version),
+                                    error: None,
+                                }
+                            }
+                            Err(e) => ConnectionTestResult {
+                                success: false,
+                                latency_ms: 0,
+                                db_version: String::new(),
+                                error: Some(e.to_string()),
+                            },
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+            DatabaseType::LibSQL => {
+                let url = config.libsql_url.as_deref()
+                    .or(config.host.as_deref())
+                    .ok_or_else(|| anyhow!("LibSQL Connection URI is required"))?;
+                let token = config.libsql_auth_token.as_deref()
+                    .or(config.password.as_deref())
+                    .unwrap_or_default();
+
+                match reqwest::Client::builder().build() {
+                    Ok(client) => {
+                        match Self::libsql_http_pipeline(&client, url, token, "SELECT sqlite_version()").await {
+                            Ok(res) => {
+                                let version = res.rows.first()
+                                    .and_then(|r| r.as_object())
+                                    .and_then(|obj| obj.values().next())
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown");
+                                let latency_ms = start.elapsed().as_millis() as u64;
+                                let provider_label = if config.provider.as_deref() == Some("turso") {
+                                    "Turso (LibSQL)"
+                                } else if config.provider.as_deref() == Some("valtown") {
+                                    "Val Town (LibSQL)"
+                                } else {
+                                    "LibSQL"
+                                };
+                                ConnectionTestResult {
+                                    success: true,
+                                    latency_ms,
+                                    db_version: format!("{} v{}", provider_label, version),
+                                    error: None,
+                                }
+                            }
+                            Err(e) => ConnectionTestResult {
+                                success: false,
+                                latency_ms: 0,
+                                db_version: String::new(),
+                                error: Some(e.to_string()),
+                            },
                         }
                     }
                     Err(e) => ConnectionTestResult {
@@ -1137,6 +1486,50 @@ impl ConnectionManager {
                 }
                 tables
             }
+            DatabasePool::ClickHouse { client, url, database } => {
+                let query = format!(
+                    "SELECT name, engine, total_rows FROM system.tables WHERE database = '{}' AND is_temporary = 0 FORMAT JSONCompact",
+                    database.replace('\'', "''")
+                );
+                let res = Self::clickhouse_http_query(client, url, database, &query).await?;
+                let mut tables = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let engine = obj.get("engine").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        let count = obj.get("total_rows").and_then(|v| v.as_u64()).map(|n| n as i64);
+                        tables.push(DatabaseTable {
+                            name: name.clone(),
+                            schema: None,
+                            full_name: Some(name),
+                            row_count: count,
+                            size_kb: None,
+                            table_type: engine,
+                        });
+                    }
+                }
+                tables
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let query = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name";
+                let res = Self::libsql_http_pipeline(client, url, token, query).await?;
+                let mut tables = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let table_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("table").to_string();
+                        tables.push(DatabaseTable {
+                            name: name.clone(),
+                            schema: None,
+                            full_name: Some(name),
+                            row_count: None,
+                            size_kb: None,
+                            table_type: Some(table_type.to_uppercase()),
+                        });
+                    }
+                }
+                tables
+            }
         };
 
         Ok(tables)
@@ -1154,7 +1547,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA table_info({})", table_name)
             }
             DatabaseType::PostgreSQL => String::new(),
@@ -1169,6 +1562,7 @@ impl ConnectionManager {
                 )
             }
             DatabaseType::MongoDB => String::new(),
+            DatabaseType::ClickHouse => String::new(),
         };
 
         let columns = match pool {
@@ -1408,6 +1802,92 @@ impl ConnectionManager {
                 }
                 columns
             }
+            DatabasePool::ClickHouse { client, url, database } => {
+                let ch_query = format!(
+                    "SELECT name, type, default_expression, is_in_primary_key FROM system.columns WHERE database = '{}' AND table = '{}' ORDER BY position FORMAT JSONCompact",
+                    database.replace('\'', "''"),
+                    table_name.replace('\'', "''")
+                );
+                let res = Self::clickhouse_http_query(client, url, database, &ch_query).await?;
+                let mut columns = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let data_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("String").to_string();
+                        let is_pk = obj.get("is_in_primary_key").and_then(|v| v.as_u64()).unwrap_or(0) == 1;
+                        let default_val = obj.get("default_expression").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string());
+                        let normalized_type = normalize_type_name(&data_type);
+                        let type_family = classify_sqlite_type(&data_type);
+
+                        columns.push(TableColumn {
+                            name,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type),
+                            normalized_type,
+                            type_family,
+                            db_type: DatabaseType::ClickHouse,
+                            is_nullable: true,
+                            default_value: default_val,
+                            is_primary_key: is_pk,
+                            is_boolean_like: false,
+                            is_array: false,
+                            enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
+                        });
+                    }
+                }
+                columns
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, &query).await?;
+                let mut columns = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let data_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("TEXT").to_string();
+                        let not_null = obj.get("notnull").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let default_value = obj.get("dflt_value").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        let is_pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
+                        let normalized_type = normalize_type_name(&data_type);
+                        let type_family = classify_sqlite_type(&data_type);
+
+                        columns.push(TableColumn {
+                            name,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type),
+                            normalized_type,
+                            type_family: type_family.clone(),
+                            db_type: DatabaseType::LibSQL,
+                            is_nullable: not_null == 0,
+                            default_value,
+                            is_primary_key: is_pk,
+                            is_boolean_like: matches!(type_family, ColumnTypeFamily::Boolean),
+                            is_array: false,
+                            enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
+                        });
+                    }
+                }
+                columns
+            }
         };
 
         Ok(columns)
@@ -1447,6 +1927,25 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { client, database } => {
                 Self::mongo_execute_shell(client, database, query).await
+            }
+            DatabasePool::ClickHouse { client, url, database } => {
+                let trimmed = query.trim();
+                if trimmed.to_uppercase().starts_with("SELECT")
+                    || trimmed.to_uppercase().starts_with("SHOW")
+                    || trimmed.to_uppercase().starts_with("DESCRIBE")
+                    || trimmed.to_uppercase().starts_with("EXISTS") {
+                    Self::clickhouse_http_query(client, url, database, trimmed).await
+                } else {
+                    let count = Self::clickhouse_http_execute(client, url, database, trimmed).await?;
+                    Ok(QueryResult {
+                        columns: vec![],
+                        rows: vec![],
+                        rows_affected: count,
+                    })
+                }
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                Self::libsql_http_pipeline(client, url, token, query).await
             }
         }
     }
@@ -1530,6 +2029,28 @@ impl ConnectionManager {
                     });
                 }
                 
+                (steps, None)
+            }
+            (DatabasePool::LibSQL { client, url, token }, DatabaseType::LibSQL) => {
+                let explain_query = format!("EXPLAIN QUERY PLAN {}", query);
+                let res = Self::libsql_http_pipeline(client, url, token, &explain_query).await?;
+
+                let mut steps = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let detail = obj.get("detail").and_then(|v| v.as_str()).unwrap_or("Query Step");
+                        steps.push(PlanStep {
+                            step_type: detail.to_string(),
+                            table_name: None,
+                            rows: None,
+                            cost: None,
+                            filter_condition: None,
+                            index_used: None,
+                            children: vec![],
+                        });
+                    }
+                }
+
                 (steps, None)
             }
             _ => return Err(anyhow!("Database type mismatch")),
@@ -1703,6 +2224,17 @@ impl ConnectionManager {
             return Ok(format!("Successfully inserted 1 document into {}", table_name));
         }
 
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let json_body = serde_json::to_string(&data)?;
+            let query_url = format!("{}/?database={}&query=INSERT%20INTO%20{}%20FORMAT%20JSONEachRow", url, urlencoding::encode(database), urlencoding::encode(table_name));
+            let resp = client.post(&query_url).body(json_body).send().await?;
+            if !resp.status().is_success() {
+                let err_text = resp.text().await.unwrap_or_else(|_| "ClickHouse insert error".to_string());
+                return Err(anyhow!("ClickHouse Error: {}", err_text));
+            }
+            return Ok(format!("Successfully inserted 1 row into {}", table_name));
+        }
+
         let obj = data.as_object()
             .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
 
@@ -1763,6 +2295,17 @@ impl ConnectionManager {
             }
             coll.insert_many(docs).await?;
             return Ok(format!("Successfully inserted {} documents into {}", rows.len(), table_name));
+        }
+
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let json_body = serde_json::to_string(&rows)?;
+            let query_url = format!("{}/?database={}&query=INSERT%20INTO%20{}%20FORMAT%20JSONEachRow", url, urlencoding::encode(database), urlencoding::encode(table_name));
+            let resp = client.post(&query_url).body(json_body).send().await?;
+            if !resp.status().is_success() {
+                let err_text = resp.text().await.unwrap_or_else(|_| "ClickHouse insert error".to_string());
+                return Err(anyhow!("ClickHouse Error: {}", err_text));
+            }
+            return Ok(format!("Successfully inserted {} rows into {}", rows.len(), table_name));
         }
 
         // Get columns from first row
@@ -1838,6 +2381,20 @@ impl ConnectionManager {
             return Ok(format!("Successfully updated {} document(s)", res.modified_count));
         }
 
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let obj = data.as_object().ok_or_else(|| anyhow!("Data must be a JSON object"))?;
+            let set_clauses: Vec<String> = obj.iter().map(|(k, v)| {
+                if v.is_string() {
+                    format!("{} = '{}'", k, v.as_str().unwrap().replace('\'', "''"))
+                } else {
+                    format!("{} = {}", k, v)
+                }
+            }).collect();
+            let sql = format!("ALTER TABLE {} UPDATE {} WHERE {}", table_name, set_clauses.join(", "), where_clause);
+            Self::clickhouse_http_execute(client, url, database, &sql).await?;
+            return Ok("Update requested via ALTER TABLE UPDATE".to_string());
+        }
+
         let obj = data.as_object()
             .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
 
@@ -1899,6 +2456,12 @@ impl ConnectionManager {
             return Ok(format!("Successfully deleted {} document(s)", res.deleted_count));
         }
 
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let sql = format!("ALTER TABLE {} DELETE WHERE {}", table_name, where_clause);
+            Self::clickhouse_http_execute(client, url, database, &sql).await?;
+            return Ok("Deletion requested via ALTER TABLE DELETE".to_string());
+        }
+
         let query = format!(
             "DELETE FROM {} WHERE {}",
             if matches!(pool, DatabasePool::Postgres(_)) {
@@ -1930,6 +2493,21 @@ impl ConnectionManager {
             let db = client.database(database);
             db.create_collection(table_name).await?;
             return Ok(format!("Successfully created collection {}", table_name));
+        }
+
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let mut col_defs = Vec::new();
+            let mut pks = Vec::new();
+            for (name, data_type, _nullable, is_pk) in columns {
+                col_defs.push(format!("{} {}", name, data_type));
+                if is_pk {
+                    pks.push(name);
+                }
+            }
+            let order_by = if pks.is_empty() { "tuple()".to_string() } else { format!("({})", pks.join(", ")) };
+            let sql = format!("CREATE TABLE {} ({}) ENGINE = MergeTree() ORDER BY {}", table_name, col_defs.join(", "), order_by);
+            Self::clickhouse_http_execute(client, url, database, &sql).await?;
+            return Ok(format!("Successfully created ClickHouse table {}", table_name));
         }
 
         let mut column_defs: Vec<String> = Vec::new();
@@ -1984,6 +2562,12 @@ impl ConnectionManager {
             return Ok(format!("Successfully dropped collection {}", table_name));
         }
 
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let sql = format!("DROP TABLE {}", table_name);
+            Self::clickhouse_http_execute(client, url, database, &sql).await?;
+            return Ok(format!("Successfully dropped table {}", table_name));
+        }
+
         let query = format!(
             "DROP TABLE {}",
             if matches!(pool, DatabasePool::Postgres(_)) {
@@ -2019,10 +2603,10 @@ impl ConnectionManager {
         let nullable_clause = if nullable { "" } else { " NOT NULL" };
         
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("ALTER TABLE {} ADD COLUMN {} {}", table_name, column_name, data_type)
             }
-            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
+            DatabaseType::PostgreSQL | DatabaseType::MySQL | DatabaseType::ClickHouse => {
                 let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
                     Self::quote_pg_table(table_name)
                 } else {
@@ -2061,10 +2645,10 @@ impl ConnectionManager {
         }
 
         let query = match db_type {
-            DatabaseType::SQLite => {
-                return Err(anyhow!("SQLite does not support dropping columns directly. Please recreate the table."));
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
+                return Err(anyhow!("SQLite/LibSQL does not support dropping columns directly. Please recreate the table."));
             }
-            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
+            DatabaseType::PostgreSQL | DatabaseType::MySQL | DatabaseType::ClickHouse => {
                 let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
                     Self::quote_pg_table(table_name)
                 } else {
@@ -2106,9 +2690,15 @@ impl ConnectionManager {
             return Ok(format!("Successfully renamed collection {} to {}", old_name, new_name));
         }
 
+        if let DatabasePool::ClickHouse { client, url, database } = pool {
+            let sql = format!("RENAME TABLE {} TO {}", old_name, new_name);
+            Self::clickhouse_http_execute(client, url, database, &sql).await?;
+            return Ok(format!("Successfully renamed table {} to {}", old_name, new_name));
+        }
+
         let query = match db_type {
-            DatabaseType::SQLite => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
-            DatabaseType::MySQL => format!("RENAME TABLE {} TO {}", old_name, new_name),
+            DatabaseType::SQLite | DatabaseType::LibSQL => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
+            DatabaseType::MySQL | DatabaseType::ClickHouse => format!("RENAME TABLE {} TO {}", old_name, new_name),
             DatabaseType::PostgreSQL => {
                 let quoted_old = Self::quote_pg_table(old_name);
                 let quoted_new = Self::quote_pg_ident(new_name);
@@ -2170,6 +2760,18 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => {
                 return Err(anyhow!("Transactions are not supported for MongoDB in this tool"));
+            }
+            DatabasePool::ClickHouse { client, url, database } => {
+                for query in queries {
+                    Self::clickhouse_http_execute(client, url, database, query).await?;
+                    total_rows_affected += 1;
+                }
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                for query in queries {
+                    let res = Self::libsql_http_pipeline(client, url, token, query).await?;
+                    total_rows_affected += res.rows_affected;
+                }
             }
         }
 
@@ -2364,6 +2966,8 @@ impl ConnectionManager {
                     .collect()
             }
             DatabasePool::MongoDB { .. } => vec![],
+            DatabasePool::ClickHouse { .. } => vec![],
+            DatabasePool::LibSQL { .. } => vec![],
         };
 
         Ok(constraints)
@@ -2519,6 +3123,12 @@ impl ConnectionManager {
             DatabaseType::MongoDB => {
                 return Err(anyhow!("Foreign keys are not supported for MongoDB"));
             }
+            DatabaseType::ClickHouse => {
+                return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
+            }
+            DatabaseType::LibSQL => {
+                return Err(anyhow!("Foreign keys are not supported for LibSQL"));
+            }
         }
 
         Ok(format!(
@@ -2573,6 +3183,12 @@ impl ConnectionManager {
             DatabaseType::MongoDB => {
                 return Err(anyhow!("Foreign keys are not supported for MongoDB"));
             }
+            DatabaseType::ClickHouse => {
+                return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
+            }
+            DatabaseType::LibSQL => {
+                return Err(anyhow!("Foreign keys are not supported for LibSQL"));
+            }
         }
 
         Ok(format!(
@@ -2594,10 +3210,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let sql = match db_type {
-            DatabaseType::PostgreSQL | DatabaseType::SQLite => {
-                "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
-            }
-            DatabaseType::MySQL => {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::MySQL | DatabaseType::ClickHouse | DatabaseType::LibSQL => {
                 "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
             }
             DatabaseType::MongoDB => "",
@@ -2638,6 +3251,31 @@ impl ConnectionManager {
                 })
                 .collect(),
             DatabasePool::MongoDB { .. } => vec![],
+            DatabasePool::ClickHouse { client, url, database } => {
+                let res = Self::clickhouse_http_query(client, url, database, "SELECT id, name, toString(applied_at) as applied_at, checksum FROM schema_migrations ORDER BY id FORMAT JSONCompact").await?;
+                res.rows.into_iter().filter_map(|r| {
+                    let obj = r.as_object()?;
+                    let id = obj.get("id")?.as_str()?.to_string();
+                    let name = obj.get("name")?.as_str()?.to_string();
+                    let applied_at = obj.get("applied_at")?.as_str().unwrap_or_default().to_string();
+                    let checksum = obj.get("checksum").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    Some(AppliedMigration { id, name, applied_at, checksum })
+                }).collect()
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, sql).await;
+                match res {
+                    Ok(r) => r.rows.into_iter().filter_map(|row| {
+                        let obj = row.as_object()?;
+                        let id = obj.get("id")?.as_str()?.to_string();
+                        let name = obj.get("name")?.as_str()?.to_string();
+                        let applied_at = obj.get("applied_at").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let checksum = obj.get("checksum").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        Some(AppliedMigration { id, name, applied_at, checksum })
+                    }).collect(),
+                    Err(_) => vec![],
+                }
+            }
         };
 
         Ok(migrations)
@@ -2943,7 +3581,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let create_sql = match db_type {
-            DatabaseType::SQLite => r#"
+            DatabaseType::SQLite | DatabaseType::LibSQL => r#"
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -2968,6 +3606,14 @@ impl ConnectionManager {
                 )
             "#,
             DatabaseType::MongoDB => "",
+            DatabaseType::ClickHouse => r#"
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    id String,
+                    name String,
+                    checksum Nullable(String),
+                    applied_at DateTime DEFAULT now()
+                ) ENGINE = MergeTree() ORDER BY id
+            "#,
         };
 
         execute_query!(pool, create_sql)?;
@@ -3265,7 +3911,7 @@ impl ConnectionManager {
         db_type: &DatabaseType,
     ) -> Result<Vec<String>> {
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA table_info({})", table_name)
             }
             DatabaseType::PostgreSQL => {
@@ -3287,6 +3933,7 @@ impl ConnectionManager {
                 )
             }
             DatabaseType::MongoDB => String::new(),
+            DatabaseType::ClickHouse => String::new(),
         };
 
         let primary_keys = match pool {
@@ -3317,6 +3964,28 @@ impl ConnectionManager {
                     .collect()
             }
             DatabasePool::MongoDB { .. } => vec!["_id".to_string()],
+            DatabasePool::ClickHouse { client, url, database } => {
+                let q = format!("SELECT name FROM system.columns WHERE database = '{}' AND table = '{}' AND is_in_primary_key = 1 FORMAT JSONCompact", database.replace('\'', "''"), table_name.replace('\'', "''"));
+                let res = Self::clickhouse_http_query(client, url, database, &q).await?;
+                res.rows.into_iter().filter_map(|r| {
+                    r.as_object()?.get("name")?.as_str().map(|s| s.to_string())
+                }).collect()
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, &query).await?;
+                let mut pks = Vec::new();
+                for r in res.rows {
+                    if let Some(obj) = r.as_object() {
+                        let pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if pk > 0 {
+                            if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                                pks.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+                pks
+            }
         };
 
         Ok(primary_keys)
@@ -3329,7 +3998,7 @@ impl ConnectionManager {
         db_type: &DatabaseType,
     ) -> Result<Vec<String>> {
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA index_list({})", table_name)
             }
             DatabaseType::PostgreSQL => {
@@ -3350,6 +4019,7 @@ impl ConnectionManager {
                 )
             }
             DatabaseType::MongoDB => String::new(),
+            DatabaseType::ClickHouse => String::new(),
         };
 
         let indexes = match pool {
@@ -3421,6 +4091,8 @@ impl ConnectionManager {
                     .collect()
             }
             DatabasePool::MongoDB { .. } => vec![],
+            DatabasePool::ClickHouse { .. } => vec![],
+            DatabasePool::LibSQL { .. } => vec![],
         };
 
         Ok(indexes)
@@ -3854,6 +4526,8 @@ impl ConnectionManager {
                 }
             }
             DatabasePool::MongoDB { .. } => {}
+            DatabasePool::ClickHouse { .. } => {}
+            DatabasePool::LibSQL { .. } => {}
         }
 
         Ok(matches)
@@ -3983,6 +4657,28 @@ impl ConnectionManager {
             DatabasePool::MongoDB { client, database } => {
                 let query = format!("db.{}.find({{\"{}\": \"{}\"}})", table_name, column_name, clean_value);
                 Self::mongo_execute_shell(client, database, &query).await
+            }
+            DatabasePool::ClickHouse { client, url, database } => {
+                let query = format!(
+                    "SELECT * FROM {} WHERE {} = '{}' LIMIT {} OFFSET {}",
+                    table_name,
+                    column_name,
+                    clean_value.replace('\'', "''"),
+                    limit,
+                    offset
+                );
+                Self::clickhouse_http_query(client, url, database, &query).await
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let query = format!(
+                    "SELECT * FROM \"{}\" WHERE \"{}\" = '{}' LIMIT {} OFFSET {}",
+                    table_name.replace('"', "\"\""),
+                    column_name.replace('"', "\"\""),
+                    clean_value.replace('\'', "''"),
+                    limit,
+                    offset
+                );
+                Self::libsql_http_pipeline(client, url, token, &query).await
             }
         }
     }

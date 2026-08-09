@@ -1,5 +1,5 @@
-export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mongodb';
-export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb';
+export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mongodb' | 'clickhouse' | 'libsql';
+export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb' | 'planetscale' | 'planetscale_postgres' | 'prisma' | 'turso' | 'valtown';
 export type MariaDBAuthMethod = 'password' | 'aws_iam' | 'azure_ad' | 'gcp_iam';
 export type MongoDBAuthMethod = 'password' | 'atlas';
 
@@ -49,7 +49,7 @@ export interface ConnectionConfig {
   database?: string;
   file_path?: string;
   ssh_config?: SSHConfig;
-  /** Set for cloud providers (supabase, neon) or mariadb. Wire protocol stays postgresql/mysql. */
+  /** Set for cloud providers (supabase, neon, planetscale, prisma, turso, valtown) or mariadb. */
   provider?: DatabaseProvider;
   /** Auth method — only relevant when provider === 'mariadb' */
   auth_method?: MariaDBAuthMethod;
@@ -68,6 +68,12 @@ export interface ConnectionConfig {
   mongo_connection_string?: string;
   /** MongoDB: auth source database (defaults to 'admin') */
   mongo_auth_source?: string;
+  /** ClickHouse SSL/TLS requirement */
+  clickhouse_use_ssl?: boolean;
+  /** LibSQL / Turso / Val Town Connection URI */
+  libsql_url?: string;
+  /** LibSQL / Turso / Val Town Auth Token */
+  libsql_auth_token?: string;
 }
 
 export interface DatabaseTable {
