@@ -1,4 +1,5 @@
 export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql';
+export type DatabaseProvider = 'supabase' | 'neon';
 
 export type ColumnTypeFamily =
   | 'boolean'
@@ -46,6 +47,8 @@ export interface ConnectionConfig {
   database?: string;
   file_path?: string;
   ssh_config?: SSHConfig;
+  /** Set for cloud providers (supabase, neon). Wire protocol stays postgresql. */
+  provider?: DatabaseProvider;
 }
 
 export interface DatabaseTable {
