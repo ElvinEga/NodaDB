@@ -11,12 +11,15 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
+use mongodb::bson::{self, doc, Bson, Document as BsonDocument};
+use futures::TryStreamExt;
 
 #[derive(Clone)]
 pub enum DatabasePool {
     Sqlite(sqlx::SqlitePool),
     Postgres(sqlx::PgPool),
     MySql(sqlx::MySqlPool),
+    MongoDB { client: mongodb::Client, database: String },
 }
 
 macro_rules! decimal_json_value {
@@ -211,6 +214,9 @@ macro_rules! execute_query {
             DatabasePool::MySql(pool) => {
                 sqlx::query($query).execute(pool).await?.rows_affected()
             }
+            DatabasePool::MongoDB { .. } => {
+                return Err(anyhow::anyhow!("Raw SQL execution is not supported for MongoDB"));
+            }
         };
         Ok::<u64, anyhow::Error>(rows_affected)
     }};
@@ -271,6 +277,7 @@ impl ConnectionManager {
                 format!("\"{}\"", identifier.replace('"', "\"\""))
             }
             DatabaseType::MySQL => format!("`{}`", identifier.replace('`', "``")),
+            DatabaseType::MongoDB => identifier.to_string(),
         }
     }
 
@@ -299,6 +306,7 @@ impl ConnectionManager {
                     Self::quote_identifier(table_name.trim_matches('`'), db_type)
                 }
             }
+            DatabaseType::MongoDB => table_name.to_string(),
         }
     }
 
@@ -472,6 +480,186 @@ impl ConnectionManager {
         }
     }
 
+    fn bson_docs_to_query_result(docs: Vec<BsonDocument>) -> Result<QueryResult> {
+        let mut columns_set = std::collections::BTreeSet::new();
+        let mut json_rows = Vec::new();
+
+        for doc in &docs {
+            let json_val: serde_json::Value = serde_json::to_value(doc)?;
+            if let serde_json::Value::Object(map) = &json_val {
+                for k in map.keys() {
+                    columns_set.insert(k.clone());
+                }
+            }
+            json_rows.push(json_val);
+        }
+
+        let mut columns: Vec<String> = Vec::new();
+        if columns_set.contains("_id") {
+            columns.push("_id".to_string());
+            columns_set.remove("_id");
+        }
+        for c in columns_set {
+            columns.push(c);
+        }
+
+        let count = json_rows.len() as u64;
+        Ok(QueryResult {
+            columns,
+            rows: json_rows,
+            rows_affected: count,
+        })
+    }
+
+    async fn mongo_execute_shell(client: &mongodb::Client, database: &str, query: &str) -> Result<QueryResult> {
+        let db = client.database(database);
+        let trimmed = query.trim().trim_end_matches(';');
+
+        if trimmed.to_uppercase().starts_with("SELECT") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            let from_idx = parts.iter().position(|&p| p.eq_ignore_ascii_case("FROM"));
+            let collection_name = if let Some(idx) = from_idx {
+                if idx + 1 < parts.len() {
+                    parts[idx + 1].trim_matches(|c| c == '"' || c == '\'' || c == '`').to_string()
+                } else {
+                    return Err(anyhow!("Invalid SELECT query"));
+                }
+            } else {
+                return Err(anyhow!("Invalid SELECT query"));
+            };
+
+            let coll = db.collection::<BsonDocument>(&collection_name);
+            let mut cursor = coll.find(doc! {}).await?;
+            let mut docs = Vec::new();
+            while let Some(doc) = cursor.try_next().await? {
+                docs.push(doc);
+            }
+            return Self::bson_docs_to_query_result(docs);
+        }
+
+        if !trimmed.starts_with("db.") {
+            return Err(anyhow!("MongoDB query must start with 'db.<collection>.<method>()' or 'SELECT ... FROM <collection>'"));
+        }
+
+        let rest = &trimmed[3..];
+        let dot_idx = rest.find('.').ok_or_else(|| anyhow!("Invalid MQL format. Expected: db.<collection>.<method>(...)"))?;
+        let collection = &rest[..dot_idx];
+        let method_and_args = &rest[dot_idx + 1..];
+
+        let paren_idx = method_and_args.find('(').ok_or_else(|| anyhow!("Invalid MQL format. Expected: method(...)"))?;
+        let method = &method_and_args[..paren_idx];
+        let args_str = method_and_args[paren_idx + 1..].trim_end_matches(')').trim();
+
+        let coll = db.collection::<BsonDocument>(collection);
+
+        match method {
+            "find" => {
+                let filter: BsonDocument = if args_str.is_empty() {
+                    doc! {}
+                } else {
+                    let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                    bson::to_document(&json_val)?
+                };
+                let mut cursor = coll.find(filter).await?;
+                let mut docs = Vec::new();
+                while let Some(doc) = cursor.try_next().await? {
+                    docs.push(doc);
+                }
+                Self::bson_docs_to_query_result(docs)
+            }
+            "findOne" => {
+                let filter: BsonDocument = if args_str.is_empty() {
+                    doc! {}
+                } else {
+                    let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                    bson::to_document(&json_val)?
+                };
+                let maybe_doc = coll.find_one(filter).await?;
+                let docs = match maybe_doc {
+                    Some(d) => vec![d],
+                    None => vec![],
+                };
+                Self::bson_docs_to_query_result(docs)
+            }
+            "aggregate" => {
+                let pipeline_json: serde_json::Value = serde_json::from_str(args_str)?;
+                let pipeline_arr = pipeline_json.as_array().ok_or_else(|| anyhow!("aggregate requires an array of pipeline stages"))?;
+                let mut pipeline = Vec::new();
+                for stage in pipeline_arr {
+                    let doc = bson::to_document(stage)?;
+                    pipeline.push(doc);
+                }
+                let mut cursor = coll.aggregate(pipeline).await?;
+                let mut docs = Vec::new();
+                while let Some(doc) = cursor.try_next().await? {
+                    docs.push(doc);
+                }
+                Self::bson_docs_to_query_result(docs)
+            }
+            "countDocuments" | "count" => {
+                let filter: BsonDocument = if args_str.is_empty() {
+                    doc! {}
+                } else {
+                    let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                    bson::to_document(&json_val)?
+                };
+                let count = coll.count_documents(filter).await?;
+                let mut doc = BsonDocument::new();
+                doc.insert("count", count as i64);
+                Self::bson_docs_to_query_result(vec![doc])
+            }
+            "insertOne" => {
+                let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                let doc = bson::to_document(&json_val)?;
+                let res = coll.insert_one(doc).await?;
+                let mut res_doc = BsonDocument::new();
+                res_doc.insert("insertedId", res.inserted_id);
+                res_doc.insert("status", "success");
+                Self::bson_docs_to_query_result(vec![res_doc])
+            }
+            "insertMany" => {
+                let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                let arr = json_val.as_array().ok_or_else(|| anyhow!("insertMany requires an array of documents"))?;
+                let mut docs = Vec::new();
+                for item in arr {
+                    docs.push(bson::to_document(item)?);
+                }
+                let res = coll.insert_many(docs).await?;
+                let mut res_doc = BsonDocument::new();
+                res_doc.insert("insertedCount", res.inserted_ids.len() as i64);
+                res_doc.insert("status", "success");
+                Self::bson_docs_to_query_result(vec![res_doc])
+            }
+            "deleteMany" => {
+                let filter: BsonDocument = if args_str.is_empty() {
+                    doc! {}
+                } else {
+                    let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                    bson::to_document(&json_val)?
+                };
+                let res = coll.delete_many(filter).await?;
+                let mut res_doc = BsonDocument::new();
+                res_doc.insert("deletedCount", res.deleted_count as i64);
+                res_doc.insert("status", "success");
+                Self::bson_docs_to_query_result(vec![res_doc])
+            }
+            "deleteOne" => {
+                let filter: BsonDocument = if args_str.is_empty() {
+                    doc! {}
+                } else {
+                    let json_val: serde_json::Value = serde_json::from_str(args_str)?;
+                    bson::to_document(&json_val)?
+                };
+                let res = coll.delete_one(filter).await?;
+                let mut res_doc = BsonDocument::new();
+                res_doc.insert("deletedCount", res.deleted_count as i64);
+                res_doc.insert("status", "success");
+                Self::bson_docs_to_query_result(vec![res_doc])
+            }
+            _ => Err(anyhow!("Unsupported MongoDB method: {}. Supported: find, findOne, aggregate, countDocuments, insertOne, insertMany, deleteOne, deleteMany", method))
+        }
+    }
+
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
         let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
@@ -553,6 +741,25 @@ impl ConnectionManager {
                 );
                 let pool = sqlx::MySqlPool::connect(&connection_string).await?;
                 DatabasePool::MySql(pool)
+            }
+            DatabaseType::MongoDB => {
+                let uri = if config.mongo_auth_method.as_deref() == Some("atlas") {
+                    config.mongo_connection_string.as_ref()
+                        .ok_or_else(|| anyhow!("Atlas connection string is required"))?
+                        .clone()
+                } else {
+                    let user = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                    let pass = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    let encoded_pw = urlencoding::encode(pass);
+                    let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host.clone() };
+                    let port = if actual_port == 0 { 27017 } else { actual_port };
+                    let db = config.database.as_deref().unwrap_or("admin");
+                    let auth_source = config.mongo_auth_source.as_deref().unwrap_or("admin");
+                    format!("mongodb://{}:{}@{}:{}/{}?authSource={}", user, encoded_pw, host, port, db, auth_source)
+                };
+                let client = mongodb::Client::with_uri_str(&uri).await?;
+                let database = config.database.clone().or(config.mongo_database.clone()).unwrap_or_else(|| "admin".to_string());
+                DatabasePool::MongoDB { client, database }
             }
         };
 
@@ -746,6 +953,49 @@ impl ConnectionManager {
                     },
                 }
             }
+            DatabaseType::MongoDB => {
+                let uri = if config.mongo_auth_method.as_deref() == Some("atlas") {
+                    config.mongo_connection_string.as_ref()
+                        .ok_or_else(|| anyhow!("Atlas connection string is required"))?
+                        .clone()
+                } else {
+                    let user = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
+                    let pass = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    let encoded_pw = urlencoding::encode(pass);
+                    let host = if actual_host.is_empty() { "localhost".to_string() } else { actual_host.clone() };
+                    let port = if actual_port == 0 { 27017 } else { actual_port };
+                    let db = config.database.as_deref().unwrap_or("admin");
+                    let auth_source = config.mongo_auth_source.as_deref().unwrap_or("admin");
+                    format!("mongodb://{}:{}@{}:{}/{}?authSource={}", user, encoded_pw, host, port, db, auth_source)
+                };
+                match mongodb::Client::with_uri_str(&uri).await {
+                    Ok(client) => {
+                        let ping_res = client.database("admin").run_command(doc! { "ping": 1 }).await;
+                        if let Err(e) = ping_res {
+                            ConnectionTestResult {
+                                success: false,
+                                latency_ms: 0,
+                                db_version: String::new(),
+                                error: Some(e.to_string()),
+                            }
+                        } else {
+                            let latency_ms = start.elapsed().as_millis() as u64;
+                            ConnectionTestResult {
+                                success: true,
+                                latency_ms,
+                                db_version: "MongoDB".to_string(),
+                                error: None,
+                            }
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
         };
 
         Ok(result)
@@ -866,6 +1116,27 @@ impl ConnectionManager {
                     })
                     .collect()
             }
+            DatabasePool::MongoDB { client, database } => {
+                let db = client.database(database);
+                let collections = db.list_collection_names().await.unwrap_or_default();
+                let mut tables = Vec::new();
+                for name in collections {
+                    let count = db.collection::<BsonDocument>(&name)
+                        .estimated_document_count()
+                        .await
+                        .ok()
+                        .map(|c| c as i64);
+                    tables.push(DatabaseTable {
+                        name: name.clone(),
+                        schema: None,
+                        full_name: None,
+                        row_count: count,
+                        size_kb: None,
+                        table_type: Some("COLLECTION".to_string()),
+                    });
+                }
+                tables
+            }
         };
 
         Ok(tables)
@@ -897,6 +1168,7 @@ impl ConnectionManager {
                     table_name
                 )
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         let columns = match pool {
@@ -974,22 +1246,21 @@ impl ConnectionManager {
                     JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
                     LEFT JOIN pg_type elem ON elem.oid = typ.typelem
                     LEFT JOIN pg_type base_typ ON base_typ.oid = typ.typbasetype
-                    LEFT JOIN pg_attrdef def
-                      ON def.adrelid = att.attrelid
-                     AND def.adnum = att.attnum
+                    LEFT JOIN pg_attrdef def ON def.adrelid = att.attrelid AND def.adnum = att.attnum
                     LEFT JOIN pg_collation col ON col.oid = att.attcollation
                     LEFT JOIN (
-                      SELECT a.attname
-                      FROM pg_index i
-                      JOIN pg_attribute a
-                        ON a.attrelid = i.indrelid
-                       AND a.attnum = ANY(i.indkey)
-                      WHERE i.indrelid = to_regclass($1)
-                        AND i.indisprimary
-                    ) pk ON pk.attname = att.attname
-                    WHERE cls.oid = to_regclass($1)
-                      AND att.attnum > 0
+                        SELECT conrelid, unnest(conkey) AS attnum
+                        FROM pg_constraint
+                        WHERE contype = 'p'
+                    ) pk ON pk.conrelid = att.attrelid AND pk.attnum = att.attnum
+                    WHERE att.attnum > 0
                       AND NOT att.attisdropped
+                      AND ns.nspname NOT IN ('pg_catalog', 'information_schema')
+                      AND ns.nspname NOT LIKE 'pg_toast%'
+                      AND (
+                        ns.nspname || '.' || cls.relname = $1
+                        OR ($1 NOT LIKE '%.%' AND ns.nspname = 'public' AND cls.relname = $1)
+                      )
                     ORDER BY att.attnum
                     "#,
                 )
@@ -1001,16 +1272,14 @@ impl ConnectionManager {
                         let name: String = row.try_get(0).unwrap_or_default();
                         let data_type: String = row.try_get(1).unwrap_or_default();
                         let raw_type: String = row.try_get(2).unwrap_or_default();
-                        let _type_schema: String = row.try_get(3).unwrap_or_default();
                         let type_kind: String = row.try_get(4).unwrap_or_default();
-                        let _type_category: String = row.try_get(5).unwrap_or_default();
                         let not_null: bool = row.try_get(6).unwrap_or(false);
                         let default_value: Option<String> = row.try_get(7).ok();
                         let is_primary_key: bool = row.try_get(8).unwrap_or(false);
                         let is_array: bool = row.try_get(9).unwrap_or(false);
                         let array_dimensions: Option<i32> = row.try_get(10).ok();
                         let element_raw_type: Option<String> = row.try_get(11).ok();
-                        let enum_values: Option<Vec<String>> = row.try_get(12).ok().flatten();
+                        let enum_values: Option<Vec<String>> = row.try_get(12).ok();
                         let identity_kind: Option<String> = row.try_get(13).ok();
                         let generated_kind: Option<String> = row.try_get(14).ok();
                         let generation_expression: Option<String> = row.try_get(15).ok();
@@ -1086,6 +1355,59 @@ impl ConnectionManager {
                     })
                     .collect()
             }
+            DatabasePool::MongoDB { client, database } => {
+                let db = client.database(database);
+                let coll = db.collection::<BsonDocument>(table_name);
+                let mut cursor = coll.find(doc! {}).limit(100).await?;
+                let mut fields_map = std::collections::BTreeMap::new();
+                while let Some(doc) = cursor.try_next().await? {
+                    for (k, v) in doc.iter() {
+                        let type_name = match v {
+                            Bson::Double(_) => "double",
+                            Bson::String(_) => "string",
+                            Bson::Array(_) => "array",
+                            Bson::Document(_) => "object",
+                            Bson::Boolean(_) => "bool",
+                            Bson::Null => "null",
+                            Bson::Int32(_) => "int",
+                            Bson::Int64(_) => "long",
+                            Bson::ObjectId(_) => "objectId",
+                            Bson::DateTime(_) => "date",
+                            Bson::Binary(_) => "binData",
+                            _ => "any",
+                        };
+                        fields_map.entry(k.clone()).or_insert_with(|| type_name.to_string());
+                    }
+                }
+                let mut columns = Vec::new();
+                for (name, data_type) in fields_map {
+                    columns.push(TableColumn {
+                        name: name.clone(),
+                        data_type: data_type.clone(),
+                        raw_type: Some(data_type.clone()),
+                        normalized_type: data_type.clone(),
+                        type_family: ColumnTypeFamily::Json,
+                        db_type: DatabaseType::MongoDB,
+                        is_nullable: true,
+                        default_value: None,
+                        is_primary_key: name == "_id",
+                        is_boolean_like: data_type == "bool",
+                        is_array: data_type == "array",
+                        enum_values: None,
+                        identity_kind: None,
+                        generated_kind: None,
+                        generation_expression: None,
+                        column_comment: None,
+                        collation_name: None,
+                        domain_name: None,
+                        domain_schema: None,
+                        domain_base_type: None,
+                        array_dimensions: None,
+                        element_raw_type: None,
+                    });
+                }
+                columns
+            }
         };
 
         Ok(columns)
@@ -1122,6 +1444,9 @@ impl ConnectionManager {
                     .await
                     .map_err(Self::format_sqlx_error)?;
                 Ok(process_rows!(rows, common))
+            }
+            DatabasePool::MongoDB { client, database } => {
+                Self::mongo_execute_shell(client, database, query).await
             }
         }
     }
@@ -1370,6 +1695,14 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            let coll = db.collection::<BsonDocument>(table_name);
+            let doc: BsonDocument = bson::to_document(&data)?;
+            coll.insert_one(doc).await?;
+            return Ok(format!("Successfully inserted 1 document into {}", table_name));
+        }
+
         let obj = data.as_object()
             .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
 
@@ -1420,6 +1753,17 @@ impl ConnectionManager {
         let pool = connections
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            let coll = db.collection::<BsonDocument>(table_name);
+            let mut docs = Vec::new();
+            for r in &rows {
+                docs.push(bson::to_document(r)?);
+            }
+            coll.insert_many(docs).await?;
+            return Ok(format!("Successfully inserted {} documents into {}", rows.len(), table_name));
+        }
 
         // Get columns from first row
         let first_obj = rows[0].as_object()
@@ -1480,6 +1824,20 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            let coll = db.collection::<BsonDocument>(table_name);
+            let filter: BsonDocument = if where_clause.trim().starts_with('{') {
+                let json_val: serde_json::Value = serde_json::from_str(where_clause)?;
+                bson::to_document(&json_val)?
+            } else {
+                doc! {}
+            };
+            let update_doc: BsonDocument = bson::to_document(&data)?;
+            let res = coll.update_many(filter, doc! { "$set": update_doc }).await?;
+            return Ok(format!("Successfully updated {} document(s)", res.modified_count));
+        }
+
         let obj = data.as_object()
             .ok_or_else(|| anyhow!("Data must be a JSON object"))?;
 
@@ -1528,6 +1886,19 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            let coll = db.collection::<BsonDocument>(table_name);
+            let filter: BsonDocument = if where_clause.trim().starts_with('{') {
+                let json_val: serde_json::Value = serde_json::from_str(where_clause)?;
+                bson::to_document(&json_val)?
+            } else {
+                doc! {}
+            };
+            let res = coll.delete_many(filter).await?;
+            return Ok(format!("Successfully deleted {} document(s)", res.deleted_count));
+        }
+
         let query = format!(
             "DELETE FROM {} WHERE {}",
             if matches!(pool, DatabasePool::Postgres(_)) {
@@ -1554,6 +1925,12 @@ impl ConnectionManager {
         let pool = connections
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
+
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            db.create_collection(table_name).await?;
+            return Ok(format!("Successfully created collection {}", table_name));
+        }
 
         let mut column_defs: Vec<String> = Vec::new();
         let mut primary_keys: Vec<String> = Vec::new();
@@ -1601,6 +1978,12 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let db = client.database(database);
+            db.collection::<BsonDocument>(table_name).drop().await?;
+            return Ok(format!("Successfully dropped collection {}", table_name));
+        }
+
         let query = format!(
             "DROP TABLE {}",
             if matches!(pool, DatabasePool::Postgres(_)) {
@@ -1629,14 +2012,17 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if matches!(pool, DatabasePool::MongoDB { .. }) {
+            return Err(anyhow!("MongoDB is schemaless. Column operations are not applicable."));
+        }
+
         let nullable_clause = if nullable { "" } else { " NOT NULL" };
         
         let query = match db_type {
             DatabaseType::SQLite => {
-                // SQLite doesn't support NOT NULL in ALTER TABLE ADD COLUMN without default
                 format!("ALTER TABLE {} ADD COLUMN {} {}", table_name, column_name, data_type)
             }
-            _ => {
+            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
                 let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
                     Self::quote_pg_table(table_name)
                 } else {
@@ -1650,6 +2036,7 @@ impl ConnectionManager {
                 format!("ALTER TABLE {} ADD COLUMN {} {}{}", 
                     target_table, target_column, data_type, nullable_clause)
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -1669,12 +2056,15 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if matches!(pool, DatabasePool::MongoDB { .. }) {
+            return Err(anyhow!("MongoDB is schemaless. Column operations are not applicable."));
+        }
+
         let query = match db_type {
             DatabaseType::SQLite => {
-                // SQLite doesn't support DROP COLUMN directly
                 return Err(anyhow!("SQLite does not support dropping columns directly. Please recreate the table."));
             }
-            _ => {
+            DatabaseType::PostgreSQL | DatabaseType::MySQL => {
                 let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
                     Self::quote_pg_table(table_name)
                 } else {
@@ -1687,6 +2077,7 @@ impl ConnectionManager {
                 };
                 format!("ALTER TABLE {} DROP COLUMN {}", target_table, target_column)
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -1706,6 +2097,15 @@ impl ConnectionManager {
             .get(connection_id)
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
+        if let DatabasePool::MongoDB { client, database } = pool {
+            let admin_db = client.database("admin");
+            admin_db.run_command(doc! {
+                "renameCollection": format!("{}.{}", database, old_name),
+                "to": format!("{}.{}", database, new_name),
+            }).await?;
+            return Ok(format!("Successfully renamed collection {} to {}", old_name, new_name));
+        }
+
         let query = match db_type {
             DatabaseType::SQLite => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
             DatabaseType::MySQL => format!("RENAME TABLE {} TO {}", old_name, new_name),
@@ -1714,6 +2114,7 @@ impl ConnectionManager {
                 let quoted_new = Self::quote_pg_ident(new_name);
                 format!("ALTER TABLE {} RENAME TO {}", quoted_old, quoted_new)
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         execute_query!(pool, &query)?;
@@ -1766,6 +2167,9 @@ impl ConnectionManager {
                         .rows_affected();
                 }
                 tx.commit().await?;
+            }
+            DatabasePool::MongoDB { .. } => {
+                return Err(anyhow!("Transactions are not supported for MongoDB in this tool"));
             }
         }
 
@@ -1959,6 +2363,7 @@ impl ConnectionManager {
                     })
                     .collect()
             }
+            DatabasePool::MongoDB { .. } => vec![],
         };
 
         Ok(constraints)
@@ -2111,6 +2516,9 @@ impl ConnectionManager {
                 );
                 execute_query!(pool, &sql)?;
             }
+            DatabaseType::MongoDB => {
+                return Err(anyhow!("Foreign keys are not supported for MongoDB"));
+            }
         }
 
         Ok(format!(
@@ -2162,6 +2570,9 @@ impl ConnectionManager {
                 );
                 execute_query!(pool, &sql)?;
             }
+            DatabaseType::MongoDB => {
+                return Err(anyhow!("Foreign keys are not supported for MongoDB"));
+            }
         }
 
         Ok(format!(
@@ -2189,6 +2600,7 @@ impl ConnectionManager {
             DatabaseType::MySQL => {
                 "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
             }
+            DatabaseType::MongoDB => "",
         };
 
         let migrations = match pool {
@@ -2225,6 +2637,7 @@ impl ConnectionManager {
                     checksum: row.try_get(3).ok(),
                 })
                 .collect(),
+            DatabasePool::MongoDB { .. } => vec![],
         };
 
         Ok(migrations)
@@ -2520,6 +2933,10 @@ impl ConnectionManager {
         connection_id: &str,
         db_type: &DatabaseType,
     ) -> Result<()> {
+        if db_type == &DatabaseType::MongoDB {
+            return Ok(());
+        }
+
         let connections = self.connections.read().await;
         let pool = connections
             .get(connection_id)
@@ -2550,6 +2967,7 @@ impl ConnectionManager {
                     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             "#,
+            DatabaseType::MongoDB => "",
         };
 
         execute_query!(pool, create_sql)?;
@@ -2868,6 +3286,7 @@ impl ConnectionManager {
                     table_name
                 )
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         let primary_keys = match pool {
@@ -2897,6 +3316,7 @@ impl ConnectionManager {
                     .map(|row| row.try_get(0).unwrap_or_default())
                     .collect()
             }
+            DatabasePool::MongoDB { .. } => vec!["_id".to_string()],
         };
 
         Ok(primary_keys)
@@ -2929,6 +3349,7 @@ impl ConnectionManager {
                     table_name
                 )
             }
+            DatabaseType::MongoDB => String::new(),
         };
 
         let indexes = match pool {
@@ -2999,6 +3420,7 @@ impl ConnectionManager {
                     })
                     .collect()
             }
+            DatabasePool::MongoDB { .. } => vec![],
         };
 
         Ok(indexes)
@@ -3431,6 +3853,7 @@ impl ConnectionManager {
                     }
                 }
             }
+            DatabasePool::MongoDB { .. } => {}
         }
 
         Ok(matches)
@@ -3556,6 +3979,10 @@ impl ConnectionManager {
                     Ok(process_rows!(r, common))
                 };
                 converter(rows)
+            }
+            DatabasePool::MongoDB { client, database } => {
+                let query = format!("db.{}.find({{\"{}\": \"{}\"}})", table_name, column_name, clean_value);
+                Self::mongo_execute_shell(client, database, &query).await
             }
         }
     }
