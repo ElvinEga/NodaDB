@@ -55,7 +55,7 @@ export function AppSidebar({
               className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-secondary"
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <DbIcon dbType={connection.db_type} className="h-4 w-4 shrink-0" />
+                <DbIcon dbType={connection.db_type} provider={connection.provider} className="h-4 w-4 shrink-0" />
                 <span className="truncate text-xs font-semibold">{connection.name}</span>
               </div>
               <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -79,7 +79,7 @@ export function AppSidebar({
                   >
                     <div className="flex min-w-0 flex-1 items-start gap-2">
                       <div className="pt-0.5 flex items-center gap-1.5">
-                        <DbIcon dbType={conn.db_type} className="h-4 w-4 shrink-0" />
+                        <DbIcon dbType={conn.db_type} provider={conn.provider} className="h-4 w-4 shrink-0" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
