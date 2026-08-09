@@ -855,7 +855,7 @@ function App() {
                               <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
                                 {conn.provider
                                   ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB' } as Record<string, string>)[conn.provider] ?? conn.provider
-                                  : conn.db_type.toUpperCase()}
+                                  : conn.db_type === 'mongodb' ? 'MongoDB' : conn.db_type.toUpperCase()}
                               </span>
                               {conn.file_path && (
                                 <span className="truncate">
