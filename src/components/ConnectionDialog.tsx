@@ -683,7 +683,7 @@ export function ConnectionDialog({
                       Neon databases sleep after <strong>5 minutes</strong> of inactivity. Long-running transactions may be interrupted.
                     </CollapsibleAlert>
                   </div>
-                )}\n                {/* ── MariaDB auth ─────────────────────────────────── */}
+                )}              {/* ── MariaDB auth ─────────────────────────────────── */}
                 {provider === 'mariadb' && (
                   <div className="space-y-3">
                     {/* Auth method selector */}
