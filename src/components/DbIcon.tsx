@@ -10,11 +10,15 @@ import planetscaleIcon from "@/assets/icons/db/planetscale-icon.svg";
 import prismaIcon from "@/assets/icons/db/prisma-icon.svg";
 import tursoIcon from "@/assets/icons/db/turso-icon.svg";
 import vtIcon from "@/assets/icons/db/vt-icon.svg";
+import redisIcon from "@/assets/icons/db/redis-icon.svg";
+import cloudflareIcon from "@/assets/icons/db/cloudflare-icon.svg";
 import { Database } from "lucide-react";
 
 export function getDbIconSrc(dbType?: string): string | null {
   if (!dbType) return null;
   const type = dbType.toLowerCase();
+  if (type.includes("cloudflare") || type === "d1") return cloudflareIcon;
+  if (type.includes("redis")) return redisIcon;
   if (type.includes("prisma")) return prismaIcon;
   if (type.includes("valtown") || type === "vt") return vtIcon;
   if (type.includes("turso") || type.includes("libsql")) return tursoIcon;
