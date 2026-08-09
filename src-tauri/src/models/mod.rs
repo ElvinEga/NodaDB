@@ -8,6 +8,7 @@ pub enum DatabaseType {
     MySQL,
     MongoDB,
     ClickHouse,
+    LibSQL,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -93,6 +94,9 @@ pub struct ConnectionConfig {
     pub mongo_database: Option<String>,
     // ClickHouse
     pub clickhouse_use_ssl: Option<bool>,
+    // LibSQL / Turso / Val Town
+    pub libsql_url: Option<String>,
+    pub libsql_auth_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
