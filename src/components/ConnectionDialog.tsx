@@ -2,7 +2,7 @@ import { DbIcon } from "@/components/DbIcon";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Database, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Database, Loader2, CheckCircle, XCircle, Info, AlertTriangle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,8 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -25,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ConnectionConfig,
   DatabaseType,
+  DatabaseProvider,
   ConnectionTestResult,
   SSHAuthMethod,
 } from "@/types";
@@ -72,6 +75,8 @@ export function ConnectionDialog({
   const [sshAuthMethod, setSshAuthMethod] = useState<SSHAuthMethod>("password");
   const [sshPassword, setSshPassword] = useState("");
   const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState("");
+  // Cloud provider (supabase | neon). When set, dbType is always "postgresql".
+  const [provider, setProvider] = useState<DatabaseProvider | undefined>(undefined);
 
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
@@ -84,6 +89,7 @@ export function ConnectionDialog({
     if (open && editConnection) {
       setName(editConnection.name);
       setDbType(editConnection.db_type);
+      setProvider(editConnection.provider);
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
@@ -110,6 +116,7 @@ export function ConnectionDialog({
       if (!editConnection) {
         setName('');
         setDbType('sqlite');
+        setProvider(undefined);
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -127,6 +134,34 @@ export function ConnectionDialog({
       }
     }
   }, [open, editConnection]);
+
+  /**
+   * The Select uses a combined value like "supabase" or "neon" for cloud providers,
+   * and "sqlite" / "postgresql" / "mysql" for core databases.
+   */
+  const selectValue =
+    provider === 'supabase' ? 'supabase' :
+    provider === 'neon'      ? 'neon'      :
+    dbType;
+
+  const handleDbTypeOrProviderChange = (value: string) => {
+    if (value === 'supabase') {
+      setDbType('postgresql');
+      setProvider('supabase');
+      setPort('5432');
+      setConnectionType('connectionString');
+    } else if (value === 'neon') {
+      setDbType('postgresql');
+      setProvider('neon');
+      setPort('5432');
+      setConnectionType('connectionString');
+    } else {
+      setDbType(value as DatabaseType);
+      setProvider(undefined);
+      if (value === 'postgresql') setPort('5432');
+      if (value === 'mysql') setPort('3306');
+    }
+  };
 
   const handleParseConnectionString = () => {
     if (!connectionString.trim()) {
@@ -351,6 +386,7 @@ export function ConnectionDialog({
           ...editConnection,
           name,
           db_type: dbType,
+          provider,
           ...(dbType === "sqlite"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
             : { host, port: parseInt(port), username, password, database, file_path: undefined }),
@@ -365,6 +401,7 @@ export function ConnectionDialog({
           id: crypto.randomUUID(),
           name,
           db_type: dbType,
+          provider,
           ...(dbType === "sqlite"
             ? { file_path: filePath }
             : { host, port: parseInt(port), username, password, database }),
@@ -441,13 +478,14 @@ export function ConnectionDialog({
                 Database Type <span className="text-destructive">*</span>
               </label>
               <Select
-                value={dbType}
-                onValueChange={(v) => setDbType(v as DatabaseType)}
+                value={selectValue}
+                onValueChange={handleDbTypeOrProviderChange}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Core Databases</SelectLabel>
                   <SelectItem value="sqlite">
                     <div className="flex items-center gap-2">
                       <DbIcon dbType="sqlite" className="h-4 w-4 shrink-0" />
@@ -477,6 +515,30 @@ export function ConnectionDialog({
                         <span>MySQL</span>
                         <span className="text-[10px] text-muted-foreground ml-2">
                           Server
+                        </span>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectSeparator />
+                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Cloud Providers</SelectLabel>
+                  <SelectItem value="supabase">
+                    <div className="flex items-center gap-2">
+                      <DbIcon dbType="supabase" className="h-4 w-4 shrink-0" />
+                      <div>
+                        <span>Supabase</span>
+                        <span className="text-[10px] text-muted-foreground ml-2">
+                          PostgreSQL
+                        </span>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="neon">
+                    <div className="flex items-center gap-2">
+                      <DbIcon dbType="neon" className="h-4 w-4 shrink-0" />
+                      <div>
+                        <span>Neon</span>
+                        <span className="text-[10px] text-muted-foreground ml-2">
+                          Serverless PostgreSQL
                         </span>
                       </div>
                     </div>
@@ -516,6 +578,42 @@ export function ConnectionDialog({
               </div>
             ) : (
               <>
+                {/* ── Supabase alerts ──────────────────────────────── */}
+                {provider === 'supabase' && (
+                  <Alert className="border-emerald-500/40 bg-emerald-500/5">
+                    <Info className="h-4 w-4 text-emerald-500" />
+                    <AlertTitle className="text-emerald-600 dark:text-emerald-400">IPv4 Compatibility Notice</AlertTitle>
+                    <AlertDescription className="text-xs space-y-1">
+                      <p>Supabase direct connections require <strong>IPv6</strong>. If you&apos;re on IPv4:</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Use the <strong>Session Pooler</strong> connection string (recommended)</li>
+                        <li>Or purchase the IPv4 add-on from Supabase Dashboard</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {/* ── Neon alerts ────────────────────────────────────── */}
+                {provider === 'neon' && (
+                  <div className="space-y-2">
+                    <Alert className="border-teal-500/40 bg-teal-500/5">
+                      <Zap className="h-4 w-4 text-teal-500" />
+                      <AlertTitle className="text-teal-600 dark:text-teal-400">Connection Pooling</AlertTitle>
+                      <AlertDescription className="text-xs space-y-1">
+                        <p>Add <code className="bg-muted px-1 rounded">-pooler</code> to your endpoint for connection pooling:</p>
+                        <p className="font-mono text-[10px] bg-muted px-2 py-1 rounded break-all">
+                          ep-cool-darkness-123456<strong>-pooler</strong>.us-east-2.aws.neon.tech
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                    <Alert className="border-amber-500/40 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      <AlertTitle className="text-amber-600 dark:text-amber-400">Scale to Zero</AlertTitle>
+                      <AlertDescription className="text-xs">
+                        Neon databases have a <strong>5-minute idle timeout</strong>. Long-running transactions may be interrupted.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
                 <Tabs
                   value={connectionType}
                   onValueChange={(v) =>
@@ -528,7 +626,12 @@ export function ConnectionDialog({
                     <TabsTrigger value="connectionString" className="!text-xs">
                       String
                     </TabsTrigger>
-                    <TabsTrigger value="direct" className="!text-xs">
+                    <TabsTrigger
+                      value="direct"
+                      className="!text-xs"
+                      disabled={provider === 'neon'}
+                      title={provider === 'neon' ? 'Neon only supports connection strings' : undefined}
+                    >
                       Direct
                     </TabsTrigger>
                     <TabsTrigger value="ssh" className="!text-xs">
@@ -542,7 +645,11 @@ export function ConnectionDialog({
                   >
                     <div className="p-3 rounded-lg bg-secondary/30 border border-border">
                       <p className="text-xs text-muted-foreground mb-3">
-                        PostgreSQL Connection String
+                        {provider === 'supabase'
+                          ? 'Supabase Connection String'
+                          : provider === 'neon'
+                          ? 'Neon Connection String'
+                          : 'PostgreSQL Connection String'}
                       </p>
                       <div className="grid gap-3">
                         <div className="grid gap-2">
@@ -559,12 +666,32 @@ export function ConnectionDialog({
                             onChange={(e) =>
                               setConnectionString(e.target.value)
                             }
-                            placeholder="postgres://username:password@host:port/database?sslmode=require"
+                            placeholder={
+                              provider === 'supabase'
+                                ? 'postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres'
+                                : provider === 'neon'
+                                ? 'postgresql://[user]:[password]@ep-xxx-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require'
+                                : 'postgres://username:password@host:port/database?sslmode=require'
+                            }
                             className="h-9 text-sm font-mono"
                           />
                           <p className="text-[10px] text-muted-foreground mt-1">
-                            Example:
-                            postgres://user:password@db.example.com:5432/mydb?sslmode=require
+                            {provider === 'supabase' ? (
+                              <span>
+                                Session Pooler (IPv4 friendly):{" "}
+                                <span className="font-mono">postgresql://postgres.[ref]:[pw]@aws-0-us-east-1.pooler.supabase.com:6543/postgres</span>
+                                <br />
+                                Direct:{" "}
+                                <span className="font-mono">postgresql://postgres:[pw]@db.[ref].supabase.co:5432/postgres</span>
+                              </span>
+                            ) : provider === 'neon' ? (
+                              <span>
+                                With pooler:{" "}
+                                <span className="font-mono">...ep-name<strong>-pooler</strong>.region.aws.neon.tech/dbname?sslmode=require</span>
+                              </span>
+                            ) : (
+                              'Example: postgres://user:password@db.example.com:5432/mydb?sslmode=require'
+                            )}
                           </p>
                         </div>
 
