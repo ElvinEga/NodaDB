@@ -5,11 +5,15 @@ import supabaseIcon from "@/assets/icons/db/supabase-icon.svg";
 import neonIcon from "@/assets/icons/db/neon-icon.svg";
 import mariadbIcon from "@/assets/icons/db/mariadb-icon.svg";
 import mongodbIcon from "@/assets/icons/db/mongodb-icon.svg";
+import clickhouseIcon from "@/assets/icons/db/clickhouse-icon.svg";
+import planetscaleIcon from "@/assets/icons/db/planetscale-icon.svg";
 import { Database } from "lucide-react";
 
 export function getDbIconSrc(dbType?: string): string | null {
   if (!dbType) return null;
   const type = dbType.toLowerCase();
+  if (type.includes("clickhouse")) return clickhouseIcon;
+  if (type.includes("planetscale")) return planetscaleIcon;
   if (type.includes("postgres") || type.includes("pg")) return postgresIcon;
   if (type.includes("mysql")) return mysqlIcon;
   if (type.includes("mariadb") || type.includes("maria")) return mariadbIcon;
