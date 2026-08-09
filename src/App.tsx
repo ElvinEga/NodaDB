@@ -839,7 +839,7 @@ function App() {
                       >
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <DbIcon dbType={conn.db_type} className="h-6 w-6 shrink-0" />
+                            <DbIcon dbType={conn.db_type} provider={conn.provider} className="h-6 w-6 shrink-0" />
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold mb-1 text-left flex items-center gap-2">
@@ -853,7 +853,9 @@ function App() {
                             </div>
                             <div className="text-sm text-muted-foreground flex items-center gap-2">
                               <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
-                                {conn.db_type.toUpperCase()}
+                                {conn.provider
+                                  ? conn.provider.charAt(0).toUpperCase() + conn.provider.slice(1)
+                                  : conn.db_type.toUpperCase()}
                               </span>
                               {conn.file_path && (
                                 <span className="truncate">
