@@ -1,6 +1,6 @@
 pub mod types;
 
-use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch};
+use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, MariaDBAuthMethod, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch};
 use crate::ssh_tunnel::SshTunnel;
 use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
 use anyhow::{anyhow, Result};
@@ -393,6 +393,85 @@ impl ConnectionManager {
     }
 
 
+    /// Fetch a short-lived IAM/AD token and use it as the MySQL password.
+    async fn fetch_cloud_token(config: &ConnectionConfig) -> Result<String> {
+        match config.auth_method.as_ref() {
+            Some(MariaDBAuthMethod::AwsIam) => {
+                let region = config.aws_region.as_deref()
+                    .ok_or_else(|| anyhow!("AWS region is required for IAM auth"))?;
+                let host = config.host.as_deref()
+                    .ok_or_else(|| anyhow!("Host is required"))?;
+                let port = config.port
+                    .ok_or_else(|| anyhow!("Port is required"))?;
+                let db_user = config.aws_db_user.as_deref()
+                    .ok_or_else(|| anyhow!("AWS DB user is required for IAM auth"))?;
+
+                let mut cmd = tokio::process::Command::new("aws");
+                cmd.args([
+                    "rds", "generate-db-auth-token",
+                    "--hostname", host,
+                    "--port", &port.to_string(),
+                    "--region", region,
+                    "--username", db_user,
+                ]);
+                // Inject explicit credentials if provided; otherwise fall back to env/profile
+                if let (Some(key_id), Some(secret)) = (
+                    config.aws_access_key_id.as_deref(),
+                    config.aws_secret_access_key.as_deref(),
+                ) {
+                    cmd.env("AWS_ACCESS_KEY_ID", key_id)
+                       .env("AWS_SECRET_ACCESS_KEY", secret);
+                }
+                let output = cmd.output().await
+                    .map_err(|e| anyhow!("AWS CLI not found or not executable: {}", e))?;
+                if !output.status.success() {
+                    return Err(anyhow!(
+                        "aws rds generate-db-auth-token failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+                Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            }
+            Some(MariaDBAuthMethod::AzureAd) => {
+                let tenant = config.azure_tenant_id.as_deref().unwrap_or("common");
+                let output = tokio::process::Command::new("az")
+                    .args([
+                        "account", "get-access-token",
+                        "--resource-type", "oss-rdbms",
+                        "--tenant", tenant,
+                        "--query", "accessToken",
+                        "-o", "tsv",
+                    ])
+                    .output().await
+                    .map_err(|e| anyhow!("Azure CLI (az) not found or not executable: {}", e))?;
+                if !output.status.success() {
+                    return Err(anyhow!(
+                        "az account get-access-token failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+                Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            }
+            Some(MariaDBAuthMethod::GcpIam) => {
+                let mut cmd = tokio::process::Command::new("gcloud");
+                cmd.args(["auth", "print-access-token"]);
+                if let Some(project) = config.gcp_project.as_deref() {
+                    cmd.arg("--project").arg(project);
+                }
+                let output = cmd.output().await
+                    .map_err(|e| anyhow!("gcloud CLI not found or not executable: {}", e))?;
+                if !output.status.success() {
+                    return Err(anyhow!(
+                        "gcloud auth print-access-token failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+                Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            }
+            _ => Err(anyhow!("fetch_cloud_token called without a cloud auth method")),
+        }
+    }
+
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
         let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
@@ -452,12 +531,25 @@ impl ConnectionManager {
             }
             DatabaseType::MySQL => {
                 let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
-                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                 let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
 
+                // Determine password: plain or cloud IAM token
+                let is_cloud_auth = matches!(
+                    config.auth_method.as_ref(),
+                    Some(MariaDBAuthMethod::AwsIam) | Some(MariaDBAuthMethod::AzureAd) | Some(MariaDBAuthMethod::GcpIam)
+                );
+                let (password, ssl_suffix) = if is_cloud_auth {
+                    let token = Self::fetch_cloud_token(&config).await?;
+                    (token, "?ssl-mode=required")
+                } else {
+                    let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    (pw.clone(), "")
+                };
+
+                let encoded_pw = urlencoding::encode(&password).into_owned();
                 let connection_string = format!(
-                    "mysql://{}:{}@{}:{}/{}",
-                    username, password, actual_host, actual_port, database
+                    "mysql://{}:{}@{}:{}/{}{}",
+                    username, encoded_pw, actual_host, actual_port, database, ssl_suffix
                 );
                 let pool = sqlx::MySqlPool::connect(&connection_string).await?;
                 DatabasePool::MySql(pool)
@@ -609,12 +701,24 @@ impl ConnectionManager {
             }
             DatabaseType::MySQL => {
                 let username = config.username.as_ref().ok_or_else(|| anyhow!("Username is required"))?;
-                let password = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
                 let database = config.database.as_ref().ok_or_else(|| anyhow!("Database is required"))?;
 
+                let is_cloud_auth = matches!(
+                    config.auth_method.as_ref(),
+                    Some(MariaDBAuthMethod::AwsIam) | Some(MariaDBAuthMethod::AzureAd) | Some(MariaDBAuthMethod::GcpIam)
+                );
+                let (password, ssl_suffix) = if is_cloud_auth {
+                    let token = Self::fetch_cloud_token(&config).await?;
+                    (token, "?ssl-mode=required")
+                } else {
+                    let pw = config.password.as_ref().ok_or_else(|| anyhow!("Password is required"))?;
+                    (pw.clone(), "")
+                };
+
+                let encoded_pw = urlencoding::encode(&password).into_owned();
                 let connection_string = format!(
-                    "mysql://{}:{}@{}:{}/{}",
-                    username, password, actual_host, actual_port, database
+                    "mysql://{}:{}@{}:{}/{}{}",
+                    username, encoded_pw, actual_host, actual_port, database, ssl_suffix
                 );
 
                 match sqlx::MySqlPool::connect(&connection_string).await {

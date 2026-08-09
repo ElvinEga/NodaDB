@@ -10,6 +10,15 @@ pub enum DatabaseType {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+pub enum MariaDBAuthMethod {
+    Password,
+    AwsIam,
+    AzureAd,
+    GcpIam,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum ColumnTypeFamily {
     Boolean,
     Integer,
@@ -64,6 +73,17 @@ pub struct ConnectionConfig {
     pub database: Option<String>,
     pub file_path: Option<String>, // For SQLite
     pub ssh_config: Option<SSHConfig>,
+    pub provider: Option<String>,
+    pub auth_method: Option<MariaDBAuthMethod>,
+    // AWS IAM
+    pub aws_region: Option<String>,
+    pub aws_db_user: Option<String>,
+    pub aws_access_key_id: Option<String>,
+    pub aws_secret_access_key: Option<String>,
+    // Azure AD
+    pub azure_tenant_id: Option<String>,
+    // GCP IAM
+    pub gcp_project: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
