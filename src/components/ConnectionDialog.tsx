@@ -101,6 +101,14 @@ export function ConnectionDialog({
   const [libsqlUrl, setLibsqlUrl] = useState('');
   const [libsqlAuthToken, setLibsqlAuthToken] = useState('');
 
+  // Redis state
+  const [redisDb, setRedisDb] = useState(0);
+
+  // Cloudflare D1 state
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
+  const [cloudflareDatabaseId, setCloudflareDatabaseId] = useState('');
+  const [cloudflareApiToken, setCloudflareApiToken] = useState('');
+
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
   const setActiveConnection = useConnectionStore(
@@ -126,11 +134,15 @@ export function ConnectionDialog({
       setClickhouseUseSsl(editConnection.clickhouse_use_ssl ?? false);
       setLibsqlUrl(editConnection.libsql_url ?? '');
       setLibsqlAuthToken(editConnection.libsql_auth_token ?? '');
+      setRedisDb(editConnection.redis_db ?? 0);
+      setCloudflareAccountId(editConnection.cloudflare_account_id ?? '');
+      setCloudflareDatabaseId(editConnection.cloudflare_database_id ?? '');
+      setCloudflareApiToken(editConnection.cloudflare_api_token ?? '');
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
         setHost(editConnection.host ?? 'localhost');
-        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : editConnection.db_type === 'clickhouse' ? 8123 : 5432)));
+        setPort(String(editConnection.port ?? (editConnection.db_type === 'redis' ? 6379 : editConnection.db_type === 'mongodb' ? 27017 : editConnection.db_type === 'clickhouse' ? 8123 : 5432)));
         setUsername(editConnection.username ?? '');
         setPassword(editConnection.password ?? '');
         setDatabase(editConnection.database ?? '');
@@ -166,6 +178,10 @@ export function ConnectionDialog({
         setClickhouseUseSsl(false);
         setLibsqlUrl('');
         setLibsqlAuthToken('');
+        setRedisDb(0);
+        setCloudflareAccountId('');
+        setCloudflareDatabaseId('');
+        setCloudflareApiToken('');
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -189,6 +205,7 @@ export function ConnectionDialog({
    * and "sqlite" / "postgresql" / "mysql" for core databases.
    */
   const selectValue =
+    provider === 'cloudflare' ? 'cloudflare' :
     provider === 'prisma'   ? 'prisma'   :
     provider === 'turso'    ? 'turso'    :
     provider === 'valtown'  ? 'valtown'  :
@@ -200,7 +217,17 @@ export function ConnectionDialog({
     dbType;
 
   const handleDbTypeOrProviderChange = (value: string) => {
-    if (value === 'prisma') {
+    if (value === 'cloudflare') {
+      setDbType('sqlite');
+      setProvider('cloudflare');
+      setConnectionType('direct');
+    } else if (value === 'redis') {
+      setDbType('redis');
+      setProvider(undefined);
+      setPort('6379');
+      setRedisDb(0);
+      setConnectionType('direct');
+    } else if (value === 'prisma') {
       setDbType('postgresql');
       setProvider('prisma');
       setPort('5432');
@@ -260,6 +287,7 @@ export function ConnectionDialog({
       setAuthMethod('password');
       if (value === 'postgresql') setPort('5432');
       if (value === 'mysql') setPort('3306');
+      if (value === 'redis') setPort('6379');
     }
   };
 
@@ -527,6 +555,16 @@ export function ConnectionDialog({
       libsql_auth_token: dbType === 'libsql' ? libsqlAuthToken : undefined,
     };
 
+    const redisFields = {
+      redis_db: dbType === 'redis' ? redisDb : undefined,
+    };
+
+    const cloudflareFields = {
+      cloudflare_account_id: provider === 'cloudflare' ? cloudflareAccountId : undefined,
+      cloudflare_database_id: provider === 'cloudflare' ? cloudflareDatabaseId : undefined,
+      cloudflare_api_token: provider === 'cloudflare' ? cloudflareApiToken : undefined,
+    };
+
     try {
       if (isEditMode && editConnection) {
         // Edit mode: update store and reconnect with new config
@@ -544,6 +582,8 @@ export function ConnectionDialog({
           gcp_project: gcpProject || undefined,
           ...mongoFields,
           ...libsqlFields,
+          ...redisFields,
+          ...cloudflareFields,
           clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
           ...(dbType === "sqlite" || dbType === "libsql"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
@@ -569,6 +609,8 @@ export function ConnectionDialog({
           gcp_project: gcpProject || undefined,
           ...mongoFields,
           ...libsqlFields,
+          ...redisFields,
+          ...cloudflareFields,
           clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
           ...(dbType === "sqlite" || dbType === "libsql"
             ? { file_path: filePath }
@@ -732,10 +774,32 @@ export function ConnectionDialog({
                         </div>
                       </div>
                     </SelectItem>
+                    <SelectItem value="redis">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="redis" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Redis</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            In-Memory KV Store
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                   </SelectGroup>
                   <SelectSeparator />
                   <SelectGroup>
                     <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Cloud Providers</SelectLabel>
+                    <SelectItem value="cloudflare">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="cloudflare" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Cloudflare D1</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Serverless SQLite
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                     <SelectItem value="prisma">
                       <div className="flex items-center gap-2">
                         <DbIcon provider="prisma" className="h-4 w-4 shrink-0" />
@@ -818,7 +882,134 @@ export function ConnectionDialog({
               </Select>
             </div>
 
-            {dbType === "sqlite" ? (
+            {provider === 'cloudflare' ? (
+              <div className="space-y-3">
+                <CollapsibleAlert
+                  variant="info"
+                  icon={<Info className="h-3.5 w-3.5" />}
+                  title="Cloudflare D1 Database Setup"
+                >
+                  <p className="mb-1">
+                    Find your <strong>Account ID</strong> at <code className="bg-muted px-1 rounded">dash.cloudflare.com/[account-id]</code>, your <strong>Database ID</strong> (UUID) via dashboard or <code className="bg-muted px-1 rounded">wrangler d1 list</code>, and create an <strong>API Token</strong> with D1 permissions at <code className="bg-muted px-1 rounded">dash.cloudflare.com/profile/api-tokens</code>.
+                  </p>
+                </CollapsibleAlert>
+
+                <div className="grid gap-2">
+                  <label htmlFor="cfAccountId" className="!text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Account ID <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="cfAccountId"
+                    value={cloudflareAccountId}
+                    onChange={(e) => setCloudflareAccountId(e.target.value)}
+                    placeholder="e.g. 8f9b4c2e1a3b5c7d9e0f1a2b3c4d5e6f"
+                    className="h-9 text-sm font-mono"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label htmlFor="cfDbId" className="!text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Database ID (UUID) <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="cfDbId"
+                    value={cloudflareDatabaseId}
+                    onChange={(e) => setCloudflareDatabaseId(e.target.value)}
+                    placeholder="e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="h-9 text-sm font-mono"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label htmlFor="cfApiToken" className="!text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    API Token <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    id="cfApiToken"
+                    type="password"
+                    value={cloudflareApiToken}
+                    onChange={(e) => setCloudflareApiToken(e.target.value)}
+                    placeholder="Cloudflare API Token with D1 permissions"
+                    className="h-9 text-sm font-mono"
+                  />
+                </div>
+              </div>
+            ) : dbType === 'redis' ? (
+              <div className="space-y-3">
+                <CollapsibleAlert
+                  variant="info"
+                  icon={<Info className="h-3.5 w-3.5" />}
+                  title="Redis Connection Setup"
+                >
+                  <p className="mb-1">
+                    Connect to your Redis instance. Select database index <strong>0-15</strong> (default 0). Username and password are optional.
+                  </p>
+                </CollapsibleAlert>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 grid gap-1.5">
+                    <label htmlFor="redisHost" className="text-xs font-medium text-muted-foreground">Host <span className="text-destructive">*</span></label>
+                    <Input
+                      id="redisHost"
+                      value={host}
+                      onChange={(e) => setHost(e.target.value)}
+                      placeholder="localhost"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="redisPort" className="text-xs font-medium text-muted-foreground">Port <span className="text-destructive">*</span></label>
+                    <Input
+                      id="redisPort"
+                      value={port}
+                      onChange={(e) => setPort(e.target.value)}
+                      placeholder="6379"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-1.5">
+                    <label htmlFor="redisUser" className="text-xs font-medium text-muted-foreground">Username <span className="text-muted-foreground text-[10px] lowercase">(optional)</span></label>
+                    <Input
+                      id="redisUser"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="default"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="redisPass" className="text-xs font-medium text-muted-foreground">Password <span className="text-muted-foreground text-[10px] lowercase">(optional)</span></label>
+                    <Input
+                      id="redisPass"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Password"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-1.5">
+                  <label htmlFor="redisDb" className="text-xs font-medium text-muted-foreground">Database Index (0-15)</label>
+                  <Select value={String(redisDb)} onValueChange={(v) => setRedisDb(parseInt(v))}>
+                    <SelectTrigger id="redisDb" className="h-8 text-xs font-mono">
+                      <SelectValue placeholder="0" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 16 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          db{i} {i === 0 ? "(Default)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : dbType === "sqlite" ? (
               <div className="grid gap-2">
                 <label
                   htmlFor="filePath"
