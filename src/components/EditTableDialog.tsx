@@ -115,6 +115,17 @@ const DATA_TYPES = {
     "IPv4",
     "IPv6",
   ],
+  libsql: [
+    "INTEGER",
+    "TEXT",
+    "REAL",
+    "BLOB",
+    "NUMERIC",
+    "VARCHAR(255)",
+    "BOOLEAN",
+    "DATE",
+    "DATETIME",
+  ],
 };
 
 export function EditTableDialog({
