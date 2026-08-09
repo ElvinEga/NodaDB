@@ -35,6 +35,7 @@ import {
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CollapsibleAlert } from "@/components/ui/collapsible-alert";
 import { parsePostgresConnectionString } from "@/lib/connectionStringParser";
 
 interface ConnectionDialogProps {
@@ -585,38 +586,38 @@ export function ConnectionDialog({
               <>
                 {/* ── Supabase alerts ──────────────────────────────── */}
                 {provider === 'supabase' && (
-                  <Alert className="border-emerald-500/40 bg-emerald-500/5">
-                    <Info className="h-4 w-4 text-emerald-500" />
-                    <AlertTitle className="text-emerald-600 dark:text-emerald-400">IPv4 Compatibility Notice</AlertTitle>
-                    <AlertDescription className="text-xs space-y-1">
-                      <p>Supabase direct connections require <strong>IPv6</strong>. If you&apos;re on IPv4:</p>
-                      <ul className="list-disc pl-4 space-y-0.5">
-                        <li>Use the <strong>Session Pooler</strong> connection string (recommended)</li>
-                        <li>Or purchase the IPv4 add-on from Supabase Dashboard</li>
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
+                  <CollapsibleAlert
+                    variant="success"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="IPv4 Compatibility Notice"
+                  >
+                    <p className="mb-1">Supabase direct connections require <strong>IPv6</strong>. If you&apos;re on IPv4:</p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li>Use the <strong>Session Pooler</strong> connection string (recommended)</li>
+                      <li>Or purchase the IPv4 add-on from Supabase Dashboard</li>
+                    </ul>
+                  </CollapsibleAlert>
                 )}
                 {/* ── Neon alerts ────────────────────────────────────── */}
                 {provider === 'neon' && (
-                  <div className="space-y-2">
-                    <Alert className="border-teal-500/40 bg-teal-500/5">
-                      <Zap className="h-4 w-4 text-teal-500" />
-                      <AlertTitle className="text-teal-600 dark:text-teal-400">Connection Pooling</AlertTitle>
-                      <AlertDescription className="text-xs space-y-1">
-                        <p>Add <code className="bg-muted px-1 rounded">-pooler</code> to your endpoint for connection pooling:</p>
-                        <p className="font-mono text-[10px] bg-muted px-2 py-1 rounded break-all">
-                          ep-cool-darkness-123456<strong>-pooler</strong>.us-east-2.aws.neon.tech
-                        </p>
-                      </AlertDescription>
-                    </Alert>
-                    <Alert className="border-amber-500/40 bg-amber-500/5">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      <AlertTitle className="text-amber-600 dark:text-amber-400">Scale to Zero</AlertTitle>
-                      <AlertDescription className="text-xs">
-                        Neon databases have a <strong>5-minute idle timeout</strong>. Long-running transactions may be interrupted.
-                      </AlertDescription>
-                    </Alert>
+                  <div className="space-y-1.5">
+                    <CollapsibleAlert
+                      variant="info"
+                      icon={<Zap className="h-3.5 w-3.5" />}
+                      title="Connection Pooling"
+                    >
+                      <p className="mb-1">Add <code className="bg-muted px-1 rounded">-pooler</code> to your endpoint:</p>
+                      <p className="font-mono text-[10px] bg-muted px-2 py-1 rounded break-all">
+                        ep-cool-darkness-123456<strong>-pooler</strong>.us-east-2.aws.neon.tech
+                      </p>
+                    </CollapsibleAlert>
+                    <CollapsibleAlert
+                      variant="warning"
+                      icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                      title="Scale to Zero — 5-min idle timeout"
+                    >
+                      Neon databases sleep after <strong>5 minutes</strong> of inactivity. Long-running transactions may be interrupted.
+                    </CollapsibleAlert>
                   </div>
                 )}
                 <Tabs
