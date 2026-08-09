@@ -9,6 +9,7 @@ pub enum DatabaseType {
     MongoDB,
     ClickHouse,
     LibSQL,
+    Redis,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -97,6 +98,12 @@ pub struct ConnectionConfig {
     // LibSQL / Turso / Val Town
     pub libsql_url: Option<String>,
     pub libsql_auth_token: Option<String>,
+    // Redis
+    pub redis_db: Option<u8>,
+    // Cloudflare D1
+    pub cloudflare_account_id: Option<String>,
+    pub cloudflare_database_id: Option<String>,
+    pub cloudflare_api_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
