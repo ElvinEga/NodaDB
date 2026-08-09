@@ -1,5 +1,6 @@
 export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql';
-export type DatabaseProvider = 'supabase' | 'neon';
+export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb';
+export type MariaDBAuthMethod = 'password' | 'aws_iam' | 'azure_ad' | 'gcp_iam';
 
 export type ColumnTypeFamily =
   | 'boolean'
@@ -47,8 +48,19 @@ export interface ConnectionConfig {
   database?: string;
   file_path?: string;
   ssh_config?: SSHConfig;
-  /** Set for cloud providers (supabase, neon). Wire protocol stays postgresql. */
+  /** Set for cloud providers (supabase, neon) or mariadb. Wire protocol stays postgresql/mysql. */
   provider?: DatabaseProvider;
+  /** Auth method — only relevant when provider === 'mariadb' */
+  auth_method?: MariaDBAuthMethod;
+  /** AWS IAM auth */
+  aws_region?: string;
+  aws_db_user?: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  /** Azure AD auth */
+  azure_tenant_id?: string;
+  /** GCP IAM auth */
+  gcp_project?: string;
 }
 
 export interface DatabaseTable {
