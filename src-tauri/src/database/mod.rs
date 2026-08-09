@@ -21,6 +21,7 @@ pub enum DatabasePool {
     MySql(sqlx::MySqlPool),
     MongoDB { client: mongodb::Client, database: String },
     ClickHouse { client: reqwest::Client, url: String, database: String },
+    LibSQL { client: reqwest::Client, url: String, token: String },
 }
 
 macro_rules! decimal_json_value {
@@ -221,6 +222,10 @@ macro_rules! execute_query {
             DatabasePool::ClickHouse { client, url, database } => {
                 ConnectionManager::clickhouse_http_execute(client, url, database, $query).await?
             }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = ConnectionManager::libsql_http_pipeline(client, url, token, $query).await?;
+                res.rows_affected
+            }
         };
         Ok::<u64, anyhow::Error>(rows_affected)
     }};
@@ -277,7 +282,7 @@ impl ConnectionManager {
 
     fn quote_identifier(identifier: &str, db_type: &DatabaseType) -> String {
         match db_type {
-            DatabaseType::PostgreSQL | DatabaseType::SQLite => {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("\"{}\"", identifier.replace('"', "\"\""))
             }
             DatabaseType::MySQL | DatabaseType::ClickHouse => format!("`{}`", identifier.replace('`', "``")),
@@ -288,7 +293,7 @@ impl ConnectionManager {
     fn quote_table_name(table_name: &str, db_type: &DatabaseType) -> String {
         match db_type {
             DatabaseType::PostgreSQL => Self::quote_pg_table(table_name),
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 if table_name.contains('.') {
                     let parts: Vec<String> = table_name
                         .split('.')
@@ -736,6 +741,99 @@ impl ConnectionManager {
         Ok(1)
     }
 
+    async fn libsql_http_pipeline(
+        client: &reqwest::Client,
+        base_url: &str,
+        token: &str,
+        sql: &str,
+    ) -> Result<QueryResult> {
+        let http_url = if base_url.starts_with("libsql://") {
+            format!("https://{}", &base_url["libsql://".len()..])
+        } else if base_url.starts_with("http://") || base_url.starts_with("https://") {
+            base_url.to_string()
+        } else {
+            format!("https://{}", base_url)
+        };
+
+        let endpoint = format!("{}/v2/pipeline", http_url.trim_end_matches('/'));
+
+        let body = serde_json::json!({
+            "baton": null,
+            "requests": [
+                {
+                    "type": "execute",
+                    "stmt": {
+                        "sql": sql
+                    }
+                }
+            ]
+        });
+
+        let mut req = client.post(&endpoint).json(&body);
+        if !token.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+
+        let resp = req.send().await?;
+        if !resp.status().is_success() {
+            let err_text = resp.text().await.unwrap_or_else(|_| "LibSQL HTTP error".to_string());
+            return Err(anyhow!("LibSQL Error: {}", err_text));
+        }
+
+        let json_resp: serde_json::Value = resp.json().await?;
+
+        let result_obj = json_resp.get("results")
+            .and_then(|r| r.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|first| first.get("response"))
+            .and_then(|resp| resp.get("result"));
+
+        let mut columns = Vec::new();
+        let mut rows = Vec::new();
+        let mut rows_affected = 0_u64;
+
+        if let Some(res) = result_obj {
+            if let Some(cols) = res.get("cols").and_then(|c| c.as_array()) {
+                for c in cols {
+                    if let Some(name) = c.get("name").and_then(|n| n.as_str()) {
+                        columns.push(name.to_string());
+                    }
+                }
+            }
+
+            if let Some(r_affected) = res.get("affected_row_count").and_then(|a| a.as_u64()) {
+                rows_affected = r_affected;
+            }
+
+            if let Some(row_list) = res.get("rows").and_then(|r| r.as_array()) {
+                for row_item in row_list {
+                    if let Some(cells) = row_item.as_array() {
+                        let mut map = serde_json::Map::new();
+                        for (i, cell) in cells.iter().enumerate() {
+                            let col_name = columns.get(i).cloned().unwrap_or_else(|| format!("col_{}", i));
+                            let val = match cell.get("type").and_then(|t| t.as_str()) {
+                                Some("integer") => cell.get("value").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("float") => cell.get("value").and_then(|v| v.as_f64()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("text") => cell.get("value").and_then(|v| v.as_str()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("blob") => cell.get("value").and_then(|v| v.as_str()).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+                                Some("null") | None => serde_json::Value::Null,
+                                _ => cell.get("value").cloned().unwrap_or(serde_json::Value::Null),
+                            };
+                            map.insert(col_name, val);
+                        }
+                        rows.push(serde_json::Value::Object(map));
+                    }
+                }
+            }
+        }
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            rows_affected,
+        })
+    }
+
     pub async fn connect(&self, config: ConnectionConfig) -> Result<()> {
         // Handle SSH tunnel if configured
         let (actual_host, actual_port, ssh_tunnel) = if let Some(ref ssh_config) = config.ssh_config {
@@ -874,6 +972,24 @@ impl ConnectionManager {
                     client,
                     url: base_url,
                     database,
+                }
+            }
+            DatabaseType::LibSQL => {
+                let url = config.libsql_url.as_deref()
+                    .or(config.host.as_deref())
+                    .ok_or_else(|| anyhow!("LibSQL Connection URI is required"))?
+                    .to_string();
+                let token = config.libsql_auth_token.as_deref()
+                    .or(config.password.as_deref())
+                    .unwrap_or_default()
+                    .to_string();
+
+                let client = reqwest::Client::builder().build()?;
+
+                DatabasePool::LibSQL {
+                    client,
+                    url,
+                    token,
                 }
             }
         };
@@ -1181,6 +1297,54 @@ impl ConnectionManager {
                     },
                 }
             }
+            DatabaseType::LibSQL => {
+                let url = config.libsql_url.as_deref()
+                    .or(config.host.as_deref())
+                    .ok_or_else(|| anyhow!("LibSQL Connection URI is required"))?;
+                let token = config.libsql_auth_token.as_deref()
+                    .or(config.password.as_deref())
+                    .unwrap_or_default();
+
+                match reqwest::Client::builder().build() {
+                    Ok(client) => {
+                        match Self::libsql_http_pipeline(&client, url, token, "SELECT sqlite_version()").await {
+                            Ok(res) => {
+                                let version = res.rows.first()
+                                    .and_then(|r| r.as_object())
+                                    .and_then(|obj| obj.values().next())
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown");
+                                let latency_ms = start.elapsed().as_millis() as u64;
+                                let provider_label = if config.provider.as_deref() == Some("turso") {
+                                    "Turso (LibSQL)"
+                                } else if config.provider.as_deref() == Some("valtown") {
+                                    "Val Town (LibSQL)"
+                                } else {
+                                    "LibSQL"
+                                };
+                                ConnectionTestResult {
+                                    success: true,
+                                    latency_ms,
+                                    db_version: format!("{} v{}", provider_label, version),
+                                    error: None,
+                                }
+                            }
+                            Err(e) => ConnectionTestResult {
+                                success: false,
+                                latency_ms: 0,
+                                db_version: String::new(),
+                                error: Some(e.to_string()),
+                            },
+                        }
+                    }
+                    Err(e) => ConnectionTestResult {
+                        success: false,
+                        latency_ms: 0,
+                        db_version: String::new(),
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
         };
 
         Ok(result)
@@ -1346,6 +1510,26 @@ impl ConnectionManager {
                 }
                 tables
             }
+            DatabasePool::LibSQL { client, url, token } => {
+                let query = "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name";
+                let res = Self::libsql_http_pipeline(client, url, token, query).await?;
+                let mut tables = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let table_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("table").to_string();
+                        tables.push(DatabaseTable {
+                            name: name.clone(),
+                            schema: None,
+                            full_name: Some(name),
+                            row_count: None,
+                            size_kb: None,
+                            table_type: Some(table_type.to_uppercase()),
+                        });
+                    }
+                }
+                tables
+            }
         };
 
         Ok(tables)
@@ -1363,7 +1547,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA table_info({})", table_name)
             }
             DatabaseType::PostgreSQL => String::new(),
@@ -1663,6 +1847,47 @@ impl ConnectionManager {
                 }
                 columns
             }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, &query).await?;
+                let mut columns = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let data_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("TEXT").to_string();
+                        let not_null = obj.get("notnull").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let default_value = obj.get("dflt_value").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        let is_pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
+                        let normalized_type = normalize_type_name(&data_type);
+                        let type_family = classify_sqlite_type(&data_type);
+
+                        columns.push(TableColumn {
+                            name,
+                            data_type: data_type.clone(),
+                            raw_type: Some(data_type),
+                            normalized_type,
+                            type_family: type_family.clone(),
+                            db_type: DatabaseType::LibSQL,
+                            is_nullable: not_null == 0,
+                            default_value,
+                            is_primary_key: is_pk,
+                            is_boolean_like: matches!(type_family, ColumnTypeFamily::Boolean),
+                            is_array: false,
+                            enum_values: None,
+                            identity_kind: None,
+                            generated_kind: None,
+                            generation_expression: None,
+                            column_comment: None,
+                            collation_name: None,
+                            domain_name: None,
+                            domain_schema: None,
+                            domain_base_type: None,
+                            array_dimensions: None,
+                            element_raw_type: None,
+                        });
+                    }
+                }
+                columns
+            }
         };
 
         Ok(columns)
@@ -1718,6 +1943,9 @@ impl ConnectionManager {
                         rows_affected: count,
                     })
                 }
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                Self::libsql_http_pipeline(client, url, token, query).await
             }
         }
     }
@@ -1801,6 +2029,28 @@ impl ConnectionManager {
                     });
                 }
                 
+                (steps, None)
+            }
+            (DatabasePool::LibSQL { client, url, token }, DatabaseType::LibSQL) => {
+                let explain_query = format!("EXPLAIN QUERY PLAN {}", query);
+                let res = Self::libsql_http_pipeline(client, url, token, &explain_query).await?;
+
+                let mut steps = Vec::new();
+                for row in res.rows {
+                    if let Some(obj) = row.as_object() {
+                        let detail = obj.get("detail").and_then(|v| v.as_str()).unwrap_or("Query Step");
+                        steps.push(PlanStep {
+                            step_type: detail.to_string(),
+                            table_name: None,
+                            rows: None,
+                            cost: None,
+                            filter_condition: None,
+                            index_used: None,
+                            children: vec![],
+                        });
+                    }
+                }
+
                 (steps, None)
             }
             _ => return Err(anyhow!("Database type mismatch")),
@@ -2353,7 +2603,7 @@ impl ConnectionManager {
         let nullable_clause = if nullable { "" } else { " NOT NULL" };
         
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("ALTER TABLE {} ADD COLUMN {} {}", table_name, column_name, data_type)
             }
             DatabaseType::PostgreSQL | DatabaseType::MySQL | DatabaseType::ClickHouse => {
@@ -2395,8 +2645,8 @@ impl ConnectionManager {
         }
 
         let query = match db_type {
-            DatabaseType::SQLite => {
-                return Err(anyhow!("SQLite does not support dropping columns directly. Please recreate the table."));
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
+                return Err(anyhow!("SQLite/LibSQL does not support dropping columns directly. Please recreate the table."));
             }
             DatabaseType::PostgreSQL | DatabaseType::MySQL | DatabaseType::ClickHouse => {
                 let target_table = if matches!(pool, DatabasePool::Postgres(_)) {
@@ -2447,7 +2697,7 @@ impl ConnectionManager {
         }
 
         let query = match db_type {
-            DatabaseType::SQLite => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
+            DatabaseType::SQLite | DatabaseType::LibSQL => format!("ALTER TABLE {} RENAME TO {}", old_name, new_name),
             DatabaseType::MySQL | DatabaseType::ClickHouse => format!("RENAME TABLE {} TO {}", old_name, new_name),
             DatabaseType::PostgreSQL => {
                 let quoted_old = Self::quote_pg_table(old_name);
@@ -2515,6 +2765,12 @@ impl ConnectionManager {
                 for query in queries {
                     Self::clickhouse_http_execute(client, url, database, query).await?;
                     total_rows_affected += 1;
+                }
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                for query in queries {
+                    let res = Self::libsql_http_pipeline(client, url, token, query).await?;
+                    total_rows_affected += res.rows_affected;
                 }
             }
         }
@@ -2711,6 +2967,7 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => vec![],
             DatabasePool::ClickHouse { .. } => vec![],
+            DatabasePool::LibSQL { .. } => vec![],
         };
 
         Ok(constraints)
@@ -2869,6 +3126,9 @@ impl ConnectionManager {
             DatabaseType::ClickHouse => {
                 return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
             }
+            DatabaseType::LibSQL => {
+                return Err(anyhow!("Foreign keys are not supported for LibSQL"));
+            }
         }
 
         Ok(format!(
@@ -2926,6 +3186,9 @@ impl ConnectionManager {
             DatabaseType::ClickHouse => {
                 return Err(anyhow!("Foreign keys are not supported for ClickHouse"));
             }
+            DatabaseType::LibSQL => {
+                return Err(anyhow!("Foreign keys are not supported for LibSQL"));
+            }
         }
 
         Ok(format!(
@@ -2947,7 +3210,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let sql = match db_type {
-            DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::MySQL | DatabaseType::ClickHouse => {
+            DatabaseType::PostgreSQL | DatabaseType::SQLite | DatabaseType::MySQL | DatabaseType::ClickHouse | DatabaseType::LibSQL => {
                 "SELECT id, name, applied_at, checksum FROM schema_migrations ORDER BY id"
             }
             DatabaseType::MongoDB => "",
@@ -2998,6 +3261,20 @@ impl ConnectionManager {
                     let checksum = obj.get("checksum").and_then(|v| v.as_str()).map(|s| s.to_string());
                     Some(AppliedMigration { id, name, applied_at, checksum })
                 }).collect()
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, sql).await;
+                match res {
+                    Ok(r) => r.rows.into_iter().filter_map(|row| {
+                        let obj = row.as_object()?;
+                        let id = obj.get("id")?.as_str()?.to_string();
+                        let name = obj.get("name")?.as_str()?.to_string();
+                        let applied_at = obj.get("applied_at").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                        let checksum = obj.get("checksum").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        Some(AppliedMigration { id, name, applied_at, checksum })
+                    }).collect(),
+                    Err(_) => vec![],
+                }
             }
         };
 
@@ -3304,7 +3581,7 @@ impl ConnectionManager {
             .ok_or_else(|| anyhow!("Connection not found"))?;
 
         let create_sql = match db_type {
-            DatabaseType::SQLite => r#"
+            DatabaseType::SQLite | DatabaseType::LibSQL => r#"
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -3634,7 +3911,7 @@ impl ConnectionManager {
         db_type: &DatabaseType,
     ) -> Result<Vec<String>> {
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA table_info({})", table_name)
             }
             DatabaseType::PostgreSQL => {
@@ -3694,6 +3971,21 @@ impl ConnectionManager {
                     r.as_object()?.get("name")?.as_str().map(|s| s.to_string())
                 }).collect()
             }
+            DatabasePool::LibSQL { client, url, token } => {
+                let res = Self::libsql_http_pipeline(client, url, token, &query).await?;
+                let mut pks = Vec::new();
+                for r in res.rows {
+                    if let Some(obj) = r.as_object() {
+                        let pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if pk > 0 {
+                            if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                                pks.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+                pks
+            }
         };
 
         Ok(primary_keys)
@@ -3706,7 +3998,7 @@ impl ConnectionManager {
         db_type: &DatabaseType,
     ) -> Result<Vec<String>> {
         let query = match db_type {
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::LibSQL => {
                 format!("PRAGMA index_list({})", table_name)
             }
             DatabaseType::PostgreSQL => {
@@ -3800,6 +4092,7 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => vec![],
             DatabasePool::ClickHouse { .. } => vec![],
+            DatabasePool::LibSQL { .. } => vec![],
         };
 
         Ok(indexes)
@@ -4234,6 +4527,7 @@ impl ConnectionManager {
             }
             DatabasePool::MongoDB { .. } => {}
             DatabasePool::ClickHouse { .. } => {}
+            DatabasePool::LibSQL { .. } => {}
         }
 
         Ok(matches)
@@ -4374,6 +4668,17 @@ impl ConnectionManager {
                     offset
                 );
                 Self::clickhouse_http_query(client, url, database, &query).await
+            }
+            DatabasePool::LibSQL { client, url, token } => {
+                let query = format!(
+                    "SELECT * FROM \"{}\" WHERE \"{}\" = '{}' LIMIT {} OFFSET {}",
+                    table_name.replace('"', "\"\""),
+                    column_name.replace('"', "\"\""),
+                    clean_value.replace('\'', "''"),
+                    limit,
+                    offset
+                );
+                Self::libsql_http_pipeline(client, url, token, &query).await
             }
         }
     }
