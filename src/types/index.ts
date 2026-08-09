@@ -1,6 +1,7 @@
-export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql';
+export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mongodb';
 export type DatabaseProvider = 'supabase' | 'neon' | 'mariadb';
 export type MariaDBAuthMethod = 'password' | 'aws_iam' | 'azure_ad' | 'gcp_iam';
+export type MongoDBAuthMethod = 'password' | 'atlas';
 
 export type ColumnTypeFamily =
   | 'boolean'
@@ -61,6 +62,12 @@ export interface ConnectionConfig {
   azure_tenant_id?: string;
   /** GCP IAM auth */
   gcp_project?: string;
+  /** MongoDB auth method */
+  mongo_auth_method?: MongoDBAuthMethod;
+  /** MongoDB: full atlas connection string */
+  mongo_connection_string?: string;
+  /** MongoDB: auth source database (defaults to 'admin') */
+  mongo_auth_source?: string;
 }
 
 export interface DatabaseTable {
