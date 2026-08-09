@@ -7,6 +7,7 @@ pub enum DatabaseType {
     PostgreSQL,
     MySQL,
     MongoDB,
+    ClickHouse,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -90,6 +91,8 @@ pub struct ConnectionConfig {
     pub mongo_connection_string: Option<String>,
     pub mongo_auth_source: Option<String>,
     pub mongo_database: Option<String>,
+    // ClickHouse
+    pub clickhouse_use_ssl: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
