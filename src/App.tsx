@@ -854,8 +854,8 @@ function App() {
                             <div className="text-sm text-muted-foreground flex items-center gap-2">
                               <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
                                 {conn.provider
-                                  ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB', planetscale: 'PlanetScale (MySQL)', planetscale_postgres: 'PlanetScale (Postgres)' } as Record<string, string>)[conn.provider] ?? conn.provider
-                                  : conn.db_type === 'mongodb' ? 'MongoDB' : conn.db_type === 'clickhouse' ? 'ClickHouse' : conn.db_type.toUpperCase()}
+                                  ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB', planetscale: 'PlanetScale (MySQL)', planetscale_postgres: 'PlanetScale (Postgres)', prisma: 'Prisma', turso: 'Turso', valtown: 'Val Town' } as Record<string, string>)[conn.provider] ?? conn.provider
+                                  : conn.db_type === 'mongodb' ? 'MongoDB' : conn.db_type === 'clickhouse' ? 'ClickHouse' : conn.db_type === 'libsql' ? 'LibSQL' : conn.db_type.toUpperCase()}
                               </span>
                               {conn.file_path && (
                                 <span className="truncate">
