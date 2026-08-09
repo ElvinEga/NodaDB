@@ -854,7 +854,7 @@ function App() {
                             <div className="text-sm text-muted-foreground flex items-center gap-2">
                               <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
                                 {conn.provider
-                                  ? conn.provider.charAt(0).toUpperCase() + conn.provider.slice(1)
+                                  ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB' } as Record<string, string>)[conn.provider] ?? conn.provider
                                   : conn.db_type.toUpperCase()}
                               </span>
                               {conn.file_path && (
