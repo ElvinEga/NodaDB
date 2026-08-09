@@ -17,6 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectLabel,
   SelectSeparator,
@@ -485,64 +486,68 @@ export function ConnectionDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Core Databases</SelectLabel>
-                  <SelectItem value="sqlite">
-                    <div className="flex items-center gap-2">
-                      <DbIcon dbType="sqlite" className="h-4 w-4 shrink-0" />
-                      <div>
-                        <span>SQLite</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">
-                          Local file
-                        </span>
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Core Databases</SelectLabel>
+                    <SelectItem value="sqlite">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="sqlite" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>SQLite</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Local file
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="postgresql">
-                    <div className="flex items-center gap-2">
-                      <DbIcon dbType="postgresql" className="h-4 w-4 shrink-0" />
-                      <div>
-                        <span>PostgreSQL</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">
-                          Server
-                        </span>
+                    </SelectItem>
+                    <SelectItem value="postgresql">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="postgresql" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>PostgreSQL</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Server
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="mysql">
-                    <div className="flex items-center gap-2">
-                      <DbIcon dbType="mysql" className="h-4 w-4 shrink-0" />
-                      <div>
-                        <span>MySQL</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">
-                          Server
-                        </span>
+                    </SelectItem>
+                    <SelectItem value="mysql">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="mysql" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>MySQL</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Server
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
+                    </SelectItem>
+                  </SelectGroup>
                   <SelectSeparator />
-                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Cloud Providers</SelectLabel>
-                  <SelectItem value="supabase">
-                    <div className="flex items-center gap-2">
-                      <DbIcon dbType="supabase" className="h-4 w-4 shrink-0" />
-                      <div>
-                        <span>Supabase</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">
-                          PostgreSQL
-                        </span>
+                  <SelectGroup>
+                    <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground px-2 pb-1">Cloud Providers</SelectLabel>
+                    <SelectItem value="supabase">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="supabase" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Supabase</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            PostgreSQL
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="neon">
-                    <div className="flex items-center gap-2">
-                      <DbIcon dbType="neon" className="h-4 w-4 shrink-0" />
-                      <div>
-                        <span>Neon</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">
-                          Serverless PostgreSQL
-                        </span>
+                    </SelectItem>
+                    <SelectItem value="neon">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="neon" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>Neon</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Serverless PostgreSQL
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
+                    </SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
