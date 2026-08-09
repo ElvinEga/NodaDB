@@ -95,6 +95,23 @@ const DATA_TYPES = {
     "Object",
     "Array",
   ],
+  clickhouse: [
+    "UInt64",
+    "Int64",
+    "Int32",
+    "Float64",
+    "String",
+    "Date",
+    "DateTime",
+    "DateTime64",
+    "UUID",
+    "Array(String)",
+    "Map(String, String)",
+    "JSON",
+    "Enum8",
+    "IPv4",
+    "IPv6",
+  ],
 };
 
 export function CreateTableDialog({
