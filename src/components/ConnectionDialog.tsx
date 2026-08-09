@@ -94,6 +94,9 @@ export function ConnectionDialog({
   const [mongoConnectionString, setMongoConnectionString] = useState('');
   const [mongoAuthSource, setMongoAuthSource] = useState('');
 
+  // ClickHouse SSL state
+  const [clickhouseUseSsl, setClickhouseUseSsl] = useState(false);
+
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
   const setActiveConnection = useConnectionStore(
@@ -116,11 +119,12 @@ export function ConnectionDialog({
       setMongoAuthMethod(editConnection.mongo_auth_method ?? 'password');
       setMongoConnectionString(editConnection.mongo_connection_string ?? '');
       setMongoAuthSource(editConnection.mongo_auth_source ?? '');
+      setClickhouseUseSsl(editConnection.clickhouse_use_ssl ?? false);
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
         setHost(editConnection.host ?? 'localhost');
-        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : 5432)));
+        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : editConnection.db_type === 'clickhouse' ? 8123 : 5432)));
         setUsername(editConnection.username ?? '');
         setPassword(editConnection.password ?? '');
         setDatabase(editConnection.database ?? '');
@@ -153,6 +157,7 @@ export function ConnectionDialog({
         setMongoAuthMethod('password');
         setMongoConnectionString('');
         setMongoAuthSource('');
+        setClickhouseUseSsl(false);
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -179,6 +184,8 @@ export function ConnectionDialog({
     provider === 'supabase' ? 'supabase' :
     provider === 'neon'     ? 'neon'     :
     provider === 'mariadb'  ? 'mariadb'  :
+    provider === 'planetscale' ? 'planetscale' :
+    provider === 'planetscale_postgres' ? 'planetscale_postgres' :
     dbType;
 
   const handleDbTypeOrProviderChange = (value: string) => {
@@ -198,11 +205,26 @@ export function ConnectionDialog({
       setPort('3306');
       setAuthMethod('password');
       setConnectionType('direct');
+    } else if (value === 'planetscale') {
+      setDbType('mysql');
+      setProvider('planetscale');
+      setPort('3306');
+      setConnectionType('direct');
+    } else if (value === 'planetscale_postgres') {
+      setDbType('postgresql');
+      setProvider('planetscale_postgres');
+      setPort('5432');
+      setConnectionType('direct');
     } else if (value === 'mongodb') {
       setDbType('mongodb');
       setProvider(undefined);
       setPort('27017');
       setMongoAuthMethod('password');
+      setConnectionType('direct');
+    } else if (value === 'clickhouse') {
+      setDbType('clickhouse');
+      setProvider(undefined);
+      setPort('8123');
       setConnectionType('direct');
     } else {
       setDbType(value as DatabaseType);
@@ -316,6 +338,7 @@ export function ConnectionDialog({
         mongo_auth_method: dbType === 'mongodb' ? mongoAuthMethod : undefined,
         mongo_connection_string: dbType === 'mongodb' && mongoAuthMethod === 'atlas' ? mongoConnectionString : undefined,
         mongo_auth_source: dbType === 'mongodb' && mongoAuthSource ? mongoAuthSource : undefined,
+        clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
         ...(dbType === "sqlite"
           ? { file_path: filePath }
           : {
@@ -480,6 +503,7 @@ export function ConnectionDialog({
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
           ...mongoFields,
+          clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
           ...(dbType === "sqlite"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
             : { host, port: parseInt(port), username, password, database, file_path: undefined }),
@@ -503,6 +527,7 @@ export function ConnectionDialog({
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
           ...mongoFields,
+          clickhouse_use_ssl: dbType === 'clickhouse' ? clickhouseUseSsl : undefined,
           ...(dbType === "sqlite"
             ? { file_path: filePath }
             : { host, port: parseInt(port), username, password, database: database || 'admin' }),
@@ -643,6 +668,17 @@ export function ConnectionDialog({
                         </div>
                       </div>
                     </SelectItem>
+                    <SelectItem value="clickhouse">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="clickhouse" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>ClickHouse</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Columnar OLAP
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
                   </SelectGroup>
                   <SelectSeparator />
                   <SelectGroup>
@@ -665,6 +701,28 @@ export function ConnectionDialog({
                           <span>Neon</span>
                           <span className="text-[10px] text-muted-foreground ml-2">
                             Serverless PostgreSQL
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="planetscale">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="planetscale" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>PlanetScale (MySQL)</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Vitess / MySQL Wire
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="planetscale_postgres">
+                      <div className="flex items-center gap-2">
+                        <DbIcon provider="planetscale" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>PlanetScale (Postgres)</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            PostgreSQL Wire
                           </span>
                         </div>
                       </div>
@@ -705,6 +763,18 @@ export function ConnectionDialog({
               </div>
             ) : (
               <>
+                {/* ── PlanetScale alerts ───────────────────────────── */}
+                {(provider === 'planetscale' || provider === 'planetscale_postgres') && (
+                  <CollapsibleAlert
+                    variant="info"
+                    icon={<Info className="h-3.5 w-3.5" />}
+                    title="PlanetScale Secure TLS Connection"
+                  >
+                    <p className="mb-1">
+                      PlanetScale requires secure TLS (<code className="bg-muted px-1 rounded">ssl-mode=required</code>). Standard authentication works with branch connection credentials.
+                    </p>
+                  </CollapsibleAlert>
+                )}
                 {/* ── Supabase alerts ──────────────────────────────── */}
                 {provider === 'supabase' && (
                   <CollapsibleAlert
@@ -1143,6 +1213,21 @@ export function ConnectionDialog({
                             className="h-9 text-sm"
                           />
                         </div>
+
+                        {dbType === 'clickhouse' && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <input
+                              type="checkbox"
+                              id="clickhouseUseSsl"
+                              checked={clickhouseUseSsl}
+                              onChange={(e) => setClickhouseUseSsl(e.target.checked)}
+                              className="h-4 w-4 rounded border-gray-300 accent-primary cursor-pointer"
+                            />
+                            <label htmlFor="clickhouseUseSsl" className="text-xs font-medium cursor-pointer">
+                              Use HTTPS / SSL (Recommended for ClickHouse Cloud, port 8443)
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TabsContent>
