@@ -6,6 +6,7 @@ pub enum DatabaseType {
     SQLite,
     PostgreSQL,
     MySQL,
+    MongoDB,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -84,6 +85,11 @@ pub struct ConnectionConfig {
     pub azure_tenant_id: Option<String>,
     // GCP IAM
     pub gcp_project: Option<String>,
+    // MongoDB
+    pub mongo_auth_method: Option<String>,
+    pub mongo_connection_string: Option<String>,
+    pub mongo_auth_source: Option<String>,
+    pub mongo_database: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

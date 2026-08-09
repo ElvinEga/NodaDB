@@ -89,6 +89,11 @@ export function ConnectionDialog({
   const [azureTenantId, setAzureTenantId] = useState('');
   const [gcpProject, setGcpProject] = useState('');
 
+  // MongoDB auth state
+  const [mongoAuthMethod, setMongoAuthMethod] = useState<'password' | 'atlas'>('password');
+  const [mongoConnectionString, setMongoConnectionString] = useState('');
+  const [mongoAuthSource, setMongoAuthSource] = useState('');
+
   const addConnection = useConnectionStore((state) => state.addConnection);
   const updateConnection = useConnectionStore((state) => state.updateConnection);
   const setActiveConnection = useConnectionStore(
@@ -108,11 +113,14 @@ export function ConnectionDialog({
       setAwsSecretAccessKey(editConnection.aws_secret_access_key ?? '');
       setAzureTenantId(editConnection.azure_tenant_id ?? '');
       setGcpProject(editConnection.gcp_project ?? '');
+      setMongoAuthMethod(editConnection.mongo_auth_method ?? 'password');
+      setMongoConnectionString(editConnection.mongo_connection_string ?? '');
+      setMongoAuthSource(editConnection.mongo_auth_source ?? '');
       if (editConnection.db_type === 'sqlite') {
         setFilePath(editConnection.file_path ?? '');
       } else {
         setHost(editConnection.host ?? 'localhost');
-        setPort(String(editConnection.port ?? 5432));
+        setPort(String(editConnection.port ?? (editConnection.db_type === 'mongodb' ? 27017 : 5432)));
         setUsername(editConnection.username ?? '');
         setPassword(editConnection.password ?? '');
         setDatabase(editConnection.database ?? '');
@@ -142,6 +150,9 @@ export function ConnectionDialog({
         setAwsSecretAccessKey('');
         setAzureTenantId('');
         setGcpProject('');
+        setMongoAuthMethod('password');
+        setMongoConnectionString('');
+        setMongoAuthSource('');
         setHost('localhost');
         setPort('5432');
         setUsername('');
@@ -186,6 +197,12 @@ export function ConnectionDialog({
       setProvider('mariadb');
       setPort('3306');
       setAuthMethod('password');
+      setConnectionType('direct');
+    } else if (value === 'mongodb') {
+      setDbType('mongodb');
+      setProvider(undefined);
+      setPort('27017');
+      setMongoAuthMethod('password');
       setConnectionType('direct');
     } else {
       setDbType(value as DatabaseType);
@@ -250,7 +267,16 @@ export function ConnectionDialog({
       return;
     }
 
-    if (dbType !== "sqlite" && (!host || !username || !database)) {
+    if (dbType === "mongodb") {
+      if (mongoAuthMethod === "atlas" && !mongoConnectionString.trim()) {
+        toast.error("Please enter an Atlas connection string");
+        return;
+      }
+      if (mongoAuthMethod === "password" && (!host || !username)) {
+        toast.error("Please fill in host and username");
+        return;
+      }
+    } else if (dbType !== "sqlite" && (!host || !username || !database)) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -287,6 +313,9 @@ export function ConnectionDialog({
         aws_secret_access_key: awsSecretAccessKey || undefined,
         azure_tenant_id: azureTenantId || undefined,
         gcp_project: gcpProject || undefined,
+        mongo_auth_method: dbType === 'mongodb' ? mongoAuthMethod : undefined,
+        mongo_connection_string: dbType === 'mongodb' && mongoAuthMethod === 'atlas' ? mongoConnectionString : undefined,
+        mongo_auth_source: dbType === 'mongodb' && mongoAuthSource ? mongoAuthSource : undefined,
         ...(dbType === "sqlite"
           ? { file_path: filePath }
           : {
@@ -381,7 +410,16 @@ export function ConnectionDialog({
       return;
     }
 
-    if (dbType !== "sqlite" && (!host || !username || !database)) {
+    if (dbType === "mongodb") {
+      if (mongoAuthMethod === "atlas" && !mongoConnectionString.trim()) {
+        toast.error("Please enter an Atlas connection string");
+        return;
+      }
+      if (mongoAuthMethod === "password" && (!host || !username)) {
+        toast.error("Please fill in host and username");
+        return;
+      }
+    } else if (dbType !== "sqlite" && (!host || !username || !database)) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -420,6 +458,12 @@ export function ConnectionDialog({
           }
         : {};
 
+    const mongoFields = {
+      mongo_auth_method: dbType === 'mongodb' ? mongoAuthMethod : undefined,
+      mongo_connection_string: dbType === 'mongodb' && mongoAuthMethod === 'atlas' ? mongoConnectionString : undefined,
+      mongo_auth_source: dbType === 'mongodb' && mongoAuthSource ? mongoAuthSource : undefined,
+    };
+
     try {
       if (isEditMode && editConnection) {
         // Edit mode: update store and reconnect with new config
@@ -435,6 +479,7 @@ export function ConnectionDialog({
           aws_secret_access_key: awsSecretAccessKey || undefined,
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
+          ...mongoFields,
           ...(dbType === "sqlite"
             ? { file_path: filePath, host: undefined, port: undefined, username: undefined, password: undefined, database: undefined }
             : { host, port: parseInt(port), username, password, database, file_path: undefined }),
@@ -457,9 +502,10 @@ export function ConnectionDialog({
           aws_secret_access_key: awsSecretAccessKey || undefined,
           azure_tenant_id: azureTenantId || undefined,
           gcp_project: gcpProject || undefined,
+          ...mongoFields,
           ...(dbType === "sqlite"
             ? { file_path: filePath }
-            : { host, port: parseInt(port), username, password, database }),
+            : { host, port: parseInt(port), username, password, database: database || 'admin' }),
           ...sshConfigPartial,
         };
 
@@ -582,6 +628,17 @@ export function ConnectionDialog({
                           <span>MariaDB</span>
                           <span className="text-[10px] text-muted-foreground ml-2">
                             Server
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="mongodb">
+                      <div className="flex items-center gap-2">
+                        <DbIcon dbType="mongodb" className="h-4 w-4 shrink-0" />
+                        <div>
+                          <span>MongoDB</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">
+                            Document DB
                           </span>
                         </div>
                       </div>
@@ -804,6 +861,66 @@ export function ConnectionDialog({
                           value={gcpProject}
                           onChange={(e) => setGcpProject(e.target.value)}
                           placeholder="my-gcp-project"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── MongoDB auth ─────────────────────────────────── */}
+                {dbType === 'mongodb' && (
+                  <div className="space-y-3">
+                    <div className="grid gap-2">
+                      <label className="!text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                        Authentication Method
+                      </label>
+                      <Select value={mongoAuthMethod} onValueChange={(v) => setMongoAuthMethod(v as 'password' | 'atlas')}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="password">User &amp; Password</SelectItem>
+                          <SelectItem value="atlas">Atlas Connection String</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {mongoAuthMethod === 'atlas' && (
+                      <div className="space-y-2">
+                        <CollapsibleAlert
+                          variant="info"
+                          icon={<Info className="h-3.5 w-3.5" />}
+                          title="MongoDB Atlas Connection String"
+                        >
+                          <p className="mb-1">Copy the SRV connection string from MongoDB Atlas:</p>
+                          <p className="font-mono text-[10px] bg-muted px-2 py-1 rounded break-all">
+                            mongodb+srv://&lt;username&gt;:&lt;password&gt;@cluster0.abc.mongodb.net/dbname
+                          </p>
+                        </CollapsibleAlert>
+                        <div className="grid gap-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Atlas Connection String <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            value={mongoConnectionString}
+                            onChange={(e) => setMongoConnectionString(e.target.value)}
+                            placeholder="mongodb+srv://user:pass@cluster0.abc.mongodb.net/mydb"
+                            className="h-9 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {mongoAuthMethod === 'password' && (
+                      <div className="grid gap-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Auth Source Database <span className="text-[10px] text-muted-foreground">(defaults to &apos;admin&apos;)</span>
+                        </label>
+                        <Input
+                          value={mongoAuthSource}
+                          onChange={(e) => setMongoAuthSource(e.target.value)}
+                          placeholder="admin"
                           className="h-8 text-xs font-mono"
                         />
                       </div>

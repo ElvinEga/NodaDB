@@ -84,6 +84,17 @@ const DATA_TYPES = {
     "TIMESTAMP",
     "JSON",
   ],
+  mongodb: [
+    "String",
+    "Int32",
+    "Int64",
+    "Double",
+    "Boolean",
+    "Date",
+    "ObjectId",
+    "Object",
+    "Array",
+  ],
 };
 
 export function CreateTableDialog({
@@ -98,7 +109,7 @@ export function CreateTableDialog({
   ]);
   const [isCreating, setIsCreating] = useState(false);
 
-  const dataTypes = DATA_TYPES[connection.db_type] || DATA_TYPES.sqlite;
+  const dataTypes = (DATA_TYPES as Record<string, string[]>)[connection.db_type] || DATA_TYPES.sqlite;
 
   const addColumn = () => {
     const newColumn: Column = {
@@ -264,7 +275,7 @@ export function CreateTableDialog({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {dataTypes.map((type) => (
+                            {dataTypes.map((type: string) => (
                               <SelectItem
                                 key={type}
                                 value={type}

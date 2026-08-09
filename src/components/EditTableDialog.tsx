@@ -87,6 +87,17 @@ const DATA_TYPES = {
     "TIMESTAMP",
     "JSON",
   ],
+  mongodb: [
+    "String",
+    "Int32",
+    "Int64",
+    "Double",
+    "Boolean",
+    "Date",
+    "ObjectId",
+    "Object",
+    "Array",
+  ],
 };
 
 export function EditTableDialog({
@@ -101,7 +112,7 @@ export function EditTableDialog({
   const [isLoadingStructure, setIsLoadingStructure] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const dataTypes = DATA_TYPES[connection.db_type] || DATA_TYPES.sqlite;
+  const dataTypes = (DATA_TYPES as Record<string, string[]>)[connection.db_type] || DATA_TYPES.sqlite;
 
   useEffect(() => {
     if (!open || !table) return;
@@ -325,7 +336,7 @@ export function EditTableDialog({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {dataTypes.map((type) => (
+                              {dataTypes.map((type: string) => (
                                 <SelectItem
                                   key={type}
                                   value={type}
