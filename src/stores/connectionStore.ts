@@ -7,6 +7,7 @@ interface ConnectionStore {
   activeConnectionId: string | null;
   previousConnectionId: string | null;
   recentConnectionIds: string[];
+  pinnedConnectionIds: string[];
   addConnection: (connection: ConnectionConfig) => void;
   removeConnection: (id: string) => void;
   updateConnection: (id: string, updates: Partial<ConnectionConfig>) => void;
@@ -15,6 +16,7 @@ interface ConnectionStore {
   restorePreviousConnection: () => void;
   clearPreviousConnection: () => void;
   getActiveConnection: () => ConnectionConfig | null;
+  togglePinConnection: (id: string) => void;
 }
 
 export const useConnectionStore = create<ConnectionStore>()(
@@ -24,6 +26,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       activeConnectionId: null,
       previousConnectionId: null,
       recentConnectionIds: [],
+      pinnedConnectionIds: [],
       
       addConnection: (connection) =>
         set((state) => ({
@@ -36,6 +39,9 @@ export const useConnectionStore = create<ConnectionStore>()(
           activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
           previousConnectionId: state.previousConnectionId === id ? null : state.previousConnectionId,
           recentConnectionIds: state.recentConnectionIds.filter(
+            (connectionId) => connectionId !== id
+          ),
+          pinnedConnectionIds: state.pinnedConnectionIds.filter(
             (connectionId) => connectionId !== id
           ),
         })),
@@ -80,6 +86,13 @@ export const useConnectionStore = create<ConnectionStore>()(
         const state = get();
         return state.connections.find((c) => c.id === state.activeConnectionId) || null;
       },
+
+      togglePinConnection: (id) =>
+        set((state) => ({
+          pinnedConnectionIds: state.pinnedConnectionIds.includes(id)
+            ? state.pinnedConnectionIds.filter((pid) => pid !== id)
+            : [...state.pinnedConnectionIds, id],
+        })),
     }),
     {
       name: 'nodadb-connections-storage',
@@ -87,6 +100,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       partialize: (state) => ({
         connections: state.connections,
         recentConnectionIds: state.recentConnectionIds,
+        pinnedConnectionIds: state.pinnedConnectionIds,
       }),
     }
   )

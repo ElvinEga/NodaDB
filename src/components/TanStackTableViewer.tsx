@@ -2165,7 +2165,7 @@ Sum: ${stats.sum}`
                 >
                   {/* Sticky Header */}
                   <thead
-                    className="sticky top-0 z-10 bg-muted/30"
+                    className="sticky top-0 z-10 bg-muted/30 backdrop-blur-md"
                     style={{ display: "grid", position: "sticky", top: 0 }}
                   >
                     {tableInstance.getHeaderGroups().map((headerGroup: any) => (
