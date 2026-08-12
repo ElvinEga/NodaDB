@@ -478,17 +478,18 @@ function App() {
   // Global keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const modKey = e.ctrlKey || e.metaKey;
+      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+      // On macOS use Cmd (metaKey); on Win/Linux use Ctrl (ctrlKey)
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // Cmd/Ctrl + Shift + P  →  Command Palette
+      // Cmd+Shift+P (mac) / Ctrl+Shift+P (win)  →  Command Palette
       if (modKey && e.shiftKey && e.key === "P") {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
         return;
       }
-      // Cmd/Ctrl + K  →  Command Palette (quick-open)
+      // Cmd+K (mac) / Ctrl+K (win)  →  Command Palette quick-open
       if (modKey && !e.shiftKey && !e.altKey && e.key === "k") {
-        // Don't capture when Monaco editor has focus
         const target = e.target as HTMLElement;
         if (!target.closest(".monaco-editor")) {
           e.preventDefault();
@@ -496,25 +497,25 @@ function App() {
           return;
         }
       }
-      // Cmd/Ctrl + ,  →  Settings
+      // Cmd+, (mac) / Ctrl+, (win)  →  Settings
       if (modKey && e.key === ",") {
         e.preventDefault();
         setSettingsDialogOpen((prev) => !prev);
         return;
       }
-      // Ctrl+Shift+? or Cmd+Shift+?  →  Shortcuts dialog
+      // Cmd+Shift+? (mac) / Ctrl+Shift+? (win)  →  Shortcuts dialog
       if (modKey && e.shiftKey && (e.key === "?" || e.key === "/")) {
         e.preventDefault();
         setShortcutsDialogOpen((prev) => !prev);
         return;
       }
-      // Ctrl+Shift+E  →  Schema Designer
+      // Cmd+Shift+E (mac) / Ctrl+Shift+E (win)  →  Schema Designer
       if (modKey && e.shiftKey && e.key === "E") {
         e.preventDefault();
         openSchemaDesignerTab();
         return;
       }
-      // Ctrl+Shift+C  →  Switch Connection
+      // Cmd+Shift+C (mac) / Ctrl+Shift+C (win)  →  Switch Connection
       if (modKey && e.shiftKey && e.key === "C") {
         e.preventDefault();
         openConnectionSwitcher();
