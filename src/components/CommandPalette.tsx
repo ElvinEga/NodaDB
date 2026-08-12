@@ -1,8 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -146,11 +143,15 @@ export function CommandPalette({ open, onOpenChange, commands }: CommandPaletteP
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-[560px] p-0 gap-0 overflow-hidden border-border/60"
-        onKeyDown={handleKeyDown}
-      >
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        {/* Overlay */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        {/* Content — no close button */}
+        <DialogPrimitive.Content
+          className="fixed left-[50%] top-[50%] z-50 w-full max-w-[560px] translate-x-[-50%] translate-y-[-50%] overflow-hidden rounded-lg border border-border/60 bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]"
+          onKeyDown={handleKeyDown}
+        >
         {/* Search bar */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60">
           <Search className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -235,8 +236,9 @@ export function CommandPalette({ open, onOpenChange, commands }: CommandPaletteP
             {flatItems.length} command{flatItems.length !== 1 ? 's' : ''}
           </span>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
