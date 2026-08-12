@@ -1965,7 +1965,7 @@ impl ConnectionManager {
                       typ.typcategory AS type_category,
                       att.attnotnull AS not_null,
                       pg_get_expr(def.adbin, def.adrelid) AS default_value,
-                      CASE WHEN pk.attname IS NOT NULL THEN true ELSE false END AS is_primary_key,
+                      CASE WHEN pk.attnum IS NOT NULL THEN true ELSE false END AS is_primary_key,
                       CASE WHEN att.attndims > 0 OR typ.typcategory = 'A' THEN true ELSE false END AS is_array,
                       att.attndims AS array_dimensions,
                       CASE WHEN typ.typcategory = 'A' THEN elem.typname ELSE NULL END AS element_raw_type,
