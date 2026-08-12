@@ -68,6 +68,8 @@ export interface ConnectionConfig {
   mongo_connection_string?: string;
   /** MongoDB: auth source database (defaults to 'admin') */
   mongo_auth_source?: string;
+  /** MongoDB: target database name (defaults to 'admin' or extracted from connection string) */
+  mongo_database?: string;
   /** ClickHouse SSL/TLS requirement */
   clickhouse_use_ssl?: boolean;
   /** LibSQL / Turso / Val Town Connection URI */
