@@ -10,7 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+
 
 interface KeyboardShortcutsDialogProps {
   open: boolean;
@@ -60,11 +60,8 @@ const shortcuts: Shortcut[] = [
 ];
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Detect system OS but allow manual toggle
-  const systemIsMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
-  const [showMac, setShowMac] = useState(systemIsMac);
 
   const filteredShortcuts = useMemo(() => {
     if (!searchQuery) return shortcuts;
@@ -109,39 +106,12 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              <Command className="h-5 w-5" />
-              Keyboard Shortcuts
-            </DialogTitle>
-            {/* macOS / Windows toggle */}
-            <div className="flex items-center gap-1 rounded-full bg-muted p-0.5 text-xs border border-border">
-              <button
-                onClick={() => setShowMac(true)}
-                className={cn(
-                  'px-3 py-1 rounded-full font-medium transition-colors',
-                  showMac
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                macOS
-              </button>
-              <button
-                onClick={() => setShowMac(false)}
-                className={cn(
-                  'px-3 py-1 rounded-full font-medium transition-colors',
-                  !showMac
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Win / Linux
-              </button>
-            </div>
-          </div>
+          <DialogTitle className="flex items-center gap-2">
+            <Command className="h-5 w-5" />
+            Keyboard Shortcuts
+          </DialogTitle>
           <DialogDescription>
-            All available keyboard shortcuts — toggle between macOS and Windows/Linux display above.
+            All available keyboard shortcuts for {isMac ? 'macOS' : 'Windows / Linux'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -176,7 +146,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
                         className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
                       >
                         <span className="text-sm">{shortcut.description}</span>
-                        {renderKeys(showMac ? shortcut.mac : shortcut.win)}
+                        {renderKeys(isMac ? shortcut.mac : shortcut.win)}
                       </div>
                     ))}
                   </div>
@@ -187,9 +157,9 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
         </ScrollArea>
 
         {/* Footer */}
-        <div className="text-xs text-muted-foreground text-center pt-2 border-t flex items-center justify-center gap-1.5 flex-wrap">
+        <div className="text-xs text-muted-foreground text-center pt-2 border-t flex items-center justify-center gap-1.5">
           Press
-          {showMac ? (
+          {isMac ? (
             <>
               <Badge variant="outline" className="mx-0.5 text-xs">⌘</Badge>
               <span>+</span>
