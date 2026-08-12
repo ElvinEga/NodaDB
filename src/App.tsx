@@ -478,53 +478,57 @@ function App() {
   // Global keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+      const isMac =
+        typeof navigator !== "undefined" &&
+        (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ||
+          /Mac/.test(navigator.platform));
       // On macOS use Cmd (metaKey); on Win/Linux use Ctrl (ctrlKey)
       const modKey = isMac ? e.metaKey : e.ctrlKey;
+      const key = e.key ? e.key.toLowerCase() : "";
 
       // Cmd+Shift+P (mac) / Ctrl+Shift+P (win)  →  Command Palette
-      if (modKey && e.shiftKey && e.key === "P") {
+      if (modKey && e.shiftKey && key === "p") {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
         return;
       }
       // Cmd+K (mac) / Ctrl+K (win)  →  Command Palette quick-open
-      if (modKey && !e.shiftKey && !e.altKey && e.key === "k") {
+      if (modKey && !e.shiftKey && !e.altKey && key === "k") {
         const target = e.target as HTMLElement;
-        if (!target.closest(".monaco-editor")) {
+        if (!target?.closest?.(".monaco-editor")) {
           e.preventDefault();
           setCommandPaletteOpen((prev) => !prev);
           return;
         }
       }
       // Cmd+, (mac) / Ctrl+, (win)  →  Settings
-      if (modKey && e.key === ",") {
+      if (modKey && key === ",") {
         e.preventDefault();
         setSettingsDialogOpen((prev) => !prev);
         return;
       }
       // Cmd+Shift+? (mac) / Ctrl+Shift+? (win)  →  Shortcuts dialog
-      if (modKey && e.shiftKey && (e.key === "?" || e.key === "/")) {
+      if (modKey && e.shiftKey && (key === "?" || key === "/")) {
         e.preventDefault();
         setShortcutsDialogOpen((prev) => !prev);
         return;
       }
       // Cmd+Shift+E (mac) / Ctrl+Shift+E (win)  →  Schema Designer
-      if (modKey && e.shiftKey && e.key === "E") {
+      if (modKey && e.shiftKey && key === "e") {
         e.preventDefault();
         openSchemaDesignerTab();
         return;
       }
       // Cmd+Shift+C (mac) / Ctrl+Shift+C (win)  →  Switch Connection
-      if (modKey && e.shiftKey && e.key === "C") {
+      if (modKey && e.shiftKey && key === "c") {
         e.preventDefault();
         openConnectionSwitcher();
         return;
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [openConnectionSwitcher, openSchemaDesignerTab]);
 
   // Command palette command registry
