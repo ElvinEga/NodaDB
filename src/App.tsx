@@ -1,5 +1,5 @@
 import { DbIcon } from "@/components/DbIcon";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Database,
   Plus,
@@ -19,6 +19,9 @@ import {
   PinOff,
   Copy,
   Edit,
+  Terminal,
+  Keyboard,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
+import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
@@ -85,6 +89,7 @@ function App() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tabs, setTabs] = useState<TabType[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -470,41 +475,172 @@ function App() {
     onCloseAllTabs: closeAllTabs,
   });
 
-  // Global keyboard listener for shortcuts dialog (Ctrl+? or Cmd+?)
+  // Global keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+? or Cmd+? (Shift+/ with Ctrl/Cmd)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "?") {
+      const isMac =
+        typeof navigator !== "undefined" &&
+        (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ||
+          /Mac/.test(navigator.platform));
+      // On macOS use Cmd (metaKey); on Win/Linux use Ctrl (ctrlKey)
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+      const key = e.key ? e.key.toLowerCase() : "";
+
+      // Cmd+Shift+P (mac) / Ctrl+Shift+P (win)  →  Command Palette
+      if (modKey && e.shiftKey && key === "p") {
         e.preventDefault();
-        setShortcutsDialogOpen((prev) => !prev);
+        setCommandPaletteOpen((prev) => !prev);
+        return;
       }
-      // Also support just ? when no input is focused
-      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Cmd+K (mac) / Ctrl+K (win)  →  Command Palette quick-open
+      if (modKey && !e.shiftKey && !e.altKey && key === "k") {
         const target = e.target as HTMLElement;
-        if (
-          target.tagName !== "INPUT" &&
-          target.tagName !== "TEXTAREA" &&
-          !target.isContentEditable
-        ) {
+        if (!target?.closest?.(".monaco-editor")) {
           e.preventDefault();
-          setShortcutsDialogOpen(true);
+          setCommandPaletteOpen((prev) => !prev);
+          return;
         }
       }
-      // Ctrl+Shift+E for Schema Designer/ERD Viewer
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
+      // Cmd+, (mac) / Ctrl+, (win)  →  Settings
+      if (modKey && key === ",") {
+        e.preventDefault();
+        setSettingsDialogOpen((prev) => !prev);
+        return;
+      }
+      // Cmd+Shift+? (mac) / Ctrl+Shift+? (win)  →  Shortcuts dialog
+      if (modKey && e.shiftKey && (key === "?" || key === "/")) {
+        e.preventDefault();
+        setShortcutsDialogOpen((prev) => !prev);
+        return;
+      }
+      // Cmd+Shift+E (mac) / Ctrl+Shift+E (win)  →  Schema Designer
+      if (modKey && e.shiftKey && key === "e") {
         e.preventDefault();
         openSchemaDesignerTab();
+        return;
       }
-      // Ctrl+Shift+C for Switch Connection
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "C") {
+      // Cmd+Shift+C (mac) / Ctrl+Shift+C (win)  →  Switch Connection
+      if (modKey && e.shiftKey && key === "c") {
         e.preventDefault();
         openConnectionSwitcher();
+        return;
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [openConnectionSwitcher, openSchemaDesignerTab]);
+
+  // Command palette command registry
+  const paletteCommands = useMemo<PaletteCommand[]>(() => [
+    // ── Connections ────────────────────────────────────────────────
+    {
+      id: 'new-connection',
+      label: 'New Connection',
+      description: 'Add a new database connection',
+      icon: <Plus className="h-3.5 w-3.5" />,
+      macShortcut: undefined,
+      winShortcut: undefined,
+      category: 'Connections',
+      action: () => setConnectionDialogOpen(true),
+    },
+    {
+      id: 'switch-connection',
+      label: 'Switch Connection',
+      description: 'Switch to a different database connection',
+      icon: <Network className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', '⇧', 'C'],
+      winShortcut: ['Ctrl', 'Shift', 'C'],
+      category: 'Connections',
+      action: () => openConnectionSwitcher(),
+      disabled: !activeConnectionId,
+    },
+    // ── Tabs ──────────────────────────────────────────────────────
+    {
+      id: 'new-query-tab',
+      label: 'New Query Tab',
+      description: 'Open a blank SQL query editor tab',
+      icon: <Terminal className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', 'N'],
+      winShortcut: ['Ctrl', 'N'],
+      category: 'Tabs',
+      action: openQueryTab,
+      disabled: !activeConnectionId,
+    },
+    {
+      id: 'close-tab',
+      label: 'Close Current Tab',
+      description: 'Close the active tab',
+      icon: <Terminal className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', 'W'],
+      winShortcut: ['Ctrl', 'W'],
+      category: 'Tabs',
+      action: () => activeTabId && closeTab(activeTabId),
+      disabled: !activeTabId,
+    },
+    {
+      id: 'close-all-tabs',
+      label: 'Close All Tabs',
+      description: 'Close all open tabs',
+      icon: <Terminal className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', '⇧', 'W'],
+      winShortcut: ['Ctrl', 'Shift', 'W'],
+      category: 'Tabs',
+      action: closeAllTabs,
+      disabled: !activeConnectionId,
+    },
+    // ── View ──────────────────────────────────────────────────────
+    {
+      id: 'schema-designer',
+      label: 'Schema Designer',
+      description: 'Open the visual ERD / schema designer',
+      icon: <LayoutGrid className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', '⇧', 'E'],
+      winShortcut: ['Ctrl', 'Shift', 'E'],
+      category: 'View',
+      action: openSchemaDesignerTab,
+      disabled: !activeConnectionId,
+    },
+    {
+      id: 'query-builder',
+      label: 'Visual Query Builder',
+      description: 'Build queries visually with drag-and-drop',
+      icon: <Database className="h-3.5 w-3.5" />,
+      category: 'View',
+      action: openQueryBuilderTab,
+      disabled: !activeConnectionId,
+    },
+    {
+      id: 'query-history',
+      label: 'Query History',
+      description: 'View recently executed queries',
+      icon: <History className="h-3.5 w-3.5" />,
+      category: 'View',
+      action: () => setShowHistoryPanel((p) => !p),
+    },
+    // ── Settings ──────────────────────────────────────────────────
+    {
+      id: 'settings',
+      label: 'Open Settings',
+      description: 'Font, theme, and application preferences',
+      icon: <Settings className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', ','],
+      winShortcut: ['Ctrl', ','],
+      category: 'Settings',
+      action: () => setSettingsDialogOpen(true),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      label: 'Keyboard Shortcuts',
+      description: 'Show all keyboard shortcuts',
+      icon: <Keyboard className="h-3.5 w-3.5" />,
+      macShortcut: ['⌘', '⇧', '?'],
+      winShortcut: ['Ctrl', 'Shift', '?'],
+      category: 'Settings',
+      action: () => setShortcutsDialogOpen(true),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [activeConnectionId, activeTabId, openConnectionSwitcher, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, closeAllTabs]);
 
   // Apply font family and font size to root element
   useEffect(() => {
@@ -1113,7 +1249,12 @@ function App() {
           autoCheckForUpdates={autoCheckForUpdates}
           onAutoCheckChange={setAutoCheckForUpdates}
         />
-        <KeyboardCheatSheet />
+        <KeyboardCheatSheet onOpenShortcutsDialog={() => setShortcutsDialogOpen(true)} />
+        <CommandPalette
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+          commands={paletteCommands}
+        />
       </div>
     </SidebarProvider>
   );

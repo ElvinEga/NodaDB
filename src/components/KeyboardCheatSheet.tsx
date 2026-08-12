@@ -5,32 +5,33 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface CheatSheetShortcut {
-  keys: string[];
+  mac: string[];
+  win: string[];
   description: string;
 }
 
 const essentialShortcuts: CheatSheetShortcut[] = [
-  { keys: ["Ctrl", "N"], description: "New Query" },
-  { keys: ["Ctrl", "W"], description: "Close Tab" },
-  { keys: ["Ctrl", "Enter"], description: "Execute Query" },
-  { keys: ["Ctrl", "E"], description: "Export Data" },
-  { keys: ["Ctrl", "B"], description: "Query Builder" },
-  { keys: ["Ctrl", "Shift", "G"], description: "Generate Data" },
-  { keys: ["Ctrl", "Tab"], description: "Next Tab" },
-  { keys: ["Ctrl", "?"], description: "All Shortcuts" },
+  { mac: ["⌘", "⇧", "P"], win: ["Ctrl", "Shift", "P"], description: "Command Palette" },
+  { mac: ["⌘", "N"],       win: ["Ctrl", "N"],          description: "New Query Tab" },
+  { mac: ["⌘", "W"],       win: ["Ctrl", "W"],          description: "Close Tab" },
+  { mac: ["⌘", "↩"],       win: ["Ctrl", "Enter"],      description: "Execute Query" },
+  { mac: ["⌘", "F"],       win: ["Ctrl", "F"],          description: "Filter Table" },
+  { mac: ["⌘", "R"],       win: ["Ctrl", "R"],          description: "Refresh Table" },
+  { mac: ["Ctrl", "Tab"],  win: ["Ctrl", "Tab"],        description: "Next Tab" },
+  { mac: ["⌘", "⇧", "?"], win: ["Ctrl", "Shift", "?"], description: "All Shortcuts" },
 ];
 
-export function KeyboardCheatSheet() {
+interface KeyboardCheatSheetProps {
+  onOpenShortcutsDialog?: () => void;
+}
+
+export function KeyboardCheatSheet({ onOpenShortcutsDialog }: KeyboardCheatSheetProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [showToggleButton, setShowToggleButton] = useState(true);
 
   const isMac =
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
-
-  const modifierMap: Record<string, string> = isMac
-    ? { Ctrl: "⌘", Alt: "⌥", Shift: "⇧", Enter: "⏎" }
-    : { Ctrl: "Ctrl", Alt: "Alt", Shift: "Shift", Enter: "Enter" };
 
   // Show cheat sheet on first load (after a delay)
   useEffect(() => {
@@ -47,8 +48,7 @@ export function KeyboardCheatSheet() {
   useEffect(() => {
     const hideTimer = setTimeout(() => {
       setShowToggleButton(false);
-    }, 10000); // Hide after 10 seconds
-
+    }, 10000);
     return () => clearTimeout(hideTimer);
   }, []);
 
@@ -56,26 +56,22 @@ export function KeyboardCheatSheet() {
   useEffect(() => {
     if (!isVisible) {
       setShowToggleButton(true);
-
-      // Hide it again after 10 seconds
       const hideTimer = setTimeout(() => {
         setShowToggleButton(false);
       }, 10000);
-
       return () => clearTimeout(hideTimer);
     }
   }, [isVisible]);
 
-  // Listen for Ctrl+? to toggle
+  // Listen for Ctrl+Shift+? to toggle
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
-      if (ctrlOrCmd && e.key === "?") {
+      if (ctrlOrCmd && e.shiftKey && (e.key === "?" || e.key === "/")) {
         e.preventDefault();
         setIsVisible((prev) => !prev);
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMac]);
@@ -89,17 +85,25 @@ export function KeyboardCheatSheet() {
     setIsVisible((prev) => !prev);
   };
 
-  const renderKey = (key: string) => {
-    const displayKey = modifierMap[key] || key;
-    return (
-      <Badge
-        variant="secondary"
-        className="px-1.5 py-0 text-[10px] font-mono font-semibold bg-primary/10 border-primary/20"
-      >
-        {displayKey}
-      </Badge>
-    );
-  };
+  const renderKeys = (keys: string[]) => (
+    <div className="flex items-center gap-0.5">
+      {keys.map((key, i) => (
+        <span key={i} className="flex items-center gap-0.5">
+          <Badge
+            variant="secondary"
+            className="px-1.5 py-0 text-[10px] font-mono font-semibold bg-primary/10 border-primary/20"
+          >
+            {key}
+          </Badge>
+          {i < keys.length - 1 && (
+            <span className="text-[10px] text-muted-foreground mx-0.5">+</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+
+  const shortcutHint = isMac ? "⌘⇧P" : "Ctrl+Shift+P";
 
   return (
     <>
@@ -110,12 +114,12 @@ export function KeyboardCheatSheet() {
           size="sm"
           onClick={handleToggle}
           className="fixed bottom-20 right-4 z-40 shadow-lg gap-2 group animate-in fade-in duration-300"
-          title="Show keyboard shortcuts (Ctrl+?)"
+          title={`Show keyboard shortcuts (${shortcutHint})`}
         >
           <Command className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Shortcuts</span>
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
-            {isMac ? "⌘" : "Ctrl"}?
+            {shortcutHint}
           </Badge>
         </Button>
       )}
@@ -125,7 +129,7 @@ export function KeyboardCheatSheet() {
         <div
           className={cn(
             "fixed bottom-4 right-4 z-50 w-80 bg-background/95 backdrop-blur-md border border-border rounded-lg shadow-2xl",
-            "animate-in slide-in-from-bottom-4 fade-in duration-300"
+            "animate-in slide-in-from-bottom-4 fade-in duration-300",
           )}
         >
           {/* Header */}
@@ -133,6 +137,9 @@ export function KeyboardCheatSheet() {
             <div className="flex items-center gap-2">
               <Command className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Essential Shortcuts</h3>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {isMac ? "macOS" : "Win/Linux"}
+              </Badge>
             </div>
             <Button
               variant="ghost"
@@ -145,7 +152,7 @@ export function KeyboardCheatSheet() {
           </div>
 
           {/* Shortcuts List */}
-          <div className="p-3 space-y-2 max-h-96 overflow-y-auto">
+          <div className="p-3 space-y-1 max-h-96 overflow-y-auto">
             {essentialShortcuts.map((shortcut, index) => (
               <div
                 key={index}
@@ -154,18 +161,7 @@ export function KeyboardCheatSheet() {
                 <span className="text-xs text-muted-foreground">
                   {shortcut.description}
                 </span>
-                <div className="flex items-center gap-0.5">
-                  {shortcut.keys.map((key, i) => (
-                    <div key={i} className="flex items-center gap-0.5">
-                      {renderKey(key)}
-                      {i < shortcut.keys.length - 1 && (
-                        <span className="text-[10px] text-muted-foreground mx-0.5">
-                          +
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {renderKeys(isMac ? shortcut.mac : shortcut.win)}
               </div>
             ))}
           </div>
@@ -175,12 +171,15 @@ export function KeyboardCheatSheet() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleDismiss}
+              onClick={() => {
+                handleDismiss();
+                onOpenShortcutsDialog?.();
+              }}
               className="w-full text-xs h-7"
             >
               View All Shortcuts
               <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
-                {isMac ? "⌘" : "Ctrl"}?
+                {isMac ? "⌘⇧?" : "Ctrl+Shift+?"}
               </Badge>
             </Button>
           </div>

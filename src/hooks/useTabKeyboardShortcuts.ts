@@ -12,23 +12,27 @@ interface TabKeyboardHandlers {
 export function useTabKeyboardShortcuts(handlers: TabKeyboardHandlers) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac =
+        typeof navigator !== 'undefined' &&
+        (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ||
+          navigator.platform.toUpperCase().indexOf('MAC') >= 0);
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+      const key = e.key.toLowerCase();
 
       // Ctrl/Cmd + N - New Query Tab
-      if (ctrlOrCmd && e.key === 'n' && handlers.onNewTab) {
+      if (ctrlOrCmd && key === 'n' && handlers.onNewTab) {
         e.preventDefault();
         handlers.onNewTab();
       }
 
       // Ctrl/Cmd + W - Close Tab
-      if (ctrlOrCmd && e.key === 'w' && handlers.onCloseTab) {
+      if (ctrlOrCmd && key === 'w' && !e.shiftKey && handlers.onCloseTab) {
         e.preventDefault();
         handlers.onCloseTab();
       }
 
       // Ctrl/Cmd + Shift + W - Close All Tabs
-      if (ctrlOrCmd && e.shiftKey && e.key === 'W' && handlers.onCloseAllTabs) {
+      if (ctrlOrCmd && e.shiftKey && key === 'w' && handlers.onCloseAllTabs) {
         e.preventDefault();
         handlers.onCloseAllTabs();
       }
