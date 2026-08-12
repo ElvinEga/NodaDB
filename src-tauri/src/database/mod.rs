@@ -1749,7 +1749,7 @@ impl ConnectionManager {
                         table_name,
                         table_type,
                         table_rows,
-                        ROUND((data_length + index_length) / 1024, 0) as size_kb
+                        CAST(ROUND((data_length + index_length) / 1024, 0) AS UNSIGNED) as size_kb
                     FROM information_schema.tables 
                     WHERE table_schema = DATABASE()
                     ORDER BY table_name
@@ -1760,7 +1760,7 @@ impl ConnectionManager {
                         let name: String = row.try_get(0).unwrap_or_default();
                         let table_type: String = row.try_get(1).unwrap_or_default();
                         let row_count: Option<i64> = row.try_get::<Option<u64>, _>(2).ok().flatten().map(|v| v as i64);
-                        let size_kb: Option<i64> = row.try_get::<Option<f64>, _>(3).ok().flatten().map(|v| v as i64);
+                        let size_kb: Option<i64> = row.try_get::<Option<u64>, _>(3).ok().flatten().map(|v| v as i64);
                         
                         DatabaseTable {
                             name,
