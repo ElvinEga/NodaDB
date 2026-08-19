@@ -85,6 +85,7 @@ export interface CommandRegistryContext {
   openAgentsPanel: () => void;
   openHistory: () => void;
   openShortcutsDialog: () => void;
+  runAgent?: (agentId: string, prompt?: string) => void;
 }
 
 // ─── Command Registry Factory ─────────────────────────────────────────────────
@@ -328,10 +329,30 @@ export function buildCommandRegistry(ctx: CommandRegistryContext): NodaCommand[]
     },
     // ── AGENT ─────────────────────────────────────────────────────────────────
     {
+      id: 'cmd-agent',
+      slash: '/agent',
+      label: 'Run AI Agent',
+      description: 'Execute Codex, Claude Code, OpenCode, or Gemini CLI with database context',
+      category: 'Agent',
+      requiredPermission: 'READ',
+      requiresConnection: false,
+      requiresConfirmation: false,
+      args: [
+        { name: 'agent_name', placeholder: 'codex | claude | opencode | gemini', description: 'Agent to execute', required: true, type: 'string' },
+        { name: 'prompt', placeholder: 'Explain schema / Investigate query / Write migration...', description: 'Task for the agent', required: false, type: 'string' },
+      ],
+      action: (args) => {
+        const agent = args?.agent_name ?? 'claude';
+        const prompt = args?.prompt ?? 'Explain the database schema and suggest improvements';
+        ctx.runAgent?.(agent, prompt);
+        return uiResult();
+      },
+    },
+    {
       id: 'cmd-agents',
       slash: '/agents',
-      label: 'Manage AI Agents',
-      description: 'Configure Claude Code, Codex, OpenCode and other AI agents',
+      label: 'AI Agents Hub',
+      description: 'Configure Codex, Claude Code, OpenCode, Gemini CLI and permissions',
       category: 'Agent',
       requiredPermission: 'ADMIN',
       requiresConnection: false,
