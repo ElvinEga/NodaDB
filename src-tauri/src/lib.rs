@@ -1,13 +1,17 @@
+pub mod agents;
 mod commands;
 mod database;
 mod models;
 mod ssh_tunnel;
 
+use agents::{AgentRegistry, AgentSessionManager};
 use database::ConnectionManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let connection_manager = ConnectionManager::new();
+    let agent_registry = AgentRegistry::new();
+    let agent_session_manager = AgentSessionManager::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -15,6 +19,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(connection_manager)
+        .manage(agent_registry)
+        .manage(agent_session_manager)
         .invoke_handler(tauri::generate_handler![
             commands::test_connection,
             commands::connect_database,
@@ -51,6 +57,10 @@ pub fn run() {
             commands::create_export_archive,
             commands::trace_id_relations,
             commands::get_relation_rows,
+            commands::detect_installed_agents,
+            commands::get_agent_db_context,
+            commands::run_agent_session,
+            commands::stop_agent_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
