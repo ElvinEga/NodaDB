@@ -48,3 +48,7 @@ path = "src/main.rs"
 [[bin]]
 name = "nodadb-mcp"
 path = "src/bin/mcp_server.rs"
+
+[[bin]]
+name = "noda"
+path = "src/bin/noda_cli.rs"
