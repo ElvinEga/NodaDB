@@ -48,6 +48,7 @@ import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
 import { AgentsPanel } from "@/components/AgentsPanel";
+import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
@@ -93,6 +94,8 @@ function App() {
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [agentsPanelOpen, setAgentsPanelOpen] = useState(false);
+  const [agentRunnerOpen, setAgentRunnerOpen] = useState(false);
+  const [agentRunParams, setAgentRunParams] = useState<AgentRunParams | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tabs, setTabs] = useState<TabType[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -645,7 +648,19 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [activeConnectionId, activeTabId, openConnectionSwitcher, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, closeAllTabs]);
 
-  // NodaDB slash-command registry (shared between palette and MCP layer)
+  const handleLaunchAgent = useCallback((agentId: string, agentName: string, prompt: string) => {
+    setAgentRunParams({
+      agentId,
+      agentName,
+      prompt,
+      connectionId: activeConnectionId,
+      dbType: activeConnection?.db_type ?? null,
+      activeTable: activeTab?.table?.name ?? null,
+    });
+    setAgentRunnerOpen(true);
+  }, [activeConnectionId, activeConnection, activeTab]);
+
+  // NodaDB slash-command registry (shared between palette, UI, and agent bridge)
   const nodaCommands = useMemo(() => buildCommandRegistry({
     connectionId: activeConnectionId,
     dbType: activeConnection?.db_type ?? null,
@@ -664,8 +679,19 @@ function App() {
     openAgentsPanel: () => setAgentsPanelOpen(true),
     openHistory: () => setShowHistoryPanel(prev => !prev),
     openShortcutsDialog: () => setShortcutsDialogOpen(true),
+    runAgent: (agentId, prompt) => {
+      const names: Record<string, string> = {
+        codex: 'Codex CLI',
+        claude: 'Claude Code',
+        opencode: 'OpenCode',
+        gemini: 'Gemini CLI',
+        agy: 'AGY',
+      };
+      const name = names[agentId.toLowerCase()] ?? agentId;
+      handleLaunchAgent(agentId, name, prompt ?? 'Analyze database schema and performance');
+    },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [activeConnectionId, activeConnection?.db_type, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab]);
+  }), [activeConnectionId, activeConnection?.db_type, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, handleLaunchAgent]);
 
   // Apply font family and font size to root element
   useEffect(() => {
@@ -1284,6 +1310,12 @@ function App() {
         <AgentsPanel
           open={agentsPanelOpen}
           onOpenChange={setAgentsPanelOpen}
+          onLaunchAgent={handleLaunchAgent}
+        />
+        <AgentRunnerDialog
+          open={agentRunnerOpen}
+          onOpenChange={setAgentRunnerOpen}
+          runParams={agentRunParams}
         />
       </div>
     </SidebarProvider>
