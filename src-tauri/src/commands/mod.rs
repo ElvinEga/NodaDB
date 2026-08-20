@@ -1,3 +1,7 @@
+use crate::acp::{
+    AcpAgentStatus, AcpBridge, AcpCommandCapability, AcpExecutionResult, AcpHostManager,
+    AcpRecentCommandEntry,
+};
 use crate::agents::{
     context::build_agent_db_context, AgentDbContext, AgentInfo, AgentRegistry, AgentSessionManager,
 };
@@ -8,6 +12,7 @@ use crate::models::{
     PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch,
 };
 use chrono::Utc;
+use serde_json::Value;
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -617,5 +622,103 @@ pub async fn stop_agent_session(
         .await
         .map_err(|e| format!("Failed to kill session: {}", e))
 }
+
+// ─── ACP Commands ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn start_acp_session(
+    app: AppHandle,
+    agent_id: String,
+    session_id: String,
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<AcpAgentStatus, String> {
+    acp_manager
+        .start_session(app, agent_id, session_id)
+        .await
+        .map_err(|e| format!("Failed to start ACP session: {}", e))
+}
+
+#[tauri::command]
+pub async fn send_acp_prompt(
+    session_id: String,
+    prompt: String,
+    context: Option<Value>,
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<(), String> {
+    acp_manager
+        .send_prompt(&session_id, &prompt, context)
+        .await
+        .map_err(|e| format!("Failed to send ACP prompt: {}", e))
+}
+
+#[tauri::command]
+pub async fn approve_acp_tool(
+    call_id: String,
+    approved: bool,
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<(), String> {
+    acp_manager
+        .approve_tool_call(&call_id, approved)
+        .await
+        .map_err(|e| format!("Failed to resolve tool approval: {}", e))
+}
+
+#[tauri::command]
+pub async fn stop_acp_session(
+    app: AppHandle,
+    session_id: String,
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<(), String> {
+    acp_manager
+        .stop_session(&app, &session_id)
+        .await
+        .map_err(|e| format!("Failed to stop ACP session: {}", e))
+}
+
+#[tauri::command]
+pub fn get_acp_capabilities() -> Vec<AcpCommandCapability> {
+    AcpBridge::get_command_capabilities()
+}
+
+#[tauri::command]
+pub async fn get_acp_connected_agents(
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<Vec<AcpAgentStatus>, String> {
+    Ok(acp_manager.get_connected_agents().await)
+}
+
+#[tauri::command]
+pub async fn get_acp_recent_commands(
+    acp_manager: State<'_, AcpHostManager>,
+) -> Result<Vec<AcpRecentCommandEntry>, String> {
+    Ok(acp_manager.bridge().get_recent_commands().await)
+}
+
+#[tauri::command]
+pub async fn execute_acp_command(
+    app: AppHandle,
+    agent_id: String,
+    command: String,
+    args: Value,
+    connection_id: Option<String>,
+    db_type: Option<DatabaseType>,
+    acp_manager: State<'_, AcpHostManager>,
+    conn_manager: State<'_, ConnectionManager>,
+) -> Result<AcpExecutionResult, String> {
+    acp_manager
+        .bridge()
+        .execute_command(
+            &app,
+            &conn_manager,
+            &agent_id,
+            &command,
+            &args,
+            connection_id.as_deref(),
+            db_type.as_ref(),
+        )
+        .await
+        .map_err(|e| format!("Failed to execute command: {}", e))
+}
+
 
 
