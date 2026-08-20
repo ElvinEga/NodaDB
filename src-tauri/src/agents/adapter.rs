@@ -22,6 +22,10 @@ pub struct AgentDbContext {
     pub tables_summary: String,
     pub active_table: Option<String>,
     pub schema_ddl: Option<String>,
+    pub active_query: Option<String>,
+    pub explain_plan: Option<String>,
+    pub selected_entity: Option<String>,
+    pub relationships_summary: Option<String>,
     pub custom_instructions: Option<String>,
 }
 
@@ -40,6 +44,19 @@ impl AgentDbContext {
         if let Some(ref tbl) = self.active_table {
             out.push_str(&format!("- **Active Table in View**: {}\n", tbl));
         }
+        if let Some(ref entity) = self.selected_entity {
+            out.push_str(&format!("- **Selected Entity / ID**: {}\n", entity));
+        }
+        if let Some(ref q) = self.active_query {
+            out.push_str(&format!("\n## Active SQL Query in Editor\n\n```sql\n{}\n```\n", q));
+        }
+        if let Some(ref plan) = self.explain_plan {
+            out.push_str(&format!("\n## Query Execution Plan (EXPLAIN)\n\n```text\n{}\n```\n", plan));
+        }
+        if let Some(ref rel) = self.relationships_summary {
+            out.push_str(&format!("\n## Foreign Key Relationships\n\n{}\n", rel));
+        }
+
         out.push_str("\n## Tables & Structure\n\n");
         out.push_str(&self.tables_summary);
 
