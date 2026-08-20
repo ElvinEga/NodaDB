@@ -5,6 +5,8 @@ export type Theme = "light" | "dark" | "system";
 export type ColorTheme = string;
 export type FontSize = "small" | "medium" | "large";
 export type FontFamily = "Outfit" | "JetBrains Mono" | "System";
+export type AIProvider = "codex" | "claude" | "opencode" | "gemini";
+export type AIIntegration = "cli" | "acp" | "mcp" | "plugin";
 
 interface SettingsStore {
   // Appearance
@@ -15,7 +17,7 @@ interface SettingsStore {
 
   // Editor
   autoSave: boolean;
-  autoSaveDelay: number; // seconds
+  autoSaveDelay: number;
   editorTabSize: number;
   editorWordWrap: boolean;
 
@@ -30,6 +32,18 @@ interface SettingsStore {
 
   // Updates
   autoCheckForUpdates: boolean;
+
+  // AI Assistant
+  aiEnabled: boolean;
+  aiProvider: AIProvider;
+  aiIntegration: AIIntegration;
+  aiAutoIncludeSchema: boolean;
+  aiAutoIncludeQuery: boolean;
+  aiConfirmGeneratedSql: boolean;
+  aiOpenAssistantOnLaunch: boolean;
+  aiAllowWriteOperations: boolean;
+  aiAllowSchemaChanges: boolean;
+  aiModel: string;
 
   // Actions
   setTheme: (theme: Theme) => void;
@@ -46,6 +60,16 @@ interface SettingsStore {
   setRowsPerPage: (rows: number) => void;
   setShowRowNumbers: (show: boolean) => void;
   setAutoCheckForUpdates: (enabled: boolean) => void;
+  setAiEnabled: (enabled: boolean) => void;
+  setAiProvider: (provider: AIProvider) => void;
+  setAiIntegration: (integration: AIIntegration) => void;
+  setAiAutoIncludeSchema: (enabled: boolean) => void;
+  setAiAutoIncludeQuery: (enabled: boolean) => void;
+  setAiConfirmGeneratedSql: (enabled: boolean) => void;
+  setAiOpenAssistantOnLaunch: (enabled: boolean) => void;
+  setAiAllowWriteOperations: (enabled: boolean) => void;
+  setAiAllowSchemaChanges: (enabled: boolean) => void;
+  setAiModel: (model: string) => void;
   resetToDefaults: () => void;
 }
 
@@ -64,13 +88,22 @@ const defaultSettings = {
   rowsPerPage: 100,
   showRowNumbers: true,
   autoCheckForUpdates: true,
+  aiEnabled: true,
+  aiProvider: "codex" as AIProvider,
+  aiIntegration: "cli" as AIIntegration,
+  aiAutoIncludeSchema: true,
+  aiAutoIncludeQuery: true,
+  aiConfirmGeneratedSql: true,
+  aiOpenAssistantOnLaunch: false,
+  aiAllowWriteOperations: false,
+  aiAllowSchemaChanges: false,
+  aiModel: "auto",
 };
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       ...defaultSettings,
-
       setTheme: (theme) => set({ theme }),
       setColorTheme: (colorTheme) => set({ colorTheme }),
       setFontSize: (fontSize) => set({ fontSize }),
@@ -80,17 +113,23 @@ export const useSettingsStore = create<SettingsStore>()(
       setEditorTabSize: (editorTabSize) => set({ editorTabSize }),
       setEditorWordWrap: (editorWordWrap) => set({ editorWordWrap }),
       setAutoExecuteOnLoad: (autoExecuteOnLoad) => set({ autoExecuteOnLoad }),
-      setConfirmBeforeExecute: (confirmBeforeExecute) =>
-        set({ confirmBeforeExecute }),
+      setConfirmBeforeExecute: (confirmBeforeExecute) => set({ confirmBeforeExecute }),
       setMaxHistorySize: (maxHistorySize) => set({ maxHistorySize }),
       setRowsPerPage: (rowsPerPage) => set({ rowsPerPage }),
       setShowRowNumbers: (showRowNumbers) => set({ showRowNumbers }),
-      setAutoCheckForUpdates: (autoCheckForUpdates) =>
-        set({ autoCheckForUpdates }),
+      setAutoCheckForUpdates: (autoCheckForUpdates) => set({ autoCheckForUpdates }),
+      setAiEnabled: (aiEnabled) => set({ aiEnabled }),
+      setAiProvider: (aiProvider) => set({ aiProvider }),
+      setAiIntegration: (aiIntegration) => set({ aiIntegration }),
+      setAiAutoIncludeSchema: (aiAutoIncludeSchema) => set({ aiAutoIncludeSchema }),
+      setAiAutoIncludeQuery: (aiAutoIncludeQuery) => set({ aiAutoIncludeQuery }),
+      setAiConfirmGeneratedSql: (aiConfirmGeneratedSql) => set({ aiConfirmGeneratedSql }),
+      setAiOpenAssistantOnLaunch: (aiOpenAssistantOnLaunch) => set({ aiOpenAssistantOnLaunch }),
+      setAiAllowWriteOperations: (aiAllowWriteOperations) => set({ aiAllowWriteOperations }),
+      setAiAllowSchemaChanges: (aiAllowSchemaChanges) => set({ aiAllowSchemaChanges }),
+      setAiModel: (aiModel) => set({ aiModel }),
       resetToDefaults: () => set(defaultSettings),
     }),
-    {
-      name: "app-settings-storage",
-    },
+    { name: "app-settings-storage" },
   ),
 );
