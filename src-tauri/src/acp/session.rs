@@ -1,11 +1,9 @@
 use crate::acp::bridge::AcpBridge;
 use crate::acp::protocol::{
-    AcpClientCapabilities, AcpClientInfo, AcpInitializeParams, AcpRecentCommandEntry,
-    AcpRpcRequest, AcpRpcResponse, AcpSessionEvent, AcpToolApprovalRequest, AcpUpdateChunk,
+    AcpClientCapabilities, AcpClientInfo, AcpInitializeParams, AcpRpcRequest, AcpRpcResponse,
+    AcpSessionEvent, AcpUpdateChunk,
 };
 use crate::agents::adapter::find_binary_in_path;
-use crate::database::ConnectionManager;
-use crate::models::DatabaseType;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
