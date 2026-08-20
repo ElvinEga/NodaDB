@@ -1,9 +1,11 @@
+pub mod acp;
 pub mod agents;
 mod commands;
 mod database;
 mod models;
 mod ssh_tunnel;
 
+use acp::AcpHostManager;
 use agents::{AgentRegistry, AgentSessionManager};
 use database::ConnectionManager;
 
@@ -12,6 +14,7 @@ pub fn run() {
     let connection_manager = ConnectionManager::new();
     let agent_registry = AgentRegistry::new();
     let agent_session_manager = AgentSessionManager::new();
+    let acp_manager = AcpHostManager::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -21,6 +24,7 @@ pub fn run() {
         .manage(connection_manager)
         .manage(agent_registry)
         .manage(agent_session_manager)
+        .manage(acp_manager)
         .invoke_handler(tauri::generate_handler![
             commands::test_connection,
             commands::connect_database,
@@ -61,6 +65,14 @@ pub fn run() {
             commands::get_agent_db_context,
             commands::run_agent_session,
             commands::stop_agent_session,
+            commands::start_acp_session,
+            commands::send_acp_prompt,
+            commands::approve_acp_tool,
+            commands::stop_acp_session,
+            commands::get_acp_capabilities,
+            commands::get_acp_connected_agents,
+            commands::get_acp_recent_commands,
+            commands::execute_acp_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
