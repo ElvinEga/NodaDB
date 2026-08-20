@@ -5,6 +5,8 @@ export type Theme = "light" | "dark" | "system";
 export type ColorTheme = string;
 export type FontSize = "small" | "medium" | "large";
 export type FontFamily = "Outfit" | "JetBrains Mono" | "System";
+export type AiProvider = "codex" | "claude" | "opencode" | "gemini";
+export type AiIntegration = "cli" | "acp" | "mcp" | "plugin";
 
 interface SettingsStore {
   // Appearance
@@ -31,6 +33,22 @@ interface SettingsStore {
   // Updates
   autoCheckForUpdates: boolean;
 
+  // AI Assistant
+  aiEnabled: boolean;
+  aiProvider: AiProvider;
+  aiIntegration: AiIntegration;
+  aiModel: string;
+  aiAutoIncludeSchema: boolean;
+  aiAutoIncludeQuery: boolean;
+  aiIncludeSelectedTable: boolean;
+  aiIncludeRelationships: boolean;
+  aiIncludeQueryResults: boolean;
+  aiIncludeExplain: boolean;
+  aiConfirmGeneratedSql: boolean;
+  aiAllowWriteOperations: boolean;
+  aiAllowSchemaChanges: boolean;
+  aiOpenAssistantOnLaunch: boolean;
+
   // Actions
   setTheme: (theme: Theme) => void;
   setColorTheme: (colorTheme: ColorTheme) => void;
@@ -46,6 +64,23 @@ interface SettingsStore {
   setRowsPerPage: (rows: number) => void;
   setShowRowNumbers: (show: boolean) => void;
   setAutoCheckForUpdates: (enabled: boolean) => void;
+
+  // AI Actions
+  setAiEnabled: (enabled: boolean) => void;
+  setAiProvider: (provider: AiProvider) => void;
+  setAiIntegration: (integration: AiIntegration) => void;
+  setAiModel: (model: string) => void;
+  setAiAutoIncludeSchema: (enabled: boolean) => void;
+  setAiAutoIncludeQuery: (enabled: boolean) => void;
+  setAiIncludeSelectedTable: (enabled: boolean) => void;
+  setAiIncludeRelationships: (enabled: boolean) => void;
+  setAiIncludeQueryResults: (enabled: boolean) => void;
+  setAiIncludeExplain: (enabled: boolean) => void;
+  setAiConfirmGeneratedSql: (enabled: boolean) => void;
+  setAiAllowWriteOperations: (enabled: boolean) => void;
+  setAiAllowSchemaChanges: (enabled: boolean) => void;
+  setAiOpenAssistantOnLaunch: (enabled: boolean) => void;
+
   resetToDefaults: () => void;
 }
 
@@ -64,6 +99,22 @@ const defaultSettings = {
   rowsPerPage: 100,
   showRowNumbers: true,
   autoCheckForUpdates: true,
+
+  // AI Defaults
+  aiEnabled: true,
+  aiProvider: "claude" as AiProvider,
+  aiIntegration: "cli" as AiIntegration,
+  aiModel: "",
+  aiAutoIncludeSchema: true,
+  aiAutoIncludeQuery: true,
+  aiIncludeSelectedTable: true,
+  aiIncludeRelationships: true,
+  aiIncludeQueryResults: false,
+  aiIncludeExplain: true,
+  aiConfirmGeneratedSql: true,
+  aiAllowWriteOperations: false,
+  aiAllowSchemaChanges: false,
+  aiOpenAssistantOnLaunch: false,
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -87,6 +138,23 @@ export const useSettingsStore = create<SettingsStore>()(
       setShowRowNumbers: (showRowNumbers) => set({ showRowNumbers }),
       setAutoCheckForUpdates: (autoCheckForUpdates) =>
         set({ autoCheckForUpdates }),
+
+      // AI Setters
+      setAiEnabled: (aiEnabled) => set({ aiEnabled }),
+      setAiProvider: (aiProvider) => set({ aiProvider }),
+      setAiIntegration: (aiIntegration) => set({ aiIntegration }),
+      setAiModel: (aiModel) => set({ aiModel }),
+      setAiAutoIncludeSchema: (aiAutoIncludeSchema) => set({ aiAutoIncludeSchema }),
+      setAiAutoIncludeQuery: (aiAutoIncludeQuery) => set({ aiAutoIncludeQuery }),
+      setAiIncludeSelectedTable: (aiIncludeSelectedTable) => set({ aiIncludeSelectedTable }),
+      setAiIncludeRelationships: (aiIncludeRelationships) => set({ aiIncludeRelationships }),
+      setAiIncludeQueryResults: (aiIncludeQueryResults) => set({ aiIncludeQueryResults }),
+      setAiIncludeExplain: (aiIncludeExplain) => set({ aiIncludeExplain }),
+      setAiConfirmGeneratedSql: (aiConfirmGeneratedSql) => set({ aiConfirmGeneratedSql }),
+      setAiAllowWriteOperations: (aiAllowWriteOperations) => set({ aiAllowWriteOperations }),
+      setAiAllowSchemaChanges: (aiAllowSchemaChanges) => set({ aiAllowSchemaChanges }),
+      setAiOpenAssistantOnLaunch: (aiOpenAssistantOnLaunch) => set({ aiOpenAssistantOnLaunch }),
+
       resetToDefaults: () => set(defaultSettings),
     }),
     {
