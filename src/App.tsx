@@ -48,6 +48,7 @@ import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
 import { AgentsPanel } from "@/components/AgentsPanel";
+import { AgentControlCenter } from "@/components/AgentControlCenter";
 import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { AboutDialog } from "@/components/AboutDialog";
@@ -659,6 +660,25 @@ function App() {
     });
     setAgentRunnerOpen(true);
   }, [activeConnectionId, activeConnection, activeTab]);
+
+  const handleExecuteCommandAction = useCallback((action: string, params: Record<string, unknown>) => {
+    if (action === 'open_relation_flow' || params?.tab === 'relation-flow') {
+      const val = typeof params?.value === 'string' ? params.value : 'flow';
+      const tabId = `relation-flow-${Date.now()}`;
+      const newTab: TabType = {
+        id: tabId,
+        type: 'relation-flow',
+        title: `Flow: ${val.substring(0, 8)}`,
+        isPinned: false,
+        isDirty: false,
+        relationFlowValue: val,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(tabId);
+    } else if (action === 'open_schema_designer' || params?.tab === 'schema') {
+      openSchemaDesignerTab();
+    }
+  }, [openSchemaDesignerTab]);
 
   // NodaDB slash-command registry (shared between palette, UI, and agent bridge)
   const nodaCommands = useMemo(() => buildCommandRegistry({
@@ -1307,10 +1327,12 @@ function App() {
           commands={paletteCommands}
           nodaCommands={nodaCommands}
         />
-        <AgentsPanel
+        <AgentControlCenter
           open={agentsPanelOpen}
           onOpenChange={setAgentsPanelOpen}
-          onLaunchAgent={handleLaunchAgent}
+          connectionId={activeConnectionId}
+          dbType={activeConnection?.db_type ?? null}
+          onExecuteCommandAction={handleExecuteCommandAction}
         />
         <AgentRunnerDialog
           open={agentRunnerOpen}
