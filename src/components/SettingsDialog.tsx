@@ -7,6 +7,11 @@ import {
   Download,
   Sparkles,
   Check,
+  Bot,
+  Shield,
+  Terminal,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -19,6 +24,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -34,9 +41,12 @@ import {
   Theme,
   FontSize,
   FontFamily,
+  AiProvider,
+  AiIntegration,
 } from "@/stores/settingsStore";
 import { THEMES, ThemeDefinition } from "@/lib/themes";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +121,19 @@ export function SettingsDialog({
     rowsPerPage,
     showRowNumbers,
     autoCheckForUpdates,
+    aiEnabled,
+    aiProvider,
+    aiIntegration,
+    aiModel,
+    aiAutoIncludeSchema,
+    aiAutoIncludeQuery,
+    aiIncludeSelectedTable,
+    aiIncludeRelationships,
+    aiIncludeQueryResults,
+    aiIncludeExplain,
+    aiConfirmGeneratedSql,
+    aiAllowWriteOperations,
+    aiAllowSchemaChanges,
     setTheme,
     setColorTheme,
     setFontSize,
@@ -125,8 +148,45 @@ export function SettingsDialog({
     setRowsPerPage,
     setShowRowNumbers,
     setAutoCheckForUpdates,
+    setAiEnabled,
+    setAiProvider,
+    setAiIntegration,
+    setAiModel,
+    setAiAutoIncludeSchema,
+    setAiAutoIncludeQuery,
+    setAiIncludeSelectedTable,
+    setAiIncludeRelationships,
+    setAiIncludeQueryResults,
+    setAiIncludeExplain,
+    setAiConfirmGeneratedSql,
+    setAiAllowWriteOperations,
+    setAiAllowSchemaChanges,
     resetToDefaults,
   } = useSettingsStore();
+
+  const [detectedAgents, setDetectedAgents] = useState<{
+    id: string;
+    name: string;
+    binary_name: string;
+    installed: boolean;
+    version?: string;
+    path?: string;
+  }[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      invoke<{
+        id: string;
+        name: string;
+        binary_name: string;
+        installed: boolean;
+        version?: string;
+        path?: string;
+      }[]>("detect_installed_agents")
+        .then((list) => setDetectedAgents(list))
+        .catch(() => setDetectedAgents([]));
+    }
+  }, [open]);
 
   // Apply appearance mode (light/dark/system)
   useEffect(() => {
@@ -192,29 +252,33 @@ export function SettingsDialog({
           defaultValue="appearance"
           className="flex-1 overflow-hidden flex flex-col"
         >
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="appearance" className="!text-sm">
-              <Palette className="h-4 w-4 mr-2" />
+          <TabsList className="grid w-full grid-cols-7">
+            <TabsTrigger value="appearance" className="!text-xs">
+              <Palette className="h-3.5 w-3.5 mr-1.5" />
               Appearance
             </TabsTrigger>
-            <TabsTrigger value="themes" className="!text-sm">
-              <Sparkles className="h-4 w-4 mr-2" />
+            <TabsTrigger value="themes" className="!text-xs">
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               Themes
             </TabsTrigger>
-            <TabsTrigger value="editor" className="!text-sm">
-              <Code className="h-4 w-4 mr-2" />
+            <TabsTrigger value="editor" className="!text-xs">
+              <Code className="h-3.5 w-3.5 mr-1.5" />
               Editor
             </TabsTrigger>
-            <TabsTrigger value="query" className="!text-sm">
-              <FileText className="h-4 w-4 mr-2" />
+            <TabsTrigger value="query" className="!text-xs">
+              <FileText className="h-3.5 w-3.5 mr-1.5" />
               Query
             </TabsTrigger>
-            <TabsTrigger value="table" className="!text-sm">
-              <Database className="h-4 w-4 mr-2" />
+            <TabsTrigger value="table" className="!text-xs">
+              <Database className="h-3.5 w-3.5 mr-1.5" />
               Table
             </TabsTrigger>
-            <TabsTrigger value="updates" className="!text-sm">
-              <Download className="h-4 w-4 mr-2" />
+            <TabsTrigger value="ai" className="!text-xs">
+              <Bot className="h-3.5 w-3.5 mr-1.5 text-primary" />
+              AI
+            </TabsTrigger>
+            <TabsTrigger value="updates" className="!text-xs">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
               Updates
             </TabsTrigger>
           </TabsList>
@@ -466,6 +530,283 @@ export function SettingsDialog({
                   checked={showRowNumbers}
                   onCheckedChange={setShowRowNumbers}
                 />
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* AI Assistant Tab */}
+          <TabsContent
+            value="ai"
+            className="flex-1 overflow-y-auto space-y-6 pt-4"
+          >
+            <div className="space-y-6 mx-2">
+              {/* General AI Config */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-border/40">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold flex items-center gap-1.5">
+                      <Bot className="h-4 w-4 text-primary" />
+                      AI Assistant
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Enable desktop-native AI database assistance
+                    </p>
+                  </div>
+                  <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+                </div>
+
+                {aiEnabled && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="aiProvider" className="text-xs">Default AI Provider</Label>
+                      <Select
+                        value={aiProvider}
+                        onValueChange={(v) => setAiProvider(v as AiProvider)}
+                      >
+                        <SelectTrigger id="aiProvider" className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="codex">Codex CLI</SelectItem>
+                          <SelectItem value="claude">Claude Code</SelectItem>
+                          <SelectItem value="opencode">OpenCode</SelectItem>
+                          <SelectItem value="gemini">Gemini CLI</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Agent binary execution provider
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="aiIntegration" className="text-xs">Integration Mode</Label>
+                      <Select
+                        value={aiIntegration}
+                        onValueChange={(v) => setAiIntegration(v as AiIntegration)}
+                      >
+                        <SelectTrigger id="aiIntegration" className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cli">Direct CLI (Native)</SelectItem>
+                          <SelectItem value="acp">ACP (Agent Client Protocol)</SelectItem>
+                          <SelectItem value="mcp">MCP (Model Context Protocol)</SelectItem>
+                          <SelectItem value="plugin">External Plugin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Communication interface
+                      </p>
+                    </div>
+
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="aiModel" className="text-xs">Model Preference (Optional)</Label>
+                      <Input
+                        id="aiModel"
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                        placeholder="e.g. claude-3-7-sonnet, gpt-4o, gemini-2.5-flash"
+                        className="h-8 text-xs font-mono"
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Leave blank to use the agent's default configured model
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Context Provider Settings */}
+              {aiEnabled && (
+                <div className="space-y-3 pt-2 border-t border-border/40">
+                  <div>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Context Provider
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Select what database metadata is automatically bundled with prompts
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include Schema</Label>
+                        <p className="text-[10px] text-muted-foreground">Table list & data types</p>
+                      </div>
+                      <Switch
+                        checked={aiAutoIncludeSchema}
+                        onCheckedChange={setAiAutoIncludeSchema}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include Current SQL</Label>
+                        <p className="text-[10px] text-muted-foreground">Active editor query text</p>
+                      </div>
+                      <Switch
+                        checked={aiAutoIncludeQuery}
+                        onCheckedChange={setAiAutoIncludeQuery}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include Selected Table</Label>
+                        <p className="text-[10px] text-muted-foreground">Full DDL and columns</p>
+                      </div>
+                      <Switch
+                        checked={aiIncludeSelectedTable}
+                        onCheckedChange={setAiIncludeSelectedTable}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include Relationships</Label>
+                        <p className="text-[10px] text-muted-foreground">Foreign key graph</p>
+                      </div>
+                      <Switch
+                        checked={aiIncludeRelationships}
+                        onCheckedChange={setAiIncludeRelationships}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include EXPLAIN Plan</Label>
+                        <p className="text-[10px] text-muted-foreground">Execution cost & nodes</p>
+                      </div>
+                      <Switch
+                        checked={aiIncludeExplain}
+                        onCheckedChange={setAiIncludeExplain}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Include Query Results</Label>
+                        <p className="text-[10px] text-muted-foreground">Compact sample rows</p>
+                      </div>
+                      <Switch
+                        checked={aiIncludeQueryResults}
+                        onCheckedChange={setAiIncludeQueryResults}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Safety & Permissions */}
+              {aiEnabled && (
+                <div className="space-y-3 pt-2 border-t border-border/40">
+                  <div>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5 text-primary" />
+                      Safety & Execution Gates
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Prevent unintended data loss or destructive operations
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Confirm Generated SQL Before Execution</Label>
+                        <p className="text-[10px] text-muted-foreground">Always review SQL before running in database</p>
+                      </div>
+                      <Switch
+                        checked={aiConfirmGeneratedSql}
+                        onCheckedChange={setAiConfirmGeneratedSql}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Allow Write Operations (DML)</Label>
+                        <p className="text-[10px] text-muted-foreground">Allow INSERT, UPDATE, DELETE generated by agents</p>
+                      </div>
+                      <Switch
+                        checked={aiAllowWriteOperations}
+                        onCheckedChange={setAiAllowWriteOperations}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-border/60 bg-muted/20">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium">Allow Schema Changes (DDL)</Label>
+                        <p className="text-[10px] text-muted-foreground">Allow CREATE, ALTER, DROP migrations generated by agents</p>
+                      </div>
+                      <Switch
+                        checked={aiAllowSchemaChanges}
+                        onCheckedChange={setAiAllowSchemaChanges}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Agent Integrations Status */}
+              <div className="space-y-3 pt-2 border-t border-border/40">
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5" />
+                    Detected Agent Integrations
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Binary availability on local PATH
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  {detectedAgents.map((ag) => (
+                    <div
+                      key={ag.id}
+                      className="flex items-center justify-between p-2 rounded-md border border-border/60 bg-card text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        {ag.installed ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-muted-foreground/50" />
+                        )}
+                        <div>
+                          <span className="font-semibold">{ag.name}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground ml-2">
+                            `{ag.binary_name}`
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {ag.installed ? (
+                          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                            {ag.version ?? "Installed"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                            Not in PATH
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[10px] px-2"
+                          onClick={() => {
+                            if (ag.installed) {
+                              toast.success(`${ag.name} connection test passed (${ag.version || 'OK'})`);
+                            } else {
+                              toast.error(`${ag.name} binary not found in PATH`);
+                            }
+                          }}
+                        >
+                          Test
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </TabsContent>

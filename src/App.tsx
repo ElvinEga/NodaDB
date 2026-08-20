@@ -22,6 +22,8 @@ import {
   Terminal,
   Keyboard,
   LayoutGrid,
+  Bot,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +51,7 @@ import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
 import { AgentsPanel } from "@/components/AgentsPanel";
 import { AgentControlCenter } from "@/components/AgentControlCenter";
+import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { AboutDialog } from "@/components/AboutDialog";
@@ -93,6 +96,7 @@ function App() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [agentsPanelOpen, setAgentsPanelOpen] = useState(false);
   const [agentRunnerOpen, setAgentRunnerOpen] = useState(false);
@@ -296,6 +300,34 @@ function App() {
     setTabs([...tabs, newTab]);
     setActiveTabId(newTab.id);
   };
+
+  const handleInsertSql = useCallback((sql: string) => {
+    const active = tabs.find((t) => t.id === activeTabId);
+    if (active?.type === "query") {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId ? { ...t, queryContent: sql, isDirty: true } : t,
+        ),
+      );
+      toast.success("SQL inserted into editor");
+    } else {
+      const newTab: TabType = {
+        id: `query-${Date.now()}`,
+        type: "query",
+        title: "AI Query",
+        isPinned: false,
+        isDirty: true,
+        queryContent: sql,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+      toast.success("Opened in new query editor");
+    }
+  }, [tabs, activeTabId]);
+
+  const handleRunSql = useCallback((sql: string) => {
+    handleInsertSql(sql);
+  }, [handleInsertSql]);
 
   const openQueryBuilderTab = () => {
     const newTab: TabType = {
@@ -618,6 +650,16 @@ function App() {
       disabled: !activeConnectionId,
     },
     {
+      id: 'ai-assistant',
+      label: 'AI Assistant',
+      description: 'Open AI Assistant for schema analysis, SQL generation & optimization',
+      icon: <Bot className="h-3.5 w-3.5 text-primary" />,
+      macShortcut: ['⌘', '⇧', 'A'],
+      winShortcut: ['Ctrl', 'Shift', 'A'],
+      category: 'Agent',
+      action: () => setShowAiAssistant((p) => !p),
+    },
+    {
       id: 'query-history',
       label: 'Query History',
       description: 'View recently executed queries',
@@ -697,6 +739,7 @@ function App() {
     openConnectionDialog: () => setConnectionDialogOpen(true),
     openSettings: () => setSettingsDialogOpen(true),
     openAgentsPanel: () => setAgentsPanelOpen(true),
+    openAiAssistant: () => setShowAiAssistant((prev) => !prev),
     openHistory: () => setShowHistoryPanel(prev => !prev),
     openShortcutsDialog: () => setShortcutsDialogOpen(true),
     runAgent: (agentId, prompt) => {
@@ -805,6 +848,16 @@ function App() {
                     <Plus className="h-4 w-4" />
                   </Button>
                 </KeyboardTooltip>*/}
+                <KeyboardTooltip description="AI Assistant" keys={["Ctrl", "Shift", "A"]}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowAiAssistant(!showAiAssistant)}
+                    className={showAiAssistant ? "bg-primary/15 text-primary" : ""}
+                  >
+                    <Bot className="h-4 w-4" />
+                  </Button>
+                </KeyboardTooltip>
                 <KeyboardTooltip description="Query History">
                   <Button
                     variant="ghost"
@@ -994,6 +1047,34 @@ function App() {
                     <QueryHistoryPanel
                       connectionId={activeConnection.id}
                       onSelectQuery={handleLoadQueryFromHistory}
+                    />
+                  </div>
+                )}
+
+                {/* Native AI Assistant Panel */}
+                {showAiAssistant && (
+                  <div className="w-96 shrink-0 border-l border-border h-full flex flex-col">
+                    <AiAssistantPanel
+                      connection={activeConnection}
+                      activeTab={activeTab}
+                      onInsertSql={handleInsertSql}
+                      onRunSql={handleRunSql}
+                      onOpenRelationFlow={(val) => {
+                        const tabId = `relation-flow-${Date.now()}`;
+                        const newTab: TabType = {
+                          id: tabId,
+                          type: "relation-flow",
+                          title: `Flow: ${val.substring(0, 8)}`,
+                          isPinned: false,
+                          isDirty: false,
+                          relationFlowValue: val,
+                        };
+                        setTabs((prev) => [...prev, newTab]);
+                        setActiveTabId(tabId);
+                      }}
+                      onOpenSchemaDesigner={openSchemaDesignerTab}
+                      onOpenSettings={() => setSettingsDialogOpen(true)}
+                      onClose={() => setShowAiAssistant(false)}
                     />
                   </div>
                 )}

@@ -8,6 +8,9 @@ pub async fn build_agent_db_context(
     connection_id: &str,
     db_type: &DatabaseType,
     active_table: Option<String>,
+    active_query: Option<String>,
+    explain_plan: Option<String>,
+    selected_entity: Option<String>,
     custom_instructions: Option<String>,
 ) -> Result<AgentDbContext> {
     let tables = manager.list_tables(connection_id, db_type).await.unwrap_or_default();
@@ -41,6 +44,27 @@ pub async fn build_agent_db_context(
         }
     }
 
+    // If foreign keys / relationships can be retrieved for the active table
+    let mut relationships_summary = None;
+    if let Some(ref table_name) = active_table {
+        if let Ok(constraints) = manager.get_table_constraints(connection_id, table_name, db_type).await {
+            let fks: Vec<_> = constraints
+                .into_iter()
+                .filter(|c| c.constraint_type.to_uppercase().contains("FOREIGN"))
+                .collect();
+            if !fks.is_empty() {
+                let mut rel = format!("Foreign keys for `{}`:\n", table_name);
+                for fk in fks {
+                    let cols = fk.column_names.join(", ");
+                    let ref_tbl = fk.foreign_table_name.unwrap_or_default();
+                    let ref_cols = fk.foreign_column_names.map(|c| c.join(", ")).unwrap_or_default();
+                    rel.push_str(&format!("- `({})` -> `{}({})` [{}]\n", cols, ref_tbl, ref_cols, fk.constraint_name));
+                }
+                relationships_summary = Some(rel);
+            }
+        }
+    }
+
     let db_type_str = format!("{:?}", db_type);
 
     Ok(AgentDbContext {
@@ -51,6 +75,10 @@ pub async fn build_agent_db_context(
         tables_summary,
         active_table,
         schema_ddl,
+        active_query,
+        explain_plan,
+        selected_entity,
+        relationships_summary,
         custom_instructions,
     })
 }
