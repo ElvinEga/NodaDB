@@ -349,10 +349,28 @@ export function buildCommandRegistry(ctx: CommandRegistryContext): NodaCommand[]
       },
     },
     {
+      id: 'cmd-acp',
+      slash: '/acp',
+      label: 'Agent Client Protocol (ACP) Session',
+      description: 'Open interactive ACP session with Codex, Claude Code, OpenCode, or Gemini CLI',
+      category: 'Agent',
+      requiredPermission: 'READ',
+      requiresConnection: false,
+      requiresConfirmation: false,
+      args: [
+        { name: 'agent_name', placeholder: 'codex | claude | opencode | gemini', description: 'ACP Agent to connect', required: false, type: 'string' },
+      ],
+      action: () => {
+        ctx.openAgentsPanel();
+        return uiResult();
+      },
+      uiAction: { type: 'open-agents' },
+    },
+    {
       id: 'cmd-agents',
       slash: '/agents',
-      label: 'AI Agents Hub',
-      description: 'Configure Codex, Claude Code, OpenCode, Gemini CLI and permissions',
+      label: 'Agent Control Center',
+      description: 'ACP Agent Host, command timeline, live permissions governance',
       category: 'Agent',
       requiredPermission: 'ADMIN',
       requiresConnection: false,
