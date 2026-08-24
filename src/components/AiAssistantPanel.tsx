@@ -30,8 +30,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useSettingsStore, type AiProvider, type AiIntegration } from '@/stores/settingsStore';
-import { useAgentStore } from '@/stores/agentStore';
 import { buildSelectiveAiContext, detectPromptIntent } from '@/lib/aiContextProvider';
+import { AiIcon } from '@/components/AiIcon';
 import type { ConnectionConfig } from '@/types';
 import type { TabType } from '@/components/TabBar';
 import { invoke } from '@tauri-apps/api/core';
@@ -303,8 +303,8 @@ export function AiAssistantPanel({
       {/* Header */}
       <div className="h-11 px-3.5 border-b border-border/70 flex items-center justify-between shrink-0 bg-muted/20">
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-            <Bot className="h-3.5 w-3.5" />
+          <div className="h-6 w-6 rounded-md bg-muted/60 flex items-center justify-center p-0.5 border border-border/50">
+            <AiIcon name={aiProvider} className="h-4 w-4 shrink-0" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
@@ -392,28 +392,28 @@ export function AiAssistantPanel({
               onClick={() => handleSend('Explain this database schema and list main tables')}
               className="text-left p-1.5 rounded border border-border/60 bg-card hover:bg-accent/40 text-[11px] text-foreground transition-all flex items-center gap-1.5"
             >
-              <Database className="h-3 w-3 text-primary shrink-0" />
+              <Database className="h-3 w-3 text-muted-foreground shrink-0" />
               <span className="truncate">Explain schema</span>
             </button>
             <button
               onClick={() => handleSend('Analyze and optimize the current SQL query for performance')}
               className="text-left p-1.5 rounded border border-border/60 bg-card hover:bg-accent/40 text-[11px] text-foreground transition-all flex items-center gap-1.5"
             >
-              <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
+              <Sparkles className="h-3 w-3 text-muted-foreground shrink-0" />
               <span className="truncate">Optimize query</span>
             </button>
             <button
               onClick={() => handleSend('Write a SQL query to ')}
               className="text-left p-1.5 rounded border border-border/60 bg-card hover:bg-accent/40 text-[11px] text-foreground transition-all flex items-center gap-1.5"
             >
-              <Code className="h-3 w-3 text-blue-500 shrink-0" />
+              <Code className="h-3 w-3 text-muted-foreground shrink-0" />
               <span className="truncate">Generate SQL</span>
             </button>
             <button
               onClick={() => handleSend('Explain foreign key relationships between tables')}
               className="text-left p-1.5 rounded border border-border/60 bg-card hover:bg-accent/40 text-[11px] text-foreground transition-all flex items-center gap-1.5"
             >
-              <Layers className="h-3 w-3 text-purple-500 shrink-0" />
+              <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
               <span className="truncate">Explore relations</span>
             </button>
           </div>
@@ -441,8 +441,8 @@ export function AiAssistantPanel({
                 {msg.role === 'user' ? (
                   <span>You • {msg.timestamp}</span>
                 ) : (
-                  <span className="flex items-center gap-1 font-semibold text-foreground">
-                    <Bot className="h-3 w-3 text-primary" />
+                  <span className="flex items-center gap-1.5 font-semibold text-foreground">
+                    <AiIcon name={aiProvider} className="h-3.5 w-3.5 shrink-0" />
                     {aiProvider} • {msg.timestamp}
                   </span>
                 )}
