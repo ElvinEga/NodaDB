@@ -17,7 +17,7 @@ interface SettingsStore {
 
   // Editor
   autoSave: boolean;
-  autoSaveDelay: number; // seconds
+  autoSaveDelay: number;
   editorTabSize: number;
   editorWordWrap: boolean;
 
@@ -121,7 +121,6 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       ...defaultSettings,
-
       setTheme: (theme) => set({ theme }),
       setColorTheme: (colorTheme) => set({ colorTheme }),
       setFontSize: (fontSize) => set({ fontSize }),
@@ -131,8 +130,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setEditorTabSize: (editorTabSize) => set({ editorTabSize }),
       setEditorWordWrap: (editorWordWrap) => set({ editorWordWrap }),
       setAutoExecuteOnLoad: (autoExecuteOnLoad) => set({ autoExecuteOnLoad }),
-      setConfirmBeforeExecute: (confirmBeforeExecute) =>
-        set({ confirmBeforeExecute }),
+      setConfirmBeforeExecute: (confirmBeforeExecute) => set({ confirmBeforeExecute }),
       setMaxHistorySize: (maxHistorySize) => set({ maxHistorySize }),
       setRowsPerPage: (rowsPerPage) => set({ rowsPerPage }),
       setShowRowNumbers: (showRowNumbers) => set({ showRowNumbers }),
@@ -157,8 +155,6 @@ export const useSettingsStore = create<SettingsStore>()(
 
       resetToDefaults: () => set(defaultSettings),
     }),
-    {
-      name: "app-settings-storage",
-    },
+    { name: "app-settings-storage" },
   ),
 );

@@ -13,13 +13,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -51,55 +45,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-interface SettingsDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  appUpdate: ReturnType<typeof useAppUpdate>;
-}
-
-interface ThemeCardProps {
-  theme: ThemeDefinition;
-  selected: boolean;
-  onSelect: (id: string) => void;
-}
+interface SettingsDialogProps { open: boolean; onOpenChange: (open: boolean) => void; appUpdate: ReturnType<typeof useAppUpdate>; }
+interface ThemeCardProps { theme: ThemeDefinition; selected: boolean; onSelect: (id: string) => void; }
 
 function ThemeCard({ theme, selected, onSelect }: ThemeCardProps) {
-  return (
-    <button
-      onClick={() => onSelect(theme.id)}
-      className={cn(
-        "flex items-center gap-3 rounded-lg border p-3 text-left w-full transition-all duration-150",
-        selected
-          ? "border-primary ring-2 ring-primary/25 bg-accent/60"
-          : "border-border hover:border-primary/40 hover:bg-accent/30"
-      )}
-    >
-      {/* Color swatch preview */}
-      <div
-        className="flex gap-[3px] rounded-md p-1.5 shrink-0 border border-white/10"
-        style={{ background: theme.previewColors[0] }}
-      >
-        {theme.previewColors.map((c, i) => (
-          <div
-            key={i}
-            className="h-5 w-[7px] rounded-full"
-            style={{ background: c }}
-          />
-        ))}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="font-medium text-sm truncate leading-tight">
-          {theme.name}
-        </p>
-        <p className="text-xs text-muted-foreground truncate mt-0.5 leading-tight">
-          {theme.description}
-        </p>
-      </div>
-      {selected && (
-        <Check className="h-3.5 w-3.5 text-primary ml-auto shrink-0" />
-      )}
-    </button>
-  );
+  return <button onClick={() => onSelect(theme.id)} className={cn("flex items-center gap-3 rounded-lg border p-3 text-left w-full transition-all duration-150", selected ? "border-primary ring-2 ring-primary/25 bg-accent/60" : "border-border hover:border-primary/40 hover:bg-accent/30")}>
+    <div className="flex gap-[3px] rounded-md p-1.5 shrink-0 border border-white/10" style={{ background: theme.previewColors[0] }}>{theme.previewColors.map((c, i) => <div key={i} className="h-5 w-[7px] rounded-full" style={{ background: c }} />)}</div>
+    <div className="min-w-0 flex-1"><p className="font-medium text-sm truncate leading-tight">{theme.name}</p><p className="text-xs text-muted-foreground truncate mt-0.5 leading-tight">{theme.description}</p></div>
+    {selected && <Check className="h-3.5 w-3.5 text-primary ml-auto shrink-0" />}
+  </button>;
 }
 
 export function SettingsDialog({
@@ -850,14 +804,42 @@ export function SettingsDialog({
           </TabsContent>
         </Tabs>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between pt-4 border-t">
-          <Button variant="outline" onClick={handleResetDefaults}>
-            Reset to Defaults
-          </Button>
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+export function SettingsDialog({ open, onOpenChange, appUpdate }: SettingsDialogProps) {
+  const s = useSettingsStore();
+  const { theme, colorTheme, fontSize, fontFamily, autoSave, autoSaveDelay, editorTabSize, editorWordWrap, autoExecuteOnLoad, confirmBeforeExecute, maxHistorySize, rowsPerPage, showRowNumbers, autoCheckForUpdates, aiEnabled, aiProvider, aiIntegration, aiAutoIncludeSchema, aiAutoIncludeQuery, aiConfirmGeneratedSql, aiOpenAssistantOnLaunch, aiAllowWriteOperations, aiAllowSchemaChanges, aiModel } = s;
+  useEffect(() => { const root = document.documentElement; if (theme === "system") { root.classList.remove("light", "dark"); root.classList.add(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } else { root.classList.remove("light", "dark"); root.classList.add(theme); } }, [theme]);
+  useEffect(() => { document.documentElement.setAttribute("data-theme", colorTheme); }, [colorTheme]);
+  useEffect(() => { const root = document.documentElement; root.classList.remove("font-size-small", "font-size-medium", "font-size-large"); root.classList.add(`font-size-${fontSize}`); }, [fontSize]);
+  useEffect(() => { const root = document.documentElement; root.classList.remove("font-outfit", "font-jetbrains-mono", "font-system"); root.classList.add(`font-${fontFamily.toLowerCase().replace(/ /g, "-")}`); }, [fontFamily]);
+  const reset = () => { if (confirm("Reset all settings to defaults? This cannot be undone.")) { s.resetToDefaults(); toast.success("Settings reset to defaults"); } };
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-3xl max-h-[88vh] flex flex-col">
+    <DialogHeader><DialogTitle className="flex items-center gap-2"><Settings className="h-5 w-5" />Settings & Preferences</DialogTitle><DialogDescription>Customize your NodaDB experience</DialogDescription></DialogHeader>
+    <Tabs defaultValue="appearance" className="flex-1 overflow-hidden flex flex-col"><TabsList className="grid w-full grid-cols-7">
+      <TabsTrigger value="appearance" className="!text-sm"><Palette className="h-4 w-4 mr-2" />Appearance</TabsTrigger><TabsTrigger value="themes" className="!text-sm"><Sparkles className="h-4 w-4 mr-2" />Themes</TabsTrigger><TabsTrigger value="editor" className="!text-sm"><Code className="h-4 w-4 mr-2" />Editor</TabsTrigger><TabsTrigger value="query" className="!text-sm"><FileText className="h-4 w-4 mr-2" />Query</TabsTrigger><TabsTrigger value="table" className="!text-sm"><Database className="h-4 w-4 mr-2" />Table</TabsTrigger><TabsTrigger value="ai" className="!text-sm"><Bot className="h-4 w-4 mr-2" />AI</TabsTrigger><TabsTrigger value="updates" className="!text-sm"><Download className="h-4 w-4 mr-2" />Updates</TabsTrigger>
+    </TabsList>
+    <TabsContent value="appearance" className="flex-1 overflow-y-auto space-y-6 pt-4"><div className="space-y-4 mx-2">
+      <div className="space-y-2"><Label>Appearance</Label><Select value={theme} onValueChange={(v) => s.setTheme(v as Theme)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="light">Light</SelectItem><SelectItem value="dark">Dark</SelectItem><SelectItem value="system">System</SelectItem></SelectContent></Select></div>
+      <div className="space-y-2"><Label>Font Size</Label><Select value={fontSize} onValueChange={(v) => s.setFontSize(v as FontSize)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="small">Small</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="large">Large</SelectItem></SelectContent></Select></div>
+      <div className="space-y-2"><Label>Font Family</Label><Select value={fontFamily} onValueChange={(v) => s.setFontFamily(v as FontFamily)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="System">System Default</SelectItem><SelectItem value="Outfit">Outfit</SelectItem><SelectItem value="JetBrains Mono">JetBrains Mono</SelectItem></SelectContent></Select></div>
+    </div></TabsContent>
+    <TabsContent value="themes" className="flex-1 overflow-y-auto pt-4"><div className="space-y-3 mx-2"><p className="text-xs text-muted-foreground">Choose a color palette.</p><div className="grid grid-cols-2 gap-2">{THEMES.map(t => <ThemeCard key={t.id} theme={t} selected={colorTheme === t.id} onSelect={s.setColorTheme} />)}</div></div></TabsContent>
+    <TabsContent value="editor" className="flex-1 overflow-y-auto space-y-6 pt-4"><div className="space-y-4 mx-2">
+      <div className="flex items-center justify-between"><div><Label>Auto Save</Label><p className="text-xs text-muted-foreground">Automatically save query changes</p></div><Switch checked={autoSave} onCheckedChange={s.setAutoSave} /></div>{autoSave && <div className="space-y-2"><Label>Auto Save Delay: {autoSaveDelay}s</Label><Slider value={[autoSaveDelay]} onValueChange={([v]) => s.setAutoSaveDelay(v)} min={1} max={30} step={1} /></div>}
+      <div className="space-y-2"><Label>Tab Size: {editorTabSize} spaces</Label><Slider value={[editorTabSize]} onValueChange={([v]) => s.setEditorTabSize(v)} min={2} max={8} step={2} /></div><div className="flex items-center justify-between"><Label>Word Wrap</Label><Switch checked={editorWordWrap} onCheckedChange={s.setEditorWordWrap} /></div>
+    </div></TabsContent>
+    <TabsContent value="query" className="flex-1 overflow-y-auto space-y-6 pt-4"><div className="space-y-4 mx-2"><div className="flex items-center justify-between"><div><Label>Auto Execute on Load</Label><p className="text-xs text-muted-foreground">Execute query when loading from history</p></div><Switch checked={autoExecuteOnLoad} onCheckedChange={s.setAutoExecuteOnLoad} /></div><div className="flex items-center justify-between"><div><Label>Confirm Before Execute</Label><p className="text-xs text-muted-foreground">Show confirmation for destructive queries</p></div><Switch checked={confirmBeforeExecute} onCheckedChange={s.setConfirmBeforeExecute} /></div><div className="space-y-2"><Label>Max History Size: {maxHistorySize}</Label><Slider value={[maxHistorySize]} onValueChange={([v]) => s.setMaxHistorySize(v)} min={10} max={200} step={10} /></div></div></TabsContent>
+    <TabsContent value="table" className="flex-1 overflow-y-auto space-y-6 pt-4"><div className="space-y-4 mx-2"><div className="space-y-2"><Label>Rows Per Page: {rowsPerPage}</Label><Select value={rowsPerPage.toString()} onValueChange={(v) => s.setRowsPerPage(Number(v))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[10,30,50,70,100].map(v => <SelectItem key={v} value={v.toString()}>{v}</SelectItem>)}</SelectContent></Select></div><div className="flex items-center justify-between"><Label>Show Row Numbers</Label><Switch checked={showRowNumbers} onCheckedChange={s.setShowRowNumbers} /></div></div></TabsContent>
+    <TabsContent value="ai" className="flex-1 overflow-y-auto pt-4"><div className="space-y-5 mx-2 pb-2">
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex gap-3"><div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0"><Bot className="h-5 w-5 text-primary" /></div><div><p className="text-sm font-semibold">AI Assistant</p><p className="text-xs text-muted-foreground mt-0.5">Schema help, SQL generation, query explanations, and agent sessions.</p></div><Switch className="ml-auto" checked={aiEnabled} onCheckedChange={s.setAiEnabled} /></div>
+      <div className="space-y-2"><Label>Default Agent</Label><Select value={aiProvider} onValueChange={(v) => s.setAiProvider(v as AIProvider)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="codex">Codex CLI</SelectItem><SelectItem value="claude">Claude Code</SelectItem><SelectItem value="opencode">OpenCode</SelectItem><SelectItem value="gemini">Gemini CLI</SelectItem></SelectContent></Select></div>
+      <div className="space-y-2"><Label>Integration</Label><div className="grid grid-cols-2 gap-2"><AIIntegrationCard value="cli" selected={aiIntegration === "cli"} title="Direct CLI" description="Launch installed coding-agent CLIs directly." icon={Terminal} onSelect={s.setAiIntegration} /><AIIntegrationCard value="acp" selected={aiIntegration === "acp"} title="ACP" description="Connect through Agent Client Protocol." icon={PlugZap} onSelect={s.setAiIntegration} /><AIIntegrationCard value="mcp" selected={aiIntegration === "mcp"} title="MCP" description="Expose NodaDB capabilities through MCP." icon={Sparkles} onSelect={s.setAiIntegration} /><AIIntegrationCard value="plugin" selected={aiIntegration === "plugin"} title="Plugin" description="Provider-specific integrations and extensions." icon={Database} onSelect={s.setAiIntegration} /></div></div>
+      <div className="space-y-2"><Label>Model</Label><Select value={aiModel} onValueChange={s.setAiModel}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem><SelectItem value="fast">Fast</SelectItem><SelectItem value="balanced">Balanced</SelectItem><SelectItem value="reasoning">Reasoning</SelectItem></SelectContent></Select></div>
+      <div className="border rounded-lg divide-y"><div className="p-3 flex items-center justify-between"><div><Label>Include schema context</Label><p className="text-[11px] text-muted-foreground">Send active schema with AI requests.</p></div><Switch checked={aiAutoIncludeSchema} onCheckedChange={s.setAiAutoIncludeSchema} /></div><div className="p-3 flex items-center justify-between"><div><Label>Include current SQL</Label><p className="text-[11px] text-muted-foreground">Include the active query when asking for help.</p></div><Switch checked={aiAutoIncludeQuery} onCheckedChange={s.setAiAutoIncludeQuery} /></div><div className="p-3 flex items-center justify-between"><div><Label>Confirm generated SQL</Label><p className="text-[11px] text-muted-foreground">Review generated SQL before using it.</p></div><Switch checked={aiConfirmGeneratedSql} onCheckedChange={s.setAiConfirmGeneratedSql} /></div><div className="p-3 flex items-center justify-between"><div><Label>Open assistant on launch</Label><p className="text-[11px] text-muted-foreground">Open the AI assistant when NodaDB starts.</p></div><Switch checked={aiOpenAssistantOnLaunch} onCheckedChange={s.setAiOpenAssistantOnLaunch} /></div></div>
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-3"><div className="flex items-center gap-2"><Shield className="h-4 w-4 text-amber-600" /><p className="text-sm font-medium">Agent permissions</p></div><div className="flex items-center justify-between"><div><Label>Allow write operations</Label><p className="text-[11px] text-muted-foreground">Permit INSERT, UPDATE, or DELETE.</p></div><Switch checked={aiAllowWriteOperations} onCheckedChange={s.setAiAllowWriteOperations} /></div><div className="flex items-center justify-between"><div><Label>Allow schema changes</Label><p className="text-[11px] text-muted-foreground">Permit DDL and migrations.</p></div><Switch checked={aiAllowSchemaChanges} onCheckedChange={s.setAiAllowSchemaChanges} /></div></div>
+      <Button variant="outline" className="w-full" onClick={() => { onOpenChange(false); window.dispatchEvent(new CustomEvent("OPEN_AI_AGENT_CONTROL")); }}><Bot className="h-4 w-4 mr-2" />Open AI Assistant & Agent Control</Button>
+    </div></TabsContent>
+    <TabsContent value="updates" className="flex-1 overflow-y-auto space-y-6 pt-4"><div className="mx-2"><AppUpdatePanel appUpdate={appUpdate} autoCheckForUpdates={autoCheckForUpdates} onAutoCheckChange={s.setAutoCheckForUpdates} /></div></TabsContent>
+    </Tabs>
+    <div className="flex items-center justify-between pt-4 border-t"><Button variant="outline" onClick={reset}>Reset to Defaults</Button><Button onClick={() => onOpenChange(false)}>Close</Button></div>
+  </DialogContent></Dialog>;
 }
