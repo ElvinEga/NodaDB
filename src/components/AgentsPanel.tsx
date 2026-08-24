@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAgentStore, ALL_PERMISSIONS, type AgentConfig } from '@/stores/agentStore';
+import { AiIcon } from '@/components/AiIcon';
 import { copyMcpConfigToClipboard, getMcpSetupInstructions } from '@/lib/mcpConfigExport';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
@@ -78,7 +79,7 @@ function PromptDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <AiIcon name={agentName} className="h-4 w-4 shrink-0" />
             Run {agentName}
           </DialogTitle>
           <DialogDescription>
@@ -165,8 +166,8 @@ function AgentCard({
     <div className="border border-border rounded-lg overflow-hidden bg-card">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-          <Bot className="h-5 w-5 text-primary" />
+        <div className="h-9 w-9 rounded-md bg-muted/60 flex items-center justify-center shrink-0 p-1.5 border border-border/50">
+          <AiIcon name={agent.id} className="h-5 w-5 shrink-0" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

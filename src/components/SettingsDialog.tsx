@@ -36,6 +36,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { AppUpdatePanel } from "@/components/AppUpdatePanel";
 import type { useAppUpdate } from "@/hooks/useAppUpdate";
+import { AiIcon } from "@/components/AiIcon";
 import {
   useSettingsStore,
   Theme,
@@ -274,7 +275,7 @@ export function SettingsDialog({
               Table
             </TabsTrigger>
             <TabsTrigger value="ai" className="!text-xs">
-              <Bot className="h-3.5 w-3.5 mr-1.5 text-primary" />
+              <Bot className="h-3.5 w-3.5 mr-1.5" />
               AI
             </TabsTrigger>
             <TabsTrigger value="updates" className="!text-xs">
@@ -545,7 +546,6 @@ export function SettingsDialog({
                 <div className="flex items-center justify-between pb-2 border-b border-border/40">
                   <div className="space-y-0.5">
                     <Label className="text-sm font-semibold flex items-center gap-1.5">
-                      <Bot className="h-4 w-4 text-primary" />
                       AI Assistant
                     </Label>
                     <p className="text-xs text-muted-foreground">
@@ -567,10 +567,30 @@ export function SettingsDialog({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="codex">Codex CLI</SelectItem>
-                          <SelectItem value="claude">Claude Code</SelectItem>
-                          <SelectItem value="opencode">OpenCode</SelectItem>
-                          <SelectItem value="gemini">Gemini CLI</SelectItem>
+                          <SelectItem value="codex">
+                            <div className="flex items-center gap-2">
+                              <AiIcon name="codex" className="h-3.5 w-3.5 shrink-0" />
+                              <span>Codex CLI</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="claude">
+                            <div className="flex items-center gap-2">
+                              <AiIcon name="claude" className="h-3.5 w-3.5 shrink-0" />
+                              <span>Claude Code</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="opencode">
+                            <div className="flex items-center gap-2">
+                              <AiIcon name="opencode" className="h-3.5 w-3.5 shrink-0" />
+                              <span>OpenCode</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="gemini">
+                            <div className="flex items-center gap-2">
+                              <AiIcon name="gemini" className="h-3.5 w-3.5 shrink-0" />
+                              <span>Gemini CLI</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-[10px] text-muted-foreground">
@@ -766,22 +786,27 @@ export function SettingsDialog({
                       key={ag.id}
                       className="flex items-center justify-between p-2 rounded-md border border-border/60 bg-card text-xs"
                     >
-                      <div className="flex items-center gap-2">
-                        {ag.installed ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-muted-foreground/50" />
-                        )}
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-md bg-muted/60 flex items-center justify-center p-1 border border-border/50 shrink-0">
+                          <AiIcon name={ag.id} className="h-4 w-4 shrink-0" />
+                        </div>
                         <div>
-                          <span className="font-semibold">{ag.name}</span>
-                          <span className="text-[10px] font-mono text-muted-foreground ml-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold">{ag.name}</span>
+                            {ag.installed ? (
+                              <CheckCircle2 className="h-3 w-3 text-primary" />
+                            ) : (
+                              <XCircle className="h-3 w-3 text-muted-foreground/50" />
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground block">
                             `{ag.binary_name}`
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {ag.installed ? (
-                          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
                             {ag.version ?? "Installed"}
                           </Badge>
                         ) : (
