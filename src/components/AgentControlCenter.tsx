@@ -1,9 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, Database, Sparkles, Terminal, Play, Loader2, Check, AlertTriangle, Settings2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  Bot,
+  Send,
+  Sparkles,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  Play,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Terminal,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Layers,
+  Database,
+  ExternalLink,
+  Brain,
+  Check,
+  X,
+  Loader2,
+} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAcpStore, type AcpSession, type AcpMessage } from '@/stores/acpStore';
 import { useAgentStore, ALL_PERMISSIONS } from '@/stores/agentStore';
@@ -13,55 +38,206 @@ import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import type { DatabaseType } from '@/types';
 
-interface AgentControlCenterProps { open: boolean; onOpenChange: (open: boolean) => void; connectionId?: string | null; dbType?: DatabaseType | null; onExecuteCommandAction?: (action: string, params: Record<string, unknown>) => void; }
+interface AgentControlCenterProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  connectionId?: string | null;
+  dbType?: DatabaseType | null;
+  onExecuteCommandAction?: (action: string, params: Record<string, unknown>) => void;
+}
 
-type AgentKey = 'codex' | 'claude' | 'opencode' | 'gemini';
-const AGENTS: Record<AgentKey, string> = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', gemini: 'Gemini CLI' };
-const STARTERS = [
-  { label: 'Explain schema', prompt: 'Explain the current database schema, key relationships, and any design concerns.' },
-  { label: 'Write SQL', prompt: 'Write the SQL query I need for the task I describe. Return production-ready SQL and explain it briefly.' },
-  { label: 'Optimize query', prompt: 'Review the current SQL and database context. Identify bottlenecks and propose an optimized query and indexes.' },
-  { label: 'Find relationships', prompt: 'Trace the important foreign-key relationships in the current schema and explain how the main entities connect.' },
-];
+export function AgentControlCenter({
+  open,
+  onOpenChange,
+  connectionId,
+  dbType,
+  onExecuteCommandAction,
+}: AgentControlCenterProps) {
+  const {
+    sessions,
+    activeSessionId,
+    connectedAgents,
+    recentCommands,
+    pendingApprovals,
+    createSession,
+    setActiveSession,
+    addMessage,
+    appendMessageChunk,
+    setSessionStatus,
+    setAgentStatus,
+    addRecentCommand,
+    addPendingApproval,
+    resolvePendingApproval,
+  } = useAcpStore();
 
-export function AgentControlCenter({ open, onOpenChange, connectionId, dbType, onExecuteCommandAction }: AgentControlCenterProps) {
-  const { sessions, activeSessionId, connectedAgents, createSession, setActiveSession, addMessage, appendMessageChunk, setSessionStatus, setAgentStatus, addRecentCommand } = useAcpStore();
-  const { aiEnabled, aiProvider, aiAutoIncludeSchema, aiAutoIncludeQuery, aiConfirmGeneratedSql } = useSettingsStore();
-  const [input, setInput] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState<AgentKey>(aiProvider);
-  const [busy, setBusy] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
-  const activeSession = sessions.find(s => s.id === activeSessionId) ?? sessions[0];
+  const { agents, grantPermission, revokePermission } = useAgentStore();
 
-  useEffect(() => setSelectedAgent(aiProvider), [aiProvider]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeSession?.messages]);
+  const [inputPrompt, setInputPrompt] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState<'codex' | 'claude' | 'opencode' | 'gemini'>('codex');
+  const [activeTab, setActiveTab] = useState<'chat' | 'permissions' | 'audit'>('chat');
+  const [thoughtExpanded, setThoughtExpanded] = useState<Record<string, boolean>>({});
 
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
+
+  // Auto-scroll chat stream
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeSession?.messages, activeSession?.status]);
+
+  // Listen to Tauri ACP events
   useEffect(() => {
     if (!open) return;
-    invoke<{ agent_id: string; name: string; status: string; protocol_version: string }[]>('get_acp_connected_agents').then(list => list.forEach(a => setAgentStatus({ agent_id: a.agent_id, name: a.name, status: a.status as 'connected' | 'idle' | 'error' | 'disconnected', protocol_version: a.protocol_version }))).catch(() => {});
-    const updates = listen<{ session_id: string; agent_id: string; chunk: { type: string; text?: string; tool?: string; arguments?: Record<string, unknown> } }>('acp://session_update', e => {
-      const c = e.payload.chunk;
-      if (c.type === 'message_chunk' && c.text) appendMessageChunk(e.payload.session_id, c.text);
-      else if (c.type === 'tool_call' && c.tool) addMessage(e.payload.session_id, { role: 'tool_call', content: `Command: ${c.tool}`, toolCall: { callId: `${Date.now()}`, command: c.tool, arguments: c.arguments ?? {}, status: 'executed' } });
-      else if (c.type === 'completed') setSessionStatus(e.payload.session_id, 'completed');
-    });
-    const commands = listen<{ id: string; timestamp: string; agent_id: string; command: string; arguments: Record<string, unknown>; status: string; duration_ms: number; ui_action_triggered?: string }>('acp://command_executed', e => { addRecentCommand(e.payload); if (e.payload.ui_action_triggered && onExecuteCommandAction) onExecuteCommandAction(e.payload.ui_action_triggered, e.payload.arguments); });
-    return () => { updates.then(f => f()); commands.then(f => f()); };
-  }, [open, setAgentStatus, appendMessageChunk, addMessage, setSessionStatus, addRecentCommand, onExecuteCommandAction]);
 
-  const startSession = async (agent: AgentKey) => {
-    const id = createSession(agent, AGENTS[agent]); setSelectedAgent(agent);
-    try { await invoke('start_acp_session', { agentId: agent, sessionId: id }); toast.success(`${AGENTS[agent]} connected`); }
-    catch (e) { toast.error(`Failed to connect ${AGENTS[agent]}: ${e}`); }
+    // Fetch live connected agents
+    invoke<{ agent_id: string; name: string; status: string; protocol_version: string }[]>('get_acp_connected_agents')
+      .then((list) => {
+        list.forEach((item) => {
+          setAgentStatus({
+            agent_id: item.agent_id,
+            name: item.name,
+            status: item.status as 'connected' | 'idle' | 'error' | 'disconnected',
+            protocol_version: item.protocol_version,
+          });
+        });
+      })
+      .catch(() => {});
+
+    // Listen to session updates
+    const unlistenUpdate = listen<{
+      session_id: string;
+      agent_id: string;
+      chunk: { type: string; text?: string; step?: string; tool?: string; arguments?: Record<string, unknown>; call_id?: string; requires_approval?: boolean };
+      timestamp: string;
+    }>('acp://session_update', (event) => {
+      const { session_id, chunk } = event.payload;
+
+      if (chunk.type === 'message_chunk' && chunk.text) {
+        appendMessageChunk(session_id, chunk.text);
+      } else if (chunk.type === 'thought' && chunk.text) {
+        addMessage(session_id, {
+          role: 'thought',
+          content: chunk.text,
+        });
+      } else if (chunk.type === 'tool_call' && chunk.tool) {
+        addMessage(session_id, {
+          role: 'tool_call',
+          content: `Invoking command ${chunk.tool}`,
+          toolCall: {
+            callId: chunk.call_id ?? `call-${Date.now()}`,
+            command: chunk.tool,
+            arguments: chunk.arguments ?? {},
+            status: chunk.requires_approval ? 'pending' : 'executed',
+          },
+        });
+        if (chunk.requires_approval && chunk.call_id) {
+          addPendingApproval({
+            call_id: chunk.call_id,
+            session_id,
+            agent_id: event.payload.agent_id,
+            command: chunk.tool,
+            arguments: chunk.arguments ?? {},
+            reason: 'Requires user confirmation for destructive execution',
+            destructive: true,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        }
+      } else if (chunk.type === 'completed') {
+        setSessionStatus(session_id, 'completed');
+      }
+    });
+
+    // Listen to recent command executions
+    const unlistenCommand = listen<{
+      id: string;
+      timestamp: string;
+      agent_id: string;
+      command: string;
+      arguments: Record<string, unknown>;
+      status: string;
+      duration_ms: number;
+      ui_action_triggered?: string;
+    }>('acp://command_executed', (event) => {
+      addRecentCommand(event.payload);
+      if (event.payload.ui_action_triggered && onExecuteCommandAction) {
+        onExecuteCommandAction(event.payload.ui_action_triggered, event.payload.arguments);
+      }
+    });
+
+    return () => {
+      unlistenUpdate.then((f) => f());
+      unlistenCommand.then((f) => f());
+    };
+  }, [open, setAgentStatus, appendMessageChunk, addMessage, setSessionStatus, addPendingApproval, addRecentCommand, onExecuteCommandAction]);
+
+  // Send turn prompt
+  const handleSend = async () => {
+    if (!inputPrompt.trim()) return;
+
+    let targetSessionId = activeSession?.id;
+    if (!targetSessionId) {
+      const names = {
+        codex: 'Codex CLI',
+        claude: 'Claude Code',
+        opencode: 'OpenCode',
+        gemini: 'Gemini CLI',
+      };
+      targetSessionId = createSession(selectedAgent, names[selectedAgent]);
+    }
+
+    const userText = inputPrompt.trim();
+    setInputPrompt('');
+
+    addMessage(targetSessionId, {
+      role: 'user',
+      content: userText,
+    });
+    setSessionStatus(targetSessionId, 'running');
+
+    try {
+      await invoke('send_acp_prompt', {
+        sessionId: targetSessionId,
+        prompt: userText,
+        context: {
+          connection_id: connectionId,
+          db_type: dbType,
+        },
+      });
+    } catch (e) {
+      toast.error(`ACP Prompt failed: ${e}`);
+      setSessionStatus(targetSessionId, 'failed');
+    }
   };
 
-  const send = async () => {
-    const prompt = input.trim(); if (!prompt || !aiEnabled) return;
-    let id = activeSession?.id; if (!id) { id = createSession(selectedAgent, AGENTS[selectedAgent]); try { await invoke('start_acp_session', { agentId: selectedAgent, sessionId: id }); } catch {} }
-    setInput(''); setBusy(true); addMessage(id, { role: 'user', content: prompt }); setSessionStatus(id, 'running');
+  const handleStartNewSession = async (agentKey: 'codex' | 'claude' | 'opencode' | 'gemini') => {
+    const names = {
+      codex: 'Codex CLI',
+      claude: 'Claude Code',
+      opencode: 'OpenCode',
+      gemini: 'Gemini CLI',
+    };
+    const sid = createSession(agentKey, names[agentKey]);
+    setSelectedAgent(agentKey);
+
     try {
-      await invoke('send_acp_prompt', { sessionId: id, prompt, context: { connection_id: connectionId, db_type: dbType, include_schema: aiAutoIncludeSchema, include_query: aiAutoIncludeQuery, confirm_generated_sql: aiConfirmGeneratedSql } });
-    } catch (e) { toast.error(`AI request failed: ${e}`); setSessionStatus(id, 'failed'); } finally { setBusy(false); }
+      await invoke('start_acp_session', {
+        agentId: agentKey,
+        sessionId: sid,
+      });
+      toast.success(`ACP Session connected with ${names[agentKey]}`);
+    } catch (err) {
+      toast.error(`Failed to connect ACP agent: ${err}`);
+    }
+  };
+
+  const handleApproveTool = async (callId: string, approved: boolean) => {
+    try {
+      await invoke('approve_acp_tool', { callId, approved });
+      resolvePendingApproval(callId);
+      toast.success(approved ? 'Action approved and executed' : 'Action rejected');
+    } catch (e) {
+      toast.error(`Failed approval: ${e}`);
+    }
   };
 
   const togglePermission = (agentId: string, perm: string) => {
