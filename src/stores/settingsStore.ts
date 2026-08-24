@@ -5,8 +5,8 @@ export type Theme = "light" | "dark" | "system";
 export type ColorTheme = string;
 export type FontSize = "small" | "medium" | "large";
 export type FontFamily = "Outfit" | "JetBrains Mono" | "System";
-export type AIProvider = "codex" | "claude" | "opencode" | "gemini";
-export type AIIntegration = "cli" | "acp" | "mcp" | "plugin";
+export type AiProvider = "codex" | "claude" | "opencode" | "gemini";
+export type AiIntegration = "cli" | "acp" | "mcp" | "plugin";
 
 interface SettingsStore {
   // Appearance
@@ -35,15 +35,19 @@ interface SettingsStore {
 
   // AI Assistant
   aiEnabled: boolean;
-  aiProvider: AIProvider;
-  aiIntegration: AIIntegration;
+  aiProvider: AiProvider;
+  aiIntegration: AiIntegration;
+  aiModel: string;
   aiAutoIncludeSchema: boolean;
   aiAutoIncludeQuery: boolean;
+  aiIncludeSelectedTable: boolean;
+  aiIncludeRelationships: boolean;
+  aiIncludeQueryResults: boolean;
+  aiIncludeExplain: boolean;
   aiConfirmGeneratedSql: boolean;
-  aiOpenAssistantOnLaunch: boolean;
   aiAllowWriteOperations: boolean;
   aiAllowSchemaChanges: boolean;
-  aiModel: string;
+  aiOpenAssistantOnLaunch: boolean;
 
   // Actions
   setTheme: (theme: Theme) => void;
@@ -60,16 +64,23 @@ interface SettingsStore {
   setRowsPerPage: (rows: number) => void;
   setShowRowNumbers: (show: boolean) => void;
   setAutoCheckForUpdates: (enabled: boolean) => void;
+
+  // AI Actions
   setAiEnabled: (enabled: boolean) => void;
-  setAiProvider: (provider: AIProvider) => void;
-  setAiIntegration: (integration: AIIntegration) => void;
+  setAiProvider: (provider: AiProvider) => void;
+  setAiIntegration: (integration: AiIntegration) => void;
+  setAiModel: (model: string) => void;
   setAiAutoIncludeSchema: (enabled: boolean) => void;
   setAiAutoIncludeQuery: (enabled: boolean) => void;
+  setAiIncludeSelectedTable: (enabled: boolean) => void;
+  setAiIncludeRelationships: (enabled: boolean) => void;
+  setAiIncludeQueryResults: (enabled: boolean) => void;
+  setAiIncludeExplain: (enabled: boolean) => void;
   setAiConfirmGeneratedSql: (enabled: boolean) => void;
-  setAiOpenAssistantOnLaunch: (enabled: boolean) => void;
   setAiAllowWriteOperations: (enabled: boolean) => void;
   setAiAllowSchemaChanges: (enabled: boolean) => void;
-  setAiModel: (model: string) => void;
+  setAiOpenAssistantOnLaunch: (enabled: boolean) => void;
+
   resetToDefaults: () => void;
 }
 
@@ -88,16 +99,22 @@ const defaultSettings = {
   rowsPerPage: 100,
   showRowNumbers: true,
   autoCheckForUpdates: true,
+
+  // AI Defaults
   aiEnabled: true,
-  aiProvider: "codex" as AIProvider,
-  aiIntegration: "cli" as AIIntegration,
+  aiProvider: "claude" as AiProvider,
+  aiIntegration: "cli" as AiIntegration,
+  aiModel: "",
   aiAutoIncludeSchema: true,
   aiAutoIncludeQuery: true,
+  aiIncludeSelectedTable: true,
+  aiIncludeRelationships: true,
+  aiIncludeQueryResults: false,
+  aiIncludeExplain: true,
   aiConfirmGeneratedSql: true,
-  aiOpenAssistantOnLaunch: false,
   aiAllowWriteOperations: false,
   aiAllowSchemaChanges: false,
-  aiModel: "auto",
+  aiOpenAssistantOnLaunch: false,
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -117,17 +134,25 @@ export const useSettingsStore = create<SettingsStore>()(
       setMaxHistorySize: (maxHistorySize) => set({ maxHistorySize }),
       setRowsPerPage: (rowsPerPage) => set({ rowsPerPage }),
       setShowRowNumbers: (showRowNumbers) => set({ showRowNumbers }),
-      setAutoCheckForUpdates: (autoCheckForUpdates) => set({ autoCheckForUpdates }),
+      setAutoCheckForUpdates: (autoCheckForUpdates) =>
+        set({ autoCheckForUpdates }),
+
+      // AI Setters
       setAiEnabled: (aiEnabled) => set({ aiEnabled }),
       setAiProvider: (aiProvider) => set({ aiProvider }),
       setAiIntegration: (aiIntegration) => set({ aiIntegration }),
+      setAiModel: (aiModel) => set({ aiModel }),
       setAiAutoIncludeSchema: (aiAutoIncludeSchema) => set({ aiAutoIncludeSchema }),
       setAiAutoIncludeQuery: (aiAutoIncludeQuery) => set({ aiAutoIncludeQuery }),
+      setAiIncludeSelectedTable: (aiIncludeSelectedTable) => set({ aiIncludeSelectedTable }),
+      setAiIncludeRelationships: (aiIncludeRelationships) => set({ aiIncludeRelationships }),
+      setAiIncludeQueryResults: (aiIncludeQueryResults) => set({ aiIncludeQueryResults }),
+      setAiIncludeExplain: (aiIncludeExplain) => set({ aiIncludeExplain }),
       setAiConfirmGeneratedSql: (aiConfirmGeneratedSql) => set({ aiConfirmGeneratedSql }),
-      setAiOpenAssistantOnLaunch: (aiOpenAssistantOnLaunch) => set({ aiOpenAssistantOnLaunch }),
       setAiAllowWriteOperations: (aiAllowWriteOperations) => set({ aiAllowWriteOperations }),
       setAiAllowSchemaChanges: (aiAllowSchemaChanges) => set({ aiAllowSchemaChanges }),
-      setAiModel: (aiModel) => set({ aiModel }),
+      setAiOpenAssistantOnLaunch: (aiOpenAssistantOnLaunch) => set({ aiOpenAssistantOnLaunch }),
+
       resetToDefaults: () => set(defaultSettings),
     }),
     { name: "app-settings-storage" },

@@ -83,6 +83,7 @@ export interface CommandRegistryContext {
   openConnectionDialog: () => void;
   openSettings: () => void;
   openAgentsPanel: () => void;
+  openAiAssistant?: () => void;
   openHistory: () => void;
   openShortcutsDialog: () => void;
   runAgent?: (agentId: string, prompt?: string) => void;
@@ -327,7 +328,49 @@ export function buildCommandRegistry(ctx: CommandRegistryContext): NodaCommand[]
         } catch (e) { return { success: false, error: String(e) }; }
       },
     },
-    // ── AGENT ─────────────────────────────────────────────────────────────────
+    // ── AGENT & AI ───────────────────────────────────────────────────────────
+    {
+      id: 'cmd-ai',
+      slash: '/ai',
+      label: 'AI Assistant',
+      description: 'Open native AI Assistant for schema explanation, query generation & optimization',
+      category: 'Agent',
+      requiredPermission: 'READ',
+      requiresConnection: false,
+      requiresConfirmation: false,
+      args: [
+        { name: 'prompt', placeholder: 'Explain schema / Optimize query / Write SQL...', description: 'Optional prompt to ask the assistant', required: false, type: 'string' },
+      ],
+      action: () => {
+        ctx.openAiAssistant?.();
+        return uiResult();
+      },
+      macShortcut: ['Cmd', 'Shift', 'A'],
+      winShortcut: ['Ctrl', 'Shift', 'A'],
+    },
+    {
+      id: 'cmd-context',
+      slash: '/context',
+      label: 'Database Context for AI',
+      description: 'Inspect database schema and editor metadata available to AI agents',
+      category: 'Agent',
+      requiredPermission: 'READ',
+      requiresConnection: true,
+      requiresConfirmation: false,
+      action: async () => {
+        const err = requireConn();
+        if (err) return err;
+        try {
+          const context = await invoke('get_agent_db_context', {
+            connectionId,
+            dbType: dbType?.toLowerCase(),
+          });
+          return { success: true, data: context };
+        } catch (e) {
+          return { success: false, error: String(e) };
+        }
+      },
+    },
     {
       id: 'cmd-agent',
       slash: '/agent',

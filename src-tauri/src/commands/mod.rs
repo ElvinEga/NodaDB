@@ -541,6 +541,9 @@ pub async fn get_agent_db_context(
     connection_id: String,
     db_type: DatabaseType,
     active_table: Option<String>,
+    active_query: Option<String>,
+    explain_plan: Option<String>,
+    selected_entity: Option<String>,
     custom_instructions: Option<String>,
     manager: State<'_, ConnectionManager>,
 ) -> Result<AgentDbContext, String> {
@@ -549,6 +552,9 @@ pub async fn get_agent_db_context(
         &connection_id,
         &db_type,
         active_table,
+        active_query,
+        explain_plan,
+        selected_entity,
         custom_instructions,
     )
     .await
@@ -564,6 +570,9 @@ pub async fn run_agent_session(
     connection_id: Option<String>,
     db_type: Option<DatabaseType>,
     active_table: Option<String>,
+    active_query: Option<String>,
+    explain_plan: Option<String>,
+    selected_entity: Option<String>,
     custom_instructions: Option<String>,
     registry: State<'_, AgentRegistry>,
     session_manager: State<'_, AgentSessionManager>,
@@ -574,18 +583,31 @@ pub async fn run_agent_session(
         .map_err(|e| format!("Failed to find adapter: {}", e))?;
 
     let context = if let (Some(ref cid), Some(ref dt)) = (connection_id, db_type) {
-        build_agent_db_context(&conn_manager, cid, dt, active_table, custom_instructions)
-            .await
-            .unwrap_or_else(|_| AgentDbContext {
-                connection_name: cid.clone(),
-                db_type: format!("{:?}", dt),
-                host: None,
-                database: None,
-                tables_summary: "Unable to inspect schema".into(),
-                active_table: None,
-                schema_ddl: None,
-                custom_instructions: None,
-            })
+        build_agent_db_context(
+            &conn_manager,
+            cid,
+            dt,
+            active_table,
+            active_query,
+            explain_plan,
+            selected_entity,
+            custom_instructions,
+        )
+        .await
+        .unwrap_or_else(|_| AgentDbContext {
+            connection_name: cid.clone(),
+            db_type: format!("{:?}", dt),
+            host: None,
+            database: None,
+            tables_summary: "Unable to inspect schema".into(),
+            active_table: None,
+            schema_ddl: None,
+            active_query: None,
+            explain_plan: None,
+            selected_entity: None,
+            relationships_summary: None,
+            custom_instructions: None,
+        })
     } else {
         AgentDbContext {
             connection_name: "None".into(),
@@ -595,6 +617,10 @@ pub async fn run_agent_session(
             tables_summary: "No active connection".into(),
             active_table: None,
             schema_ddl: None,
+            active_query: None,
+            explain_plan: None,
+            selected_entity: None,
+            relationships_summary: None,
             custom_instructions,
         }
     };

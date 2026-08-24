@@ -177,7 +177,7 @@ fn main() -> Result<()> {
 
     match args[1].as_str() {
         "agent" | "agents" => {
-            if args.len() == 2 || args[2] == "list" || args[2] == "ls" {
+            if args.len() == 2 || args[2] == "list" || args[2] == "ls" || args[2] == "status" {
                 handle_agent_list();
             } else if (args[2] == "run" || args[2] == "exec") && args.len() >= 5 {
                 let agent_id = &args[3];
