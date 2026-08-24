@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAcpStore, type AcpSession, type AcpMessage } from '@/stores/acpStore';
 import { useAgentStore, ALL_PERMISSIONS } from '@/stores/agentStore';
+import { AiIcon } from '@/components/AiIcon';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
@@ -283,16 +284,17 @@ export function AgentControlCenter({
                   key={agentKey}
                   onClick={() => handleStartNewSession(agentKey)}
                   className={cn(
-                    'flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors',
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors',
                     selectedAgent === agentKey
                       ? 'bg-primary/10 border-primary/40 text-primary'
                       : 'border-border/60 hover:bg-muted/50 text-muted-foreground',
                   )}
                   title={`Start session with ${names[agentKey]}`}
                 >
+                  <AiIcon name={agentKey} className="h-3.5 w-3.5 shrink-0" />
                   <span
                     className={cn(
-                      'h-2 w-2 rounded-full',
+                      'h-1.5 w-1.5 rounded-full',
                       status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
                     )}
                   />
@@ -341,8 +343,11 @@ export function AgentControlCenter({
                         )}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold">{sess.agentName}</span>
-                          <span className="text-[10px] text-muted-foreground/70">{sess.createdAt}</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <AiIcon name={sess.agentId} className="h-3.5 w-3.5 shrink-0" />
+                            <span className="font-semibold truncate">{sess.agentName}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/70 shrink-0">{sess.createdAt}</span>
                         </div>
                         <p className="text-[11px] text-muted-foreground line-clamp-1">
                           {sess.messages[sess.messages.length - 1]?.content ?? 'Empty session'}
@@ -448,10 +453,10 @@ export function AgentControlCenter({
                           'h-7 w-7 rounded-md flex items-center justify-center shrink-0 text-xs',
                           msg.role === 'user'
                             ? 'bg-primary text-primary-foreground font-semibold'
-                            : 'bg-muted text-muted-foreground',
+                            : 'bg-muted/80 text-muted-foreground p-1 border border-border/50',
                         )}
                       >
-                        {msg.role === 'user' ? 'U' : <Bot className="h-4 w-4" />}
+                        {msg.role === 'user' ? 'U' : <AiIcon name={activeSession?.agentId ?? selectedAgent} className="h-4 w-4 shrink-0" />}
                       </div>
                       <div
                         className={cn(
@@ -543,7 +548,10 @@ export function AgentControlCenter({
                         <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
                           {cmd.duration_ms}ms
                         </Badge>
-                        <span className="text-muted-foreground font-mono">{cmd.agent_id}</span>
+                        <span className="text-muted-foreground font-mono flex items-center gap-1">
+                          <AiIcon name={cmd.agent_id} className="h-3 w-3 shrink-0" />
+                          {cmd.agent_id}
+                        </span>
                       </div>
                     </div>
                   ))}
