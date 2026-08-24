@@ -82,9 +82,17 @@ impl AcpHostManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(|e| anyhow!("Failed to spawn ACP agent process: {}", e))?;
-        let stdin = child.stdin.take().ok_or_else(|| anyhow!("Failed to capture stdin"))?;
-        let stdout = child.stdout.take().ok_or_else(|| anyhow!("Failed to capture stdout"))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn ACP agent process: {}", e))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stdout"))?;
         let stderr = child.stderr.take();
 
         {
@@ -102,7 +110,8 @@ impl AcpHostManager {
                 "opencode" => "OpenCode",
                 "gemini" => "Gemini CLI",
                 _ => &agent_id,
-            }.to_string(),
+            }
+            .to_string(),
             status: "connected".into(),
             version: None,
             protocol_version: "2025-08-01 (ACP v1)".into(),
@@ -125,7 +134,7 @@ impl AcpHostManager {
                 protocol_version: "2025-08-01".into(),
                 client_info: AcpClientInfo {
                     name: "NodaDB".into(),
-                    version: "0.3.10".into(),
+                    version: "0.3.11".into(),
                 },
                 capabilities: AcpClientCapabilities {
                     database: true,
@@ -148,7 +157,9 @@ impl AcpHostManager {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let trimmed = line.trim();
-                if trimmed.is_empty() { continue; }
+                if trimmed.is_empty() {
+                    continue;
+                }
 
                 if let Ok(resp) = serde_json::from_str::<AcpRpcResponse>(trimmed) {
                     if let Some(res) = resp.result {
@@ -157,7 +168,9 @@ impl AcpHostManager {
                             AcpSessionEvent {
                                 session_id: sid_clone.clone(),
                                 agent_id: agent_id_clone.clone(),
-                                chunk: AcpUpdateChunk::MessageChunk { text: res.to_string() },
+                                chunk: AcpUpdateChunk::MessageChunk {
+                                    text: res.to_string(),
+                                },
                                 timestamp: Utc::now().format("%H:%M:%S").to_string(),
                             },
                         );
@@ -167,7 +180,9 @@ impl AcpHostManager {
                     if req.method == "session/update" {
                         if let Some(params) = req.params {
                             let chunk: AcpUpdateChunk = serde_json::from_value(params)
-                                .unwrap_or_else(|_| AcpUpdateChunk::MessageChunk { text: trimmed.to_string() });
+                                .unwrap_or_else(|_| AcpUpdateChunk::MessageChunk {
+                                    text: trimmed.to_string(),
+                                });
                             let _ = app_clone.emit(
                                 "acp://session_update",
                                 AcpSessionEvent {
@@ -185,7 +200,9 @@ impl AcpHostManager {
                             AcpSessionEvent {
                                 session_id: sid_clone.clone(),
                                 agent_id: agent_id_clone.clone(),
-                                chunk: AcpUpdateChunk::MessageChunk { text: trimmed.to_string() },
+                                chunk: AcpUpdateChunk::MessageChunk {
+                                    text: trimmed.to_string(),
+                                },
                                 timestamp: Utc::now().format("%H:%M:%S").to_string(),
                             },
                         );
@@ -197,7 +214,9 @@ impl AcpHostManager {
                         AcpSessionEvent {
                             session_id: sid_clone.clone(),
                             agent_id: agent_id_clone.clone(),
-                            chunk: AcpUpdateChunk::MessageChunk { text: trimmed.to_string() },
+                            chunk: AcpUpdateChunk::MessageChunk {
+                                text: trimmed.to_string(),
+                            },
                             timestamp: Utc::now().format("%H:%M:%S").to_string(),
                         },
                     );
@@ -246,7 +265,10 @@ impl AcpHostManager {
             stdin.flush().await?;
             Ok(())
         } else {
-            Err(anyhow!("No active stdin writer for session '{}'", session_id))
+            Err(anyhow!(
+                "No active stdin writer for session '{}'",
+                session_id
+            ))
         }
     }
 
@@ -256,7 +278,10 @@ impl AcpHostManager {
             let _ = sender.send(approved);
             Ok(())
         } else {
-            Err(anyhow!("No pending approval found for call_id '{}'", call_id))
+            Err(anyhow!(
+                "No pending approval found for call_id '{}'",
+                call_id
+            ))
         }
     }
 
@@ -268,7 +293,10 @@ impl AcpHostManager {
         let mut writers = self.stdin_writers.lock().await;
         writers.remove(session_id);
 
-        let _ = app.emit("acp://status", json!({ "session_id": session_id, "status": "disconnected" }));
+        let _ = app.emit(
+            "acp://status",
+            json!({ "session_id": session_id, "status": "disconnected" }),
+        );
         Ok(())
     }
 }
