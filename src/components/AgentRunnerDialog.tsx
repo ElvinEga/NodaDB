@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { AiIcon } from '@/components/AiIcon';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
@@ -261,8 +262,8 @@ export function AgentRunnerDialog({ open, onOpenChange, runParams }: AgentRunner
         <DialogHeader className="p-4 pb-3 border-b border-border/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                <Bot className="h-4 w-4" />
+              <div className="h-8 w-8 rounded-md bg-muted/60 flex items-center justify-center p-1 border border-border/50">
+                <AiIcon name={runParams?.agentId ?? runParams?.agentName} className="h-5 w-5 shrink-0" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
