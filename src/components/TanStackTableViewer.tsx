@@ -2178,7 +2178,7 @@ Sum: ${stats.sum}`
                           return (
                             <th
                               key={header.id}
-                              className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-muted-foreground border-r border-border bg-muted/30 relative group"
+                              className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-foreground border-r border-border bg-muted/30 relative group"
                               style={{
                                 width: header.getSize(),
                                 display: "flex",
@@ -2321,7 +2321,7 @@ Sum: ${stats.sum}`
                             {row.getVisibleCells().map((cell: any) => (
                               <td
                                 key={cell.id}
-                                className="px-3 py-1 flex items-center text-xs border-r border-border"
+                                className="px-3 py-1 flex items-center text-xs text-foreground border-r border-border"
                                 style={{
                                   width: cell.column.getSize(),
                                   whiteSpace: "nowrap",
