@@ -38,6 +38,8 @@ import {
   Eye,
   FileJson,
   Search,
+  KeyIcon,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -817,18 +819,22 @@ Sum: ${stats.sum}`
                   title="Click to sort column"
                 >
                   <div className="flex justify-between items-center w-full">
-                    <span className="font-normal">{col.name}</span>
-
+                    <span className="inline-flex justify-center items-center">
+                    {col.is_primary_key && (
+                      <KeyRound className="h-3 w-3 mr-2" />
+                    )}
+                      <span className="font-semibold">{col.name}</span></span>
+                    <div>
                     {isSorted === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : isSorted === "desc" ? (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
-                    )}
+                    )}</div>
                   </div>
                 </button>
-                <div className="flex items-center gap-1 text-[10px] flex-wrap">
+                <div className="hidden group-hover:flex items-center gap-1 text-[10px] flex-wrap">
                   <span
                     className={`px-1 py-0.5 rounded font-mono ${getTypeBadgeColor(
                       col.type_family,
@@ -2178,7 +2184,7 @@ Sum: ${stats.sum}`
                           return (
                             <th
                               key={header.id}
-                              className="h-12 px-3 py-2 text-left align-top font-normal text-xs text-foreground border-r border-border bg-muted/30 relative group"
+                              className="px-3 py-2 text-left align-top font-normal text-xs text-foreground border-r border-border bg-muted/30 relative group"
                               style={{
                                 width: header.getSize(),
                                 display: "flex",
