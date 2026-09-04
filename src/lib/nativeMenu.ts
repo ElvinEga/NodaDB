@@ -18,6 +18,16 @@ export async function setupNativeMenu(): Promise<void> {
       }),
       await PredefinedMenuItem.new({ item: "Separator", text: "" }),
       await MenuItem.new({
+        id: "preferences",
+        text: "Settings...",
+        accelerator: "Cmd+,",
+        action: async () => {
+          const { openSettingsWindow } = await import("@/lib/windowManager");
+          await openSettingsWindow();
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator", text: "" }),
+      await MenuItem.new({
         id: "quit-nodadb",
         text: "Quit NodaDB",
         accelerator: "Cmd+Q",
