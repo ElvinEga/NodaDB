@@ -47,3 +47,36 @@ export async function openSettingsWindow(tab?: string): Promise<void> {
     resizable: true,
   });
 }
+
+/**
+ * Open the New Database Connection window.
+ */
+export async function openNewConnectionWindow(): Promise<void> {
+  await openSubWindow({
+    label: "connection-editor",
+    title: "New Database Connection",
+    route: "connection",
+    width: 780,
+    height: 720,
+    minWidth: 640,
+    minHeight: 540,
+    resizable: true,
+  });
+}
+
+/**
+ * Open the Edit Database Connection window for a given connection ID.
+ */
+export async function openEditConnectionWindow(connectionId: string): Promise<void> {
+  await openSubWindow({
+    label: "connection-editor",
+    title: "Edit Connection",
+    route: `connection&id=${encodeURIComponent(connectionId)}`,
+    width: 780,
+    height: 720,
+    minWidth: 640,
+    minHeight: 540,
+    resizable: true,
+  });
+}
+
