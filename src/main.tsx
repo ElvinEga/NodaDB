@@ -1,41 +1,50 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { getSubWindowComponent } from "./components/WindowRouter";
 import "./index.css";
 
-// @ts-ignore - __TAURI__ is available in Tauri environment
-async function setupApp() {
-  // Setup native menu only on macOS
-  if (typeof window !== "undefined" && (window as any).__TAURI__) {
-    try {
-      // Detect if running on macOS
-      const isMacOS = navigator.userAgent.includes("Mac");
+const SubWindowComponent = getSubWindowComponent();
 
-      if (isMacOS) {
-        const { setupNativeMenu } = await import("./lib/nativeMenu");
-        const { exit } = await import("@tauri-apps/plugin-process");
-        await setupNativeMenu();
+if (SubWindowComponent) {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <SubWindowComponent />
+    </React.StrictMode>
+  );
+  document.getElementById("loading")?.remove();
+} else {
+  async function setupApp() {
+    // Setup native menu only on macOS
+    if (typeof window !== "undefined" && "__TAURI__" in window) {
+      try {
+        const isMacOS = navigator.userAgent.includes("Mac");
 
-        window.addEventListener("keydown", (event) => {
-          if (event.metaKey && event.key.toLowerCase() === "q") {
-            event.preventDefault();
-            void exit(0);
-          }
-        });
+        if (isMacOS) {
+          const { setupNativeMenu } = await import("./lib/nativeMenu");
+          const { exit } = await import("@tauri-apps/plugin-process");
+          await setupNativeMenu();
+
+          window.addEventListener("keydown", (event) => {
+            if (event.metaKey && event.key.toLowerCase() === "q") {
+              event.preventDefault();
+              void exit(0);
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Failed to setup native menu:", error);
       }
-      // For Linux/Windows, the MenuBar will be rendered in App.tsx
-    } catch (error) {
-      console.error("Failed to setup native menu:", error);
     }
   }
+
+  setupApp();
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+
+  document.getElementById("loading")?.remove();
 }
-
-setupApp();
-
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-document.getElementById("loading")?.remove();
