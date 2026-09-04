@@ -100,6 +100,11 @@ export interface SQLiteBooleanSuggestion {
   sampleSize: number;
 }
 
+export interface SQLiteJsonSuggestion {
+  columnName: string;
+  sampleSize: number;
+}
+
 export interface TableColumn {
   name: string;
   data_type: string;
