@@ -505,7 +505,9 @@ pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -
     .min_inner_size(min_w, min_h)
     .center()
     .resizable(resizable)
-    .fullscreen(false);
+    .fullscreen(false)
+    .background_color(tauri::webview::Color(9, 9, 11, 255))
+    .visible(false);
 
     #[cfg(target_os = "macos")]
     {
@@ -518,12 +520,12 @@ pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -
         .build()
         .map_err(|e| format!("Failed to create window: {}", e))?;
 
-    webview_window
-        .show()
-        .map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window
-        .set_focus()
-        .map_err(|e| format!("Failed to focus window: {}", e))?;
+    // Safety fallback: if frontend doesn't call show() within 800ms, reveal the window
+    let win_clone = webview_window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let _ = win_clone.show();
+    });
 
     Ok(())
 }
