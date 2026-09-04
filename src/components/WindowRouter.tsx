@@ -1,8 +1,10 @@
 import { ComponentType } from "react";
 import { SettingsApp } from "@/components/settings/SettingsApp";
+import { ConnectionApp } from "@/components/connection/ConnectionApp";
 
 export const SUB_WINDOW_REGISTRY: Record<string, ComponentType> = {
   settings: SettingsApp,
+  connection: ConnectionApp,
 };
 
 export function getSubWindowComponent(): ComponentType | null {
