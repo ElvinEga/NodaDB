@@ -53,7 +53,8 @@ import { AgentsPanel } from "@/components/AgentsPanel";
 import { AgentControlCenter } from "@/components/AgentControlCenter";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
-import { SettingsDialog } from "@/components/SettingsDialog";
+import { openSettingsWindow } from "@/lib/windowManager";
+import { useApplyTheme } from "@/hooks/useApplyTheme";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
@@ -91,9 +92,8 @@ function App() {
   );
   const [renameValue, setRenameValue] = useState("");
   const [editConnectionId, setEditConnectionId] = useState<string | null>(null);
-  const { fontFamily, fontSize, colorTheme } = useSettingsStore();
+  useApplyTheme();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -543,7 +543,7 @@ function App() {
       // Cmd+, (mac) / Ctrl+, (win)  →  Settings
       if (modKey && key === ",") {
         e.preventDefault();
-        setSettingsDialogOpen((prev) => !prev);
+        openSettingsWindow();
         return;
       }
       // Cmd+Shift+? (mac) / Ctrl+Shift+? (win)  →  Shortcuts dialog
@@ -676,7 +676,7 @@ function App() {
       macShortcut: ['⌘', ','],
       winShortcut: ['Ctrl', ','],
       category: 'Settings',
-      action: () => setSettingsDialogOpen(true),
+      action: () => openSettingsWindow(),
     },
     {
       id: 'keyboard-shortcuts',
@@ -737,7 +737,7 @@ function App() {
     },
     openVisualQueryBuilder: openQueryBuilderTab,
     openConnectionDialog: () => setConnectionDialogOpen(true),
-    openSettings: () => setSettingsDialogOpen(true),
+    openSettings: () => openSettingsWindow(),
     openAgentsPanel: () => setAgentsPanelOpen(true),
     openAiAssistant: () => setShowAiAssistant((prev) => !prev),
     openHistory: () => setShowHistoryPanel(prev => !prev),
@@ -755,29 +755,6 @@ function App() {
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [activeConnectionId, activeConnection?.db_type, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, handleLaunchAgent]);
-
-  // Apply font family and font size to root element
-  useEffect(() => {
-    const root = window.document.documentElement;
-
-    // Apply font family
-    root.classList.remove("font-outfit", "font-jetbrains-mono", "font-system");
-    root.classList.add(`font-${fontFamily.toLowerCase().replace(/ /g, "-")}`);
-
-    // Apply font size
-    root.classList.remove(
-      "font-size-small",
-      "font-size-medium",
-      "font-size-large",
-    );
-    root.classList.add(`font-size-${fontSize}`);
-  }, [fontFamily, fontSize]);
-
-  // Apply color theme on load and when changed
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", colorTheme);
-  }, [colorTheme]);
-
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       <div className="relative flex min-h-screen w-full overflow-hidden">
@@ -884,7 +861,7 @@ function App() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setSettingsDialogOpen(true)}
+                    onClick={() => openSettingsWindow()}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -1073,7 +1050,7 @@ function App() {
                         setActiveTabId(tabId);
                       }}
                       onOpenSchemaDesigner={openSchemaDesignerTab}
-                      onOpenSettings={() => setSettingsDialogOpen(true)}
+                      onOpenSettings={() => openSettingsWindow("ai")}
                       onClose={() => setShowAiAssistant(false)}
                     />
                   </div>
@@ -1388,11 +1365,6 @@ function App() {
         <KeyboardShortcutsDialog
           open={shortcutsDialogOpen}
           onOpenChange={setShortcutsDialogOpen}
-        />
-        <SettingsDialog
-          open={settingsDialogOpen}
-          onOpenChange={setSettingsDialogOpen}
-          appUpdate={appUpdate}
         />
         <AboutDialog
           open={aboutDialogOpen}

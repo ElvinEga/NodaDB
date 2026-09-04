@@ -36,6 +36,11 @@
         <div id="loading">
             <img src="/logo.png" alt="Loading" />
         </div>
+        <script>
+            if (window.location.search.includes("window=")) {
+                document.getElementById("loading")?.remove();
+            }
+        </script>
         <div id="root"></div>
         <script type="module" src="/src/main.tsx"></script>
     </body>
