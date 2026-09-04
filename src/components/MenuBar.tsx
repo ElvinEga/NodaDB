@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { openNewConnectionWindow } from "@/lib/windowManager";
 
 interface MenuBarProps {
   onOpenAbout: () => void;
@@ -172,7 +173,7 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
       <MenubarMenu>
         <MenubarTrigger className="font-normal">File</MenubarTrigger>
         <MenubarContent className="font-normal">
-          <MenubarItem onSelect={() => invoke("open_connection_dialog")}>
+          <MenubarItem onSelect={() => openNewConnectionWindow()}>
             <Plus className="mr-2 h-4 w-4" />
             New Connection
             <MenubarShortcut>Ctrl+Shift+N</MenubarShortcut>
