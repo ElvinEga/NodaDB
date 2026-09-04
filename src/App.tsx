@@ -45,7 +45,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
@@ -53,11 +52,16 @@ import { AgentsPanel } from "@/components/AgentsPanel";
 import { AgentControlCenter } from "@/components/AgentControlCenter";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
-import { openSettingsWindow } from "@/lib/windowManager";
+import {
+  openSettingsWindow,
+  openNewConnectionWindow,
+  openEditConnectionWindow,
+} from "@/lib/windowManager";
 import { useApplyTheme } from "@/hooks/useApplyTheme";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
+import { listen } from "@tauri-apps/api/event";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
@@ -83,7 +87,6 @@ import { OPEN_ABOUT_EVENT } from "@/lib/appEvents";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 function App() {
-  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(
     null,
   );
@@ -91,7 +94,6 @@ function App() {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
-  const [editConnectionId, setEditConnectionId] = useState<string | null>(null);
   useApplyTheme();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
@@ -162,10 +164,6 @@ function App() {
     ...connections.filter((c) => !pinnedConnectionIds.includes(c.id)),
   ];
 
-  const editConnection = editConnectionId
-    ? connections.find((c) => c.id === editConnectionId)
-    : undefined;
-
   const handleDuplicateConnection = (conn: ConnectionConfig) => {
     const duplicate: ConnectionConfig = {
       ...conn,
@@ -213,6 +211,40 @@ function App() {
       window.removeEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
     };
   }, []);
+
+  // Listen for connection events from connection sub-windows
+  useEffect(() => {
+    let unlistenActivated: (() => void) | undefined;
+    let unlistenChanged: (() => void) | undefined;
+
+    listen<{ connectionId: string }>("nodadb:connection-activated", (event) => {
+      try {
+        useConnectionStore.persist.rehydrate();
+      } catch (e) {
+        console.warn("Could not rehydrate connection store:", e);
+      }
+      if (event.payload?.connectionId) {
+        setActiveConnection(event.payload.connectionId);
+      }
+    }).then((fn) => {
+      unlistenActivated = fn;
+    });
+
+    listen("nodadb:connections-changed", () => {
+      try {
+        useConnectionStore.persist.rehydrate();
+      } catch (e) {
+        console.warn("Could not rehydrate connection store:", e);
+      }
+    }).then((fn) => {
+      unlistenChanged = fn;
+    });
+
+    return () => {
+      if (unlistenActivated) unlistenActivated();
+      if (unlistenChanged) unlistenChanged();
+    };
+  }, [setActiveConnection]);
 
   useEffect(() => {
     if (!autoCheckForUpdates) {
@@ -581,7 +613,7 @@ function App() {
       macShortcut: undefined,
       winShortcut: undefined,
       category: 'Connections',
-      action: () => setConnectionDialogOpen(true),
+      action: () => openNewConnectionWindow(),
     },
     {
       id: 'switch-connection',
@@ -736,7 +768,7 @@ function App() {
       setActiveTabId(tabId);
     },
     openVisualQueryBuilder: openQueryBuilderTab,
-    openConnectionDialog: () => setConnectionDialogOpen(true),
+    openConnectionDialog: () => openNewConnectionWindow(),
     openSettings: () => openSettingsWindow(),
     openAgentsPanel: () => setAgentsPanelOpen(true),
     openAiAssistant: () => setShowAiAssistant((prev) => !prev),
@@ -1164,7 +1196,7 @@ function App() {
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditConnectionId(conn.id);
+                              openEditConnectionWindow(conn.id);
                             }}
                           >
                             <Edit className="h-4 w-4 mr-2" />
@@ -1217,7 +1249,7 @@ function App() {
 
                   {/* Add New Connection Card */}
                   <button
-                    onClick={() => setConnectionDialogOpen(true)}
+                    onClick={() => openNewConnectionWindow()}
                     className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
                   >
                     <div className="flex items-center gap-4">
@@ -1249,7 +1281,7 @@ function App() {
               <p className="text-muted-foreground mb-8 text-lg">
                 A modern, professional database management tool built with Tauri
               </p>
-              <Button onClick={() => setConnectionDialogOpen(true)} size="lg">
+              <Button onClick={() => openNewConnectionWindow()} size="lg">
                 <Plus className="h-5 w-5 mr-2" />
                 Create Your First Connection
               </Button>
@@ -1353,15 +1385,6 @@ function App() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <ConnectionDialog
-          open={connectionDialogOpen}
-          onOpenChange={setConnectionDialogOpen}
-        />
-        <ConnectionDialog
-          open={editConnectionId !== null}
-          onOpenChange={(open) => !open && setEditConnectionId(null)}
-          editConnection={editConnection}
-        />
         <KeyboardShortcutsDialog
           open={shortcutsDialogOpen}
           onOpenChange={setShortcutsDialogOpen}
