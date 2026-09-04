@@ -2,7 +2,10 @@ pub mod types;
 
 use crate::models::{AppliedMigration, ColumnTypeFamily, ConnectionConfig, ConnectionTestResult, DatabaseTable, DatabaseType, ExecutionPlan, ForeignKeyDefinition, MariaDBAuthMethod, PlanStep, PostgresConnectionInfo, PostgresExtension, PostgresTablePrivileges, QueryResult, TableColumn, TableConstraint, TableIndex, RelationMatch};
 use crate::ssh_tunnel::SshTunnel;
-use self::types::{classify_mysql_type, classify_postgres_type, classify_sqlite_type, normalize_type_name};
+use self::types::{
+    classify_mysql_type, classify_postgres_type, classify_sqlite_type,
+    extract_sqlite_check_constraints, extract_sqlite_json_columns_from_ddl, normalize_type_name,
+};
 use anyhow::{anyhow, Result};
 use base64::Engine;
 use sqlx::{Row, TypeInfo, Column};
@@ -1916,6 +1919,20 @@ impl ConnectionManager {
 
         let columns = match pool {
             DatabasePool::Sqlite(pool) => {
+                let create_sql: Option<String> = sqlx::query_scalar(
+                    "SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?"
+                )
+                .bind(table_name)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
+
+                let json_columns = create_sql
+                    .as_deref()
+                    .map(extract_sqlite_json_columns_from_ddl)
+                    .unwrap_or_default();
+
                 let rows = sqlx::query(&query).fetch_all(pool).await?;
                 rows.into_iter()
                     .map(|row| {
@@ -1924,7 +1941,18 @@ impl ConnectionManager {
                         let not_null: i64 = row.try_get(3).unwrap_or(0);
                         let default_value: Option<String> = row.try_get(4).ok();
                         let is_pk: i64 = row.try_get(5).unwrap_or(0);
-                        let family = classify_sqlite_type(&data_type);
+                        let mut family = classify_sqlite_type(&data_type);
+
+                        let has_json_check = json_columns.contains(&name.to_lowercase());
+                        if has_json_check && family != ColumnTypeFamily::Json {
+                            family = ColumnTypeFamily::Json;
+                        }
+
+                        let generation_expression = if has_json_check {
+                            Some(format!("CHECK(json_valid({}))", name))
+                        } else {
+                            None
+                        };
 
                         TableColumn {
                             name,
@@ -1941,7 +1969,7 @@ impl ConnectionManager {
                             enum_values: None,
                             identity_kind: None,
                             generated_kind: None,
-                            generation_expression: None,
+                            generation_expression,
                             column_comment: None,
                             collation_name: None,
                             domain_name: None,
@@ -2197,6 +2225,16 @@ impl ConnectionManager {
                 columns
             }
             DatabasePool::LibSQL { client, url, token } => {
+                let ddl_query = format!("SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name = '{}'", table_name.replace('\'', "''"));
+                let ddl_res = Self::libsql_http_pipeline(client, url, token, &ddl_query).await.ok();
+                let create_sql = ddl_res
+                    .and_then(|r| r.rows.into_iter().next())
+                    .and_then(|row| row.as_object().and_then(|obj| obj.get("sql").and_then(|s| s.as_str()).map(|s| s.to_string())));
+                let json_columns = create_sql
+                    .as_deref()
+                    .map(extract_sqlite_json_columns_from_ddl)
+                    .unwrap_or_default();
+
                 let res = Self::libsql_http_pipeline(client, url, token, &query).await?;
                 let mut columns = Vec::new();
                 for row in res.rows {
@@ -2207,7 +2245,18 @@ impl ConnectionManager {
                         let default_value = obj.get("dflt_value").and_then(|v| v.as_str()).map(|s| s.to_string());
                         let is_pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
                         let normalized_type = normalize_type_name(&data_type);
-                        let type_family = classify_sqlite_type(&data_type);
+                        let mut type_family = classify_sqlite_type(&data_type);
+
+                        let has_json_check = json_columns.contains(&name.to_lowercase());
+                        if has_json_check && type_family != ColumnTypeFamily::Json {
+                            type_family = ColumnTypeFamily::Json;
+                        }
+
+                        let generation_expression = if has_json_check {
+                            Some(format!("CHECK(json_valid({}))", name))
+                        } else {
+                            None
+                        };
 
                         columns.push(TableColumn {
                             name,
@@ -2224,7 +2273,7 @@ impl ConnectionManager {
                             enum_values: None,
                             identity_kind: None,
                             generated_kind: None,
-                            generation_expression: None,
+                            generation_expression,
                             column_comment: None,
                             collation_name: None,
                             domain_name: None,
@@ -2238,6 +2287,16 @@ impl ConnectionManager {
                 columns
             }
             DatabasePool::CloudflareD1 { client, account_id, database_id, api_token } => {
+                let ddl_query = format!("SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name = '{}'", table_name.replace('\'', "''"));
+                let ddl_res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &ddl_query).await.ok();
+                let create_sql = ddl_res
+                    .and_then(|r| r.rows.into_iter().next())
+                    .and_then(|row| row.as_object().and_then(|obj| obj.get("sql").and_then(|s| s.as_str()).map(|s| s.to_string())));
+                let json_columns = create_sql
+                    .as_deref()
+                    .map(extract_sqlite_json_columns_from_ddl)
+                    .unwrap_or_default();
+
                 let res = Self::cloudflare_d1_query(client, account_id, database_id, api_token, &query).await?;
                 let mut columns = Vec::new();
                 for row in res.rows {
@@ -2248,7 +2307,18 @@ impl ConnectionManager {
                         let default_value = obj.get("dflt_value").and_then(|v| v.as_str()).map(|s| s.to_string());
                         let is_pk = obj.get("pk").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
                         let normalized_type = normalize_type_name(&data_type);
-                        let type_family = classify_sqlite_type(&data_type);
+                        let mut type_family = classify_sqlite_type(&data_type);
+
+                        let has_json_check = json_columns.contains(&name.to_lowercase());
+                        if has_json_check && type_family != ColumnTypeFamily::Json {
+                            type_family = ColumnTypeFamily::Json;
+                        }
+
+                        let generation_expression = if has_json_check {
+                            Some(format!("CHECK(json_valid({}))", name))
+                        } else {
+                            None
+                        };
 
                         columns.push(TableColumn {
                             name,
@@ -2265,7 +2335,7 @@ impl ConnectionManager {
                             enum_values: None,
                             identity_kind: None,
                             generated_kind: None,
-                            generation_expression: None,
+                            generation_expression,
                             column_comment: None,
                             collation_name: None,
                             domain_name: None,
@@ -3042,9 +3112,18 @@ impl ConnectionManager {
 
         let mut column_defs: Vec<String> = Vec::new();
         let mut primary_keys: Vec<String> = Vec::new();
+        let is_sqlite_like = matches!(
+            pool,
+            DatabasePool::Sqlite(_) | DatabasePool::LibSQL { .. } | DatabasePool::CloudflareD1 { .. }
+        );
 
         for (name, data_type, nullable, is_pk) in columns {
-            let mut col_def = format!("{} {}", name, data_type);
+            let upper_type = data_type.trim().to_uppercase();
+            let mut col_def = if is_sqlite_like && (upper_type == "JSON" || upper_type == "JSONB") {
+                format!("{} JSON CHECK (json_valid({}))", name, name)
+            } else {
+                format!("{} {}", name, data_type)
+            };
             
             if !nullable {
                 col_def.push_str(" NOT NULL");
@@ -3350,7 +3429,7 @@ impl ConnectionManager {
                     grouped.entry(id).or_default().push(row);
                 }
 
-                grouped
+                let mut all_constraints: Vec<TableConstraint> = grouped
                     .into_iter()
                     .map(|(id, rows)| {
                         let first = &rows[0];
@@ -3384,7 +3463,22 @@ impl ConnectionManager {
                             initially_deferred: None,
                         }
                     })
-                    .collect()
+                    .collect();
+
+                let create_sql: Option<String> = sqlx::query_scalar(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?"
+                )
+                .bind(table_name)
+                .fetch_optional(pool)
+                .await
+                .ok()
+                .flatten();
+
+                if let Some(ddl) = create_sql {
+                    all_constraints.extend(extract_sqlite_check_constraints(table_name, &ddl));
+                }
+
+                all_constraints
             }
             DatabasePool::Postgres(pool) => {
                 let query = r#"
