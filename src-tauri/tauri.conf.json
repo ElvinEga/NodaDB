@@ -30,7 +30,7 @@
         {
           "identifier": "main-capability",
           "description": "Main window capabilities",
-          "windows": ["main"],
+          "windows": ["*"],
           "permissions": [
             "core:default",
             "core:window:allow-set-background-color",
