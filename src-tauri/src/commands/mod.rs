@@ -529,6 +529,16 @@ pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -
 }
 
 #[tauri::command]
+pub async fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.unminimize();
+        let _ = main_win.show();
+        let _ = main_win.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn save_export_file(path: String, bytes: Vec<u8>) -> Result<String, String> {
     std::fs::write(&path, bytes)
         .map_err(|e| format!("Failed to save export file: {}", e))?;
