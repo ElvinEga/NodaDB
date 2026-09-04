@@ -1101,7 +1101,15 @@ impl ConnectionManager {
                     "postgresql://{}:{}@{}:{}/{}{}",
                     username, password, actual_host, actual_port, database, ssl_mode
                 );
-                let pool = sqlx::PgPool::connect(&connection_string).await?;
+                let pool = if ssh_tunnel.is_some() {
+                    sqlx::postgres::PgPoolOptions::new()
+                        .max_connections(1)
+                        .acquire_timeout(std::time::Duration::from_secs(30))
+                        .connect(&connection_string)
+                        .await?
+                } else {
+                    sqlx::PgPool::connect(&connection_string).await?
+                };
                 DatabasePool::Postgres(pool)
             }
             DatabaseType::MySQL => {
@@ -1129,7 +1137,15 @@ impl ConnectionManager {
                     "mysql://{}:{}@{}:{}/{}{}",
                     username, encoded_pw, actual_host, actual_port, database, ssl_suffix
                 );
-                let pool = sqlx::MySqlPool::connect(&connection_string).await?;
+                let pool = if ssh_tunnel.is_some() {
+                    sqlx::mysql::MySqlPoolOptions::new()
+                        .max_connections(1)
+                        .acquire_timeout(std::time::Duration::from_secs(30))
+                        .connect(&connection_string)
+                        .await?
+                } else {
+                    sqlx::MySqlPool::connect(&connection_string).await?
+                };
                 DatabasePool::MySql(pool)
             }
             DatabaseType::MongoDB => {
@@ -1379,7 +1395,17 @@ impl ConnectionManager {
                     username, password, actual_host, actual_port, database, ssl_mode
                 );
 
-                match sqlx::PgPool::connect(&connection_string).await {
+                let pool_res = if _ssh_tunnel.is_some() {
+                    sqlx::postgres::PgPoolOptions::new()
+                        .max_connections(1)
+                        .acquire_timeout(std::time::Duration::from_secs(30))
+                        .connect(&connection_string)
+                        .await
+                } else {
+                    sqlx::PgPool::connect(&connection_string).await
+                };
+
+                match pool_res {
                     Ok(pool) => {
                         let version_query = "SELECT version()";
                         let row = sqlx::query(version_query).fetch_one(&pool).await?;
@@ -1433,7 +1459,17 @@ impl ConnectionManager {
                     username, encoded_pw, actual_host, actual_port, database, ssl_suffix
                 );
 
-                match sqlx::MySqlPool::connect(&connection_string).await {
+                let pool_res = if _ssh_tunnel.is_some() {
+                    sqlx::mysql::MySqlPoolOptions::new()
+                        .max_connections(1)
+                        .acquire_timeout(std::time::Duration::from_secs(30))
+                        .connect(&connection_string)
+                        .await
+                } else {
+                    sqlx::MySqlPool::connect(&connection_string).await
+                };
+
+                match pool_res {
                     Ok(pool) => {
                         let version_query = "SELECT VERSION()";
                         let row = sqlx::query(version_query).fetch_one(&pool).await?;
