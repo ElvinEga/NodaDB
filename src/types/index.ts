@@ -25,18 +25,22 @@ export type ColumnTypeFamily =
   | 'custom'
   | 'unknown';
 
-export type SSHAuthMethod = 'password' | 'privateKey';
+export type SSHAuthMethod = 'password' | 'privateKey' | 'privatekey';
 
 export interface SSHConfig {
   enabled: boolean;
   host: string;
   port: number;
   username: string;
-  authMethod: SSHAuthMethod;
+  authMethod?: SSHAuthMethod;
+  auth_method?: SSHAuthMethod;
   privateKeyPath?: string;
+  private_key_path?: string;
   password?: string;
   localPort?: number;
+  local_port?: number;
 }
+
 
 export interface ConnectionConfig {
   id: string;
