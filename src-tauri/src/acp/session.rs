@@ -134,7 +134,7 @@ impl AcpHostManager {
                 protocol_version: "2025-08-01".into(),
                 client_info: AcpClientInfo {
                     name: "NodaDB".into(),
-                    version: "0.3.11".into(),
+                    version: "0.3.12".into(),
                 },
                 capabilities: AcpClientCapabilities {
                     database: true,
