@@ -1,4 +1,4 @@
-import { ReactNode, useCallback } from "react";
+import { ReactNode, useCallback, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
 import { WindowControls } from "@/components/ui/WindowControls";
@@ -21,6 +21,30 @@ export function SubWindowFrame({
   closeOnly = true,
   className,
 }: SubWindowFrameProps) {
+  // Gracefully reveal window once the component has rendered and painted
+  useEffect(() => {
+    let cancelled = false;
+    let raf2: number | undefined;
+
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(async () => {
+        if (cancelled) return;
+        try {
+          const win = getCurrentWindow();
+          await win.show();
+          await win.setFocus();
+        } catch (err) {
+          console.error("Failed to show sub-window:", err);
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, []);
   const handleHeaderDoubleClick = useCallback(async (e: React.MouseEvent) => {
     // Only toggle maximize if double-clicking the drag region itself, not interactive elements
     if ((e.target as HTMLElement).closest("button, input, select, [role='tab']")) {
