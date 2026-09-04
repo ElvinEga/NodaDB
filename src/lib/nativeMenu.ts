@@ -46,7 +46,8 @@ export async function setupNativeMenu(): Promise<void> {
         id: "new-connection",
         text: "New Connection",
         action: async () => {
-          await invoke("open_connection_dialog");
+          const { openNewConnectionWindow } = await import("@/lib/windowManager");
+          await openNewConnectionWindow();
         },
       }),
       await MenuItem.new({
