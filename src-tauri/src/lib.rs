@@ -57,6 +57,7 @@ pub fn run() {
             commands::get_postgres_table_privileges,
             commands::create_new_window,
             commands::create_window_from_label,
+            commands::open_sub_window,
             commands::save_export_file,
             commands::create_export_archive,
             commands::trace_id_relations,
