@@ -128,6 +128,7 @@ import {
   TableColumn,
   QueryResult,
   SQLiteBooleanSuggestion,
+  SQLiteJsonSuggestion,
   TabFilter,
 } from "@/types";
 import { toast } from "sonner";
@@ -197,6 +198,7 @@ export function TanStackTableViewer({
   const defaultPageSize = useSettingsStore((state) => state.rowsPerPage);
   const overrides = useColumnDisplayStore((state) => state.overrides);
   const setColumnOverride = useColumnDisplayStore((state) => state.setOverride);
+  const clearOverride = useColumnDisplayStore((state) => state.clearOverride);
 
   const [data, setData] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -216,6 +218,9 @@ export function TanStackTableViewer({
   const [rowCount, setRowCount] = useState(0);
   const [booleanSuggestions, setBooleanSuggestions] = useState<
     Record<string, SQLiteBooleanSuggestion>
+  >({});
+  const [jsonSuggestions, setJsonSuggestions] = useState<
+    Record<string, SQLiteJsonSuggestion>
   >({});
   const [dismissedSuggestions, setDismissedSuggestions] = useState<
     Record<string, true>
@@ -367,18 +372,33 @@ export function TanStackTableViewer({
   useEffect(() => {
     if (connection.db_type !== "sqlite") {
       setBooleanSuggestions({});
+      setJsonSuggestions({});
       return;
     }
 
-    const candidateColumns = tableColumns.filter((column) => {
+    const candidateBooleanColumns = tableColumns.filter((column) => {
       const hasOverride =
         overrides[`${connection.id}::${tableRef}::${column.name}`] !==
         undefined;
       return column.type_family === "integer" && !hasOverride;
     });
 
-    if (candidateColumns.length === 0) {
+    const candidateJsonColumns = tableColumns.filter((column) => {
+      const hasOverride =
+        overrides[`${connection.id}::${tableRef}::${column.name}`] !==
+        undefined;
+      return (
+        (column.type_family === "text" || column.type_family === "unknown") &&
+        !hasOverride
+      );
+    });
+
+    if (
+      candidateBooleanColumns.length === 0 &&
+      candidateJsonColumns.length === 0
+    ) {
       setBooleanSuggestions({});
+      setJsonSuggestions({});
       return;
     }
 
@@ -391,49 +411,105 @@ export function TanStackTableViewer({
           table.schema,
           connection.db_type,
         );
-        const results = await Promise.all(
-          candidateColumns.map(async (column) => {
-            const columnRef = quoteIdentifier(column.name, connection.db_type);
-            const query = `SELECT ${columnRef} FROM ${qualifiedTable} WHERE ${columnRef} IS NOT NULL LIMIT 200`;
-            const result = await invoke<QueryResult>("execute_query", {
-              connectionId: connection.id,
-              query,
-            });
-            const values = result.rows.map((row) => row[column.name]);
-            const hasRows = values.length > 0;
-            const isCandidate =
-              hasRows &&
-              values.every(
-                (value) =>
-                  value === 0 ||
-                  value === 1 ||
-                  value === "0" ||
-                  value === "1" ||
-                  value === null ||
-                  value === undefined,
-              );
 
-            return isCandidate
-              ? [
-                  column.name,
-                  { columnName: column.name, sampleSize: values.length },
-                ]
-              : null;
-          }),
-        );
+        const booleanPromises = candidateBooleanColumns.map(async (column) => {
+          const columnRef = quoteIdentifier(column.name, connection.db_type);
+          const query = `SELECT ${columnRef} FROM ${qualifiedTable} WHERE ${columnRef} IS NOT NULL LIMIT 200`;
+          const result = await invoke<QueryResult>("execute_query", {
+            connectionId: connection.id,
+            query,
+          });
+          const values = result.rows.map((row) => row[column.name]);
+          const hasRows = values.length > 0;
+          const isCandidate =
+            hasRows &&
+            values.every(
+              (value) =>
+                value === 0 ||
+                value === 1 ||
+                value === "0" ||
+                value === "1" ||
+                value === null ||
+                value === undefined,
+            );
+
+          return isCandidate
+            ? [
+                column.name,
+                { columnName: column.name, sampleSize: values.length },
+              ]
+            : null;
+        });
+
+        const jsonPromises = candidateJsonColumns.map(async (column) => {
+          const columnRef = quoteIdentifier(column.name, connection.db_type);
+          const query = `SELECT ${columnRef} FROM ${qualifiedTable} WHERE ${columnRef} IS NOT NULL LIMIT 50`;
+          const result = await invoke<QueryResult>("execute_query", {
+            connectionId: connection.id,
+            query,
+          });
+          const values = result.rows.map((row) => row[column.name]);
+          const hasRows = values.length > 0;
+          const isCandidate =
+            hasRows &&
+            values.some(
+              (val) =>
+                val !== null && val !== undefined && String(val).trim() !== "",
+            ) &&
+            values.every((val) => {
+              if (val === null || val === undefined) return true;
+              if (typeof val === "object") return true;
+              if (typeof val !== "string") return false;
+              const trimmed = val.trim();
+              if (trimmed === "") return true;
+              if (
+                (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                (trimmed.startsWith("[") && trimmed.endsWith("]"))
+              ) {
+                try {
+                  JSON.parse(trimmed);
+                  return true;
+                } catch {
+                  return false;
+                }
+              }
+              return false;
+            });
+
+          return isCandidate
+            ? [
+                column.name,
+                { columnName: column.name, sampleSize: values.length },
+              ]
+            : null;
+        });
+
+        const [booleanResults, jsonResults] = await Promise.all([
+          Promise.all(booleanPromises),
+          Promise.all(jsonPromises),
+        ]);
 
         if (isCancelled) return;
 
         setBooleanSuggestions(
           Object.fromEntries(
-            results.filter(
+            booleanResults.filter(
               (entry): entry is [string, SQLiteBooleanSuggestion] =>
                 entry !== null,
             ),
           ),
         );
+
+        setJsonSuggestions(
+          Object.fromEntries(
+            jsonResults.filter(
+              (entry): entry is [string, SQLiteJsonSuggestion] =>
+                entry !== null,
+            ),
+          ),
+        );
       } catch (error) {
-        console.error("Failed to detect SQLite boolean suggestions:", error);
+        console.error("Failed to detect SQLite suggestions:", error);
       }
     };
 
@@ -798,6 +874,20 @@ Sum: ${stats.sum}`
               isNullable={col.is_nullable}
               isSorted={isSorted}
               data={data}
+              currentTypeFamily={col.type_family}
+              onSetTypeFamily={(newTypeFamily) => {
+                if (!newTypeFamily) {
+                  clearOverride(connection.id, tableRef, col.name);
+                } else {
+                  setColumnOverride({
+                    connectionId: connection.id,
+                    tableName: tableRef,
+                    columnName: col.name,
+                    typeFamily: newTypeFamily,
+                    source: "manual",
+                  });
+                }
+              }}
               onSort={(ascending) => column.toggleSorting(!ascending)}
               onClearSort={() => column.clearSorting()}
               onHide={() => column.toggleVisibility(false)}
@@ -880,12 +970,54 @@ Sum: ${stats.sum}`
                         </button>
                       </>
                     )}
-                  {col.type_family === "boolean" &&
-                    col.data_type.toUpperCase().includes("INT") && (
-                      <span className="px-1 py-0.5 rounded font-mono bg-amber-500/10 text-amber-600">
-                        OVERRIDE
-                      </span>
+                  {jsonSuggestions[col.name] &&
+                    !dismissedSuggestions[col.name] && (
+                      <>
+                        <button
+                          type="button"
+                          className="rounded bg-cyan-500/10 px-1 py-0.5 font-mono text-cyan-500 hover:bg-cyan-500/20"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setColumnOverride({
+                              connectionId: connection.id,
+                              tableName: tableRef,
+                              columnName: col.name,
+                              typeFamily: "json",
+                              source: "suggested",
+                            });
+                            setDismissedSuggestions((prev) => ({
+                              ...prev,
+                              [col.name]: true,
+                            }));
+                          }}
+                        >
+                          Treat as JSON?
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded bg-secondary px-1 py-0.5 font-mono text-muted-foreground hover:bg-muted"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDismissedSuggestions((prev) => ({
+                              ...prev,
+                              [col.name]: true,
+                            }));
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </>
                     )}
+                  {((col.type_family === "boolean" &&
+                    col.data_type.toUpperCase().includes("INT")) ||
+                    (col.type_family === "json" &&
+                      (col.data_type.toUpperCase().includes("TEXT") ||
+                        col.data_type.toUpperCase().includes("CHAR") ||
+                        col.data_type.toUpperCase().includes("CLOB")))) && (
+                    <span className="px-1 py-0.5 rounded font-mono bg-amber-500/10 text-amber-600">
+                      OVERRIDE
+                    </span>
+                  )}
                   {col.is_primary_key && (
                     <span className="px-1 py-0.5 rounded font-mono bg-primary/10 text-primary">
                       PK
