@@ -40,7 +40,7 @@ export function SubWindowFrame({
         onDoubleClick={handleHeaderDoubleClick}
         className={cn(
           "flex h-11 shrink-0 items-center border-b border-border/60 bg-card/60 backdrop-blur-md",
-          IS_MAC ? "pl-20 pr-3" : "pl-4 pr-0"
+          IS_MAC ? "pl-28 pr-3" : "pl-4 pr-0"
         )}
       >
         {title && !headerContent && (
