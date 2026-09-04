@@ -13,7 +13,7 @@ use crate::models::{
 };
 use chrono::Utc;
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[tauri::command]
 pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult, String> {
@@ -454,6 +454,69 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     .visible(true)
     .build()
     .map_err(|e| format!("Failed to create window {}: {}", label, e))?;
+
+    webview_window
+        .show()
+        .map_err(|e| format!("Failed to show window: {}", e))?;
+    webview_window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus window: {}", e))?;
+
+    Ok(())
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SubWindowOptions {
+    pub label: String,
+    pub title: String,
+    pub route: String,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+    pub min_width: Option<f64>,
+    pub min_height: Option<f64>,
+    pub resizable: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(&options.label) {
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        let _ = existing.emit("navigate-sub-window", &options.route);
+        return Ok(());
+    }
+
+    let url = format!("index.html?window={}", options.route);
+    let width = options.width.unwrap_or(920.0);
+    let height = options.height.unwrap_or(660.0);
+    let min_w = options.min_width.unwrap_or(700.0);
+    let min_h = options.min_height.unwrap_or(500.0);
+    let resizable = options.resizable.unwrap_or(true);
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        options.label,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title(&options.title)
+    .inner_size(width, height)
+    .min_inner_size(min_w, min_h)
+    .center()
+    .resizable(resizable)
+    .fullscreen(false);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let webview_window = builder
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
 
     webview_window
         .show()
