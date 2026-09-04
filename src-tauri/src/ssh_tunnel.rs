@@ -129,15 +129,21 @@ fn handle_tunnel_connection(
     let sess = sess.lock()
         .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
 
+    // Ensure session is in blocking mode when opening the channel
+    sess.set_blocking(true);
+
     let mut channel = sess.channel_direct_tcpip(remote_host, remote_port, None)
         .map_err(|e| anyhow!("Failed to create SSH channel: {}", e))?;
 
-    // Forward data between local stream and SSH channel
-    let mut local_buf = [0u8; 8192];
-    let mut remote_buf = [0u8; 8192];
+    // Enable non-blocking on the SSH session so channel.read does not hang when remote is idle
+    sess.set_blocking(false);
 
+    let _ = local_stream.set_nodelay(true);
     local_stream.set_nonblocking(true)
         .map_err(|e| anyhow!("Failed to set non-blocking: {}", e))?;
+
+    let mut local_buf = [0u8; 16384];
+    let mut remote_buf = [0u8; 16384];
 
     loop {
         // Check if we should stop
@@ -147,12 +153,30 @@ fn handle_tunnel_connection(
             }
         }
 
+        let mut had_activity = false;
+
         // Forward from local to remote
         match local_stream.read(&mut local_buf) {
             Ok(0) => break, // Connection closed
             Ok(n) => {
-                channel.write_all(&local_buf[..n])
-                    .map_err(|e| anyhow!("Failed to write to channel: {}", e))?;
+                had_activity = true;
+                let mut written = 0;
+                while written < n {
+                    match channel.write(&local_buf[written..n]) {
+                        Ok(0) => return Err(anyhow!("Connection closed while writing to channel")),
+                        Ok(w) => written += w,
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if let Ok(r) = running.lock() {
+                                if !*r {
+                                    return Ok(());
+                                }
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(2));
+                        }
+                        Err(e) => return Err(anyhow!("Failed to write to channel: {}", e)),
+                    }
+                }
+                let _ = channel.flush();
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => return Err(anyhow!("Failed to read from local: {}", e)),
@@ -162,15 +186,34 @@ fn handle_tunnel_connection(
         match channel.read(&mut remote_buf) {
             Ok(0) => break, // Connection closed
             Ok(n) => {
-                local_stream.write_all(&remote_buf[..n])
-                    .map_err(|e| anyhow!("Failed to write to local: {}", e))?;
+                had_activity = true;
+                let mut written = 0;
+                while written < n {
+                    match local_stream.write(&remote_buf[written..n]) {
+                        Ok(0) => return Err(anyhow!("Connection closed while writing to local")),
+                        Ok(w) => written += w,
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if let Ok(r) = running.lock() {
+                                if !*r {
+                                    return Ok(());
+                                }
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(2));
+                        }
+                        Err(e) => return Err(anyhow!("Failed to write to local: {}", e)),
+                    }
+                }
+                let _ = local_stream.flush();
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => return Err(anyhow!("Failed to read from channel: {}", e)),
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        if !had_activity {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
     }
 
+    sess.set_blocking(true);
     Ok(())
 }
