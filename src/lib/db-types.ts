@@ -9,7 +9,33 @@ export function resolveEffectiveTypeFamily(
   column: TableColumn,
   override?: ColumnDisplayOverride | null,
 ): ColumnTypeFamily {
-  return override?.typeFamily ?? column.type_family;
+  if (override?.typeFamily) {
+    return override.typeFamily;
+  }
+
+  if (column.type_family === "json") {
+    return "json";
+  }
+
+  const normalizedType = (column.data_type || column.raw_type || "")
+    .trim()
+    .toLowerCase();
+  if (
+    normalizedType === "json" ||
+    normalizedType === "jsonb" ||
+    normalizedType.includes("json")
+  ) {
+    return "json";
+  }
+
+  if (
+    column.generation_expression &&
+    /json_valid|json_type/i.test(column.generation_expression)
+  ) {
+    return "json";
+  }
+
+  return column.type_family;
 }
 
 export function withEffectiveTypeFamily(
