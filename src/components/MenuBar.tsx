@@ -43,7 +43,7 @@ import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { openNewConnectionWindow } from "@/lib/windowManager";
+import { openNewConnectionWindow, openNewWorkspaceWindow } from "@/lib/windowManager";
 
 interface MenuBarProps {
   onOpenAbout: () => void;
@@ -67,7 +67,7 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
 
   const handleNewWindow = React.useCallback(async () => {
     try {
-      await invoke("create_new_window");
+      await openNewWorkspaceWindow();
       toast.success("New window opened");
     } catch (error) {
       console.log("Creating new window via command:", error);
