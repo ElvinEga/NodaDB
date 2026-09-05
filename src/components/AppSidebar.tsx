@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { DbIcon } from "@/components/DbIcon";
 import {
@@ -14,6 +15,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { openNewWorkspaceWindow } from "@/lib/windowManager";
 import { DatabaseExplorer } from "@/components/DatabaseExplorer";
 import { ConnectionConfig, DatabaseTable } from "@/types";
 
@@ -44,6 +56,8 @@ export function AppSidebar({
   onNewQuery,
   onOpenQueryBuilder,
 }: AppSidebarProps) {
+  const [targetRecentConnection, setTargetRecentConnection] = useState<ConnectionConfig | null>(null);
+
   return (
     <Sidebar collapsible="offcanvas" variant="inset">
       <SidebarHeader data-tauri-drag-region className="p-0 pl-20">
@@ -71,9 +85,7 @@ export function AppSidebar({
                   <DropdownMenuItem
                     key={conn.id}
                     onClick={() => {
-                      if (!isActive) {
-                        onConnectToConnection(conn);
-                      }
+                      setTargetRecentConnection(conn);
                     }}
                     className={`items-start py-2 cursor-pointer ${isActive ? 'bg-primary/20' : ''}`}
                   >
@@ -88,7 +100,7 @@ export function AppSidebar({
                           </span>
                         </div>
                       </div>
-                        {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                      {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                     </div>
                   </DropdownMenuItem>
                 );
@@ -123,6 +135,61 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarRail />
+
+      <AlertDialog
+        open={Boolean(targetRecentConnection)}
+        onOpenChange={(open) => !open && setTargetRecentConnection(null)}
+      >
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              {targetRecentConnection && (
+                <DbIcon
+                  dbType={targetRecentConnection.db_type}
+                  provider={targetRecentConnection.provider}
+                  className="h-5 w-5 shrink-0"
+                />
+              )}
+              <AlertDialogTitle>Open Connection</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription>
+              How would you like to open{" "}
+              <span className="font-semibold text-foreground">
+                {targetRecentConnection?.name}
+              </span>
+              ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-1.5 sm:justify-end">
+            <AlertDialogCancel onClick={() => setTargetRecentConnection(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (targetRecentConnection) {
+                  const conn = targetRecentConnection;
+                  setTargetRecentConnection(null);
+                  onConnectToConnection(conn);
+                }
+              }}
+            >
+              In This Window
+            </Button>
+            <Button
+              onClick={async () => {
+                if (targetRecentConnection) {
+                  const conn = targetRecentConnection;
+                  setTargetRecentConnection(null);
+                  await openNewWorkspaceWindow(conn.id);
+                }
+              }}
+            >
+              In New Window
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   );
 }
