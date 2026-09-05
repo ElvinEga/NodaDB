@@ -1,5 +1,5 @@
 import { DbIcon } from "@/components/DbIcon";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Database,
   Plus,
@@ -24,7 +24,9 @@ import {
   LayoutGrid,
   Bot,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -56,6 +58,7 @@ import {
   openSettingsWindow,
   openNewConnectionWindow,
   openEditConnectionWindow,
+  openNewWorkspaceWindow,
 } from "@/lib/windowManager";
 import { useApplyTheme } from "@/hooks/useApplyTheme";
 import { AboutDialog } from "@/components/AboutDialog";
@@ -201,6 +204,31 @@ function App() {
     setActiveTabId(null);
   }, [activeConnectionId]);
 
+  // Gracefully reveal workspace window once initial render is painted (avoids white flash)
+  useEffect(() => {
+    let cancelled = false;
+    let raf2: number | undefined;
+
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(async () => {
+        if (cancelled) return;
+        try {
+          const win = getCurrentWindow();
+          await win.show();
+          await win.setFocus();
+        } catch {
+          // Ignore if running outside desktop webview
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, []);
+
   useEffect(() => {
     const handleOpenAbout = () => {
       setAboutDialogOpen(true);
@@ -306,19 +334,45 @@ function App() {
     setActiveTabId(newTab.id);
   };
 
-  const connectToConnection = async (
-    connection: (typeof connections)[number],
-  ) => {
-    try {
-      await invoke("connect_database", {
-        config: connection,
-      });
-      setActiveConnection(connection.id);
-    } catch (error) {
-      console.error("Failed to connect:", error);
-      alert(`Failed to connect to ${connection.name}: ${error}`);
+  const connectToConnection = useCallback(
+    async (connection: (typeof connections)[number]) => {
+      try {
+        await invoke("connect_database", {
+          config: connection,
+        });
+        setActiveConnection(connection.id);
+      } catch (error) {
+        console.error("Failed to connect:", error);
+        alert(`Failed to connect to ${connection.name}: ${error}`);
+      }
+    },
+    [setActiveConnection],
+  );
+
+  // Track whether initial auto-connect has run for this window
+  const initialConnectAttempted = useRef(false);
+
+  // Auto-connect if this workspace window was opened with ?connection=<id>
+  useEffect(() => {
+    if (initialConnectAttempted.current) return;
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetConnId = urlParams.get("connection");
+    if (!targetConnId) return;
+
+    const conn = connections.find((c) => c.id === targetConnId);
+    if (conn) {
+      initialConnectAttempted.current = true;
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch {
+        // Ignore replaceState errors
+      }
+      void connectToConnection(conn);
     }
-  };
+  }, [connections, connectToConnection]);
 
   const openQueryTab = () => {
     const newTab: TabType = {
@@ -1193,6 +1247,15 @@ function App() {
                             )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void openNewWorkspaceWindow(conn.id);
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Open in New Window
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
