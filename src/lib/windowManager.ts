@@ -80,3 +80,16 @@ export async function openEditConnectionWindow(connectionId: string): Promise<vo
   });
 }
 
+/**
+ * Open a main workspace window, optionally connected directly to a connection ID.
+ */
+export async function openNewWorkspaceWindow(connectionId?: string): Promise<void> {
+  try {
+    await invoke("create_new_window", {
+      connectionId: connectionId ?? null,
+    });
+  } catch (error) {
+    console.error("Failed to open new workspace window:", error);
+  }
+}
+
