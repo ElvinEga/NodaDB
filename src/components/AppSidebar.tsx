@@ -174,7 +174,7 @@ export function AppSidebar({
                 }
               }}
             >
-              In This Window
+              Here
             </Button>
             <Button
               onClick={async () => {
@@ -185,7 +185,7 @@ export function AppSidebar({
                 }
               }}
             >
-              In New Window
+              New Window
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
