@@ -436,6 +436,7 @@ pub async fn create_new_window(
     .resizable(true)
     .fullscreen(false)
     .accept_first_mouse(true)
+    .transparent(true)
     .background_color(tauri::webview::Color(9, 9, 11, 255))
     .visible(false);
 
@@ -476,6 +477,7 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     .resizable(true)
     .fullscreen(false)
     .accept_first_mouse(true)
+    .transparent(true)
     .background_color(tauri::webview::Color(9, 9, 11, 255))
     .visible(false);
 
@@ -541,6 +543,7 @@ pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -
     .center()
     .resizable(resizable)
     .fullscreen(false)
+    .transparent(true)
     .background_color(tauri::webview::Color(9, 9, 11, 255))
     .visible(false);
 
@@ -854,6 +857,101 @@ pub async fn execute_acp_command(
         )
         .await
         .map_err(|e| format!("Failed to execute command: {}", e))
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn set_macos_blur_radius(window: &tauri::WebviewWindow, radius: i32) {
+    if let Ok(ns_window_ptr) = window.ns_window() {
+        if ns_window_ptr.is_null() {
+            return;
+        }
+
+        type CGSConnectionID = u32;
+        type CGSError = i32;
+        type CGSDefaultConnectionFn = unsafe extern "C" fn() -> CGSConnectionID;
+        type CGSSetWindowBackgroundBlurRadiusFn = unsafe extern "C" fn(CGSConnectionID, u32, i32) -> CGSError;
+        type SelRegisterNameFn = unsafe extern "C" fn(*const std::ffi::c_char) -> *const std::ffi::c_void;
+        type ObjcMsgSendFn = unsafe extern "C" fn(*mut std::ffi::c_void, *const std::ffi::c_void) -> isize;
+
+        let handle = libc::dlopen(std::ptr::null(), libc::RTLD_LAZY);
+        if !handle.is_null() {
+            let default_conn_ptr = libc::dlsym(handle, b"CGSDefaultConnection\0".as_ptr() as *const _);
+            let set_blur_ptr = libc::dlsym(handle, b"CGSSetWindowBackgroundBlurRadius\0".as_ptr() as *const _);
+            let sel_register_ptr = libc::dlsym(handle, b"sel_registerName\0".as_ptr() as *const _);
+            let msg_send_ptr = libc::dlsym(handle, b"objc_msgSend\0".as_ptr() as *const _);
+
+            if !default_conn_ptr.is_null() && !set_blur_ptr.is_null() && !sel_register_ptr.is_null() && !msg_send_ptr.is_null() {
+                let default_conn: CGSDefaultConnectionFn = std::mem::transmute(default_conn_ptr);
+                let set_blur: CGSSetWindowBackgroundBlurRadiusFn = std::mem::transmute(set_blur_ptr);
+                let sel_register: SelRegisterNameFn = std::mem::transmute(sel_register_ptr);
+                let msg_send: ObjcMsgSendFn = std::mem::transmute(msg_send_ptr);
+
+                let sel = sel_register(b"windowNumber\0".as_ptr() as *const _);
+                let window_number = msg_send(ns_window_ptr, sel) as u32;
+                let conn = default_conn();
+                let _ = set_blur(conn, window_number, radius);
+            }
+            libc::dlclose(handle);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn set_window_glass_mode(
+    window: tauri::WebviewWindow,
+    enabled: bool,
+    blur_radius: Option<f64>,
+) -> Result<(), String> {
+    let radius = blur_radius.unwrap_or(20.0).clamp(0.0, 64.0);
+
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, clear_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+        if enabled {
+            // Almost clear background to avoid corner artifacts on macOS
+            let _ = window.set_background_color(Some(tauri::webview::Color(0, 0, 0, 3)));
+            let _ = apply_vibrancy(
+                &window,
+                NSVisualEffectMaterial::FullScreenUI,
+                Some(NSVisualEffectState::Active),
+                Some(12.0),
+            );
+            unsafe {
+                set_macos_blur_radius(&window, radius as i32);
+            }
+        } else {
+            let _ = clear_vibrancy(&window);
+            unsafe {
+                set_macos_blur_radius(&window, 0);
+            }
+            let _ = window.set_background_color(Some(tauri::webview::Color(9, 9, 11, 255)));
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use window_vibrancy::{apply_acrylic, clear_acrylic, clear_mica};
+        if enabled {
+            let _ = window.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+            let alpha = (radius.min(255.0) as u8).max(40);
+            let _ = apply_acrylic(&window, Some((20, 24, 33, alpha)));
+        } else {
+            let _ = clear_acrylic(&window);
+            let _ = clear_mica(&window);
+            let _ = window.set_background_color(Some(tauri::webview::Color(9, 9, 11, 255)));
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        if enabled {
+            let _ = window.set_background_color(Some(tauri::webview::Color(18, 20, 28, 240)));
+        } else {
+            let _ = window.set_background_color(Some(tauri::webview::Color(9, 9, 11, 255)));
+        }
+    }
+
+    Ok(())
 }
 
 

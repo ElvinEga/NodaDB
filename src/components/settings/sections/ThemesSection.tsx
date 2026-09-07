@@ -2,6 +2,7 @@ import { THEMES, ThemeDefinition } from "@/lib/themes";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GlassThemeControls } from "@/components/settings/GlassThemeControls";
 
 interface ThemeCardProps {
   theme: ThemeDefinition;
@@ -62,6 +63,8 @@ export function ThemesSection() {
           />
         ))}
       </div>
+
+      {colorTheme === "glass" && <GlassThemeControls />}
     </div>
   );
 }

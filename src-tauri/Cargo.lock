@@ -2964,6 +2964,7 @@ dependencies = [
  "bson",
  "chrono",
  "futures",
+ "libc",
  "mongodb",
  "redis",
  "reqwest 0.12.28",
@@ -2980,6 +2981,7 @@ dependencies = [
  "tokio",
  "urlencoding",
  "uuid",
+ "window-vibrancy",
  "zip",
 ]
 

@@ -3,7 +3,14 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { listen } from "@tauri-apps/api/event";
 
 export function useApplyTheme() {
-  const { theme, colorTheme, fontSize, fontFamily } = useSettingsStore();
+  const {
+    theme,
+    colorTheme,
+    fontSize,
+    fontFamily,
+    glassOpacity,
+    glassBlur,
+  } = useSettingsStore();
 
   // Apply appearance mode (light/dark/system)
   useEffect(() => {
@@ -24,10 +31,38 @@ export function useApplyTheme() {
     }
   }, [theme]);
 
-  // Apply color theme via data-theme attribute
+  // Apply color theme via data-theme attribute and native glass mode
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", colorTheme);
-  }, [colorTheme]);
+    const root = document.documentElement;
+    root.setAttribute("data-theme", colorTheme);
+
+    const isGlass = colorTheme === "glass";
+    if (isGlass) {
+      root.classList.add("has-native-glass");
+      root.style.setProperty("--glass-opacity", `${glassOpacity}`);
+      root.style.setProperty("--glass-blur", `${glassBlur}px`);
+    } else {
+      root.classList.remove("has-native-glass");
+      root.style.removeProperty("--glass-opacity");
+      root.style.removeProperty("--glass-blur");
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      ("__TAURI__" in window || "__TAURI_INTERNALS__" in window)
+    ) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => {
+          invoke("set_window_glass_mode", {
+            enabled: isGlass,
+            blurRadius: glassBlur,
+          }).catch((err) => {
+            console.error("Failed to set window glass mode:", err);
+          });
+        })
+        .catch(() => {});
+    }
+  }, [colorTheme, glassOpacity, glassBlur]);
 
   // Apply font size
   useEffect(() => {
@@ -54,7 +89,7 @@ export function useApplyTheme() {
         emit("nodadb:settings-changed", {}).catch(() => {});
       }).catch(() => {});
     }
-  }, [theme, colorTheme, fontSize, fontFamily]);
+  }, [theme, colorTheme, fontSize, fontFamily, glassOpacity, glassBlur]);
 
   // Cross-window storage synchronization
   useEffect(() => {

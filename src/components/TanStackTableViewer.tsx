@@ -1779,7 +1779,7 @@ Sum: ${stats.sum}`
   };
 
   return (
-    <div className="h-full flex bg-background">
+    <div className="h-full flex">
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
         <div className="h-12 border-b border-border bg-secondary/50 backdrop-blur-sm flex items-center justify-between px-4">
