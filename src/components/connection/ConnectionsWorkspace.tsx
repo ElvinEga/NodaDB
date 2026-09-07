@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -61,6 +61,25 @@ export function ConnectionsWorkspace({
   onAddNew,
   onBackToPrevious,
 }: ConnectionsWorkspaceProps) {
+  const [appVersion, setAppVersion] = useState("0.3.12");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      typeof window !== "undefined" &&
+      ("__TAURI__" in window || "__TAURI_INTERNALS__" in window)
+    ) {
+      import("@tauri-apps/api/app")
+        .then(({ getVersion }) => getVersion())
+        .then((ver) => {
+          if (!cancelled && ver) setAppVersion(ver);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window !== "undefined") {
@@ -226,6 +245,39 @@ export function ConnectionsWorkspace({
       {/* Main Scrollable Content */}
       <main className="flex-1 overflow-y-auto px-6 py-6 md:px-10">
         <div className="max-w-6xl mx-auto w-full">
+          {/* Logo, Branding and App Version Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-border/60">
+            <div className="flex items-center gap-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm shrink-0">
+                <img
+                  src="/logo.png"
+                  alt="NodaDB Logo"
+                  className="h-7 w-7 object-contain drop-shadow-sm"
+                />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-foreground tracking-tight">
+                    NodaDB
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-secondary/80 text-muted-foreground border border-border font-medium">
+                    v{appVersion}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Modern, fast cross-platform database management
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg border border-border/40 w-fit">
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>
+                {connections.length} saved {connections.length === 1 ? "connection" : "connections"}
+              </span>
+            </div>
+          </div>
+
           {filteredConnections.length === 0 ? (
             <div className="text-center py-16">
               <Database className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
