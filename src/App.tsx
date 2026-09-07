@@ -1163,7 +1163,7 @@ function App() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <div className="h-20 w-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <img src="/logo.png" alt="NodaDB Logo" className="h-10w-10" />
+                <img src="/logo.png" alt="NodaDB Logo" className="h-10 w-10" />
               </div>
               <h2 className="text-3xl font-bold mb-3">NodaDB</h2>
               <p className="text-muted-foreground mb-8 text-lg">
