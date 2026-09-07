@@ -40,6 +40,7 @@ import {
   AiIntegration,
 } from "@/stores/settingsStore";
 import { THEMES, ThemeDefinition } from "@/lib/themes";
+import { GlassThemeControls } from "@/components/settings/GlassThemeControls";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
@@ -331,6 +332,8 @@ export function SettingsDialog({
                   />
                 ))}
               </div>
+
+              {colorTheme === "glass" && <GlassThemeControls />}
             </div>
           </TabsContent>
 
