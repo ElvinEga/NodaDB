@@ -75,6 +75,7 @@ pub fn run() {
             commands::get_acp_connected_agents,
             commands::get_acp_recent_commands,
             commands::execute_acp_command,
+            commands::set_window_glass_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
