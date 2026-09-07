@@ -60,6 +60,7 @@ import {
   openEditConnectionWindow,
   openNewWorkspaceWindow,
 } from "@/lib/windowManager";
+import { ConnectionsWorkspace } from "@/components/connection/ConnectionsWorkspace";
 import { useApplyTheme } from "@/hooks/useApplyTheme";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
@@ -160,12 +161,6 @@ function App() {
     .filter((connection): connection is (typeof connections)[number] =>
       Boolean(connection),
     );
-
-  // Connections sorted with pinned at top
-  const sortedConnections = [
-    ...connections.filter((c) => pinnedConnectionIds.includes(c.id)),
-    ...connections.filter((c) => !pinnedConnectionIds.includes(c.id)),
-  ];
 
   const handleDuplicateConnection = (conn: ConnectionConfig) => {
     const duplicate: ConnectionConfig = {
@@ -1145,194 +1140,24 @@ function App() {
             </SidebarInset>
           </>
         ) : connections.length > 0 ? (
-          /* Connection List when no active connection */
-          <div className="flex-1 flex flex-col">
-            <header
-              data-tauri-drag-region
-              className="pl-24 md:pl-0 h-9 py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
-            ></header>
-            {/* Back button when switching connections */}
-            {previousConnectionId && (
-              <div className="flex items-center p-6 mb-6">
-                <Button
-                  variant="outline"
-                  onClick={restorePreviousConnection}
-                  className="gap-2"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to{" "}
-                  {connections.find((c) => c.id === previousConnectionId)
-                    ?.name || "Connection"}
-                </Button>
-              </div>
-            )}
-            <div className="flex-1 flex items-center justify-center">
-              <div className="max-w-2xl w-full">
-                <h2 className="text-2xl font-bold mb-2">Your Connections</h2>
-                <p className="text-muted-foreground mb-6">
-                  Select a connection to start exploring your database
-                </p>
-                <div className="grid gap-3">
-                  {sortedConnections.map((conn) => {
-                    const isPinned = pinnedConnectionIds.includes(conn.id);
-                    return (
-                    <div
-                      key={conn.id}
-                      className={`relative group text-left p-5 rounded-lg border bg-card hover:border-primary hover:bg-accent transition-all duration-150 ${
-                        isPinned ? 'border-primary/50' : 'border-border'
-                      }`}
-                    >
-                      <button
-                        onClick={async () => {
-                          await connectToConnection(conn);
-                        }}
-                        className="w-full"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <DbIcon dbType={conn.db_type} provider={conn.provider} className="h-6 w-6 shrink-0" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-semibold mb-1 text-left flex items-center gap-2">
-                              {conn.name}
-                              {isPinned && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                                  <Pin className="h-2.5 w-2.5" />
-                                  Pinned
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
-                                {conn.provider
-                                  ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB', planetscale: 'PlanetScale (MySQL)', planetscale_postgres: 'PlanetScale (Postgres)', prisma: 'Prisma', turso: 'Turso', valtown: 'Val Town', cloudflare: 'Cloudflare D1' } as Record<string, string>)[conn.provider] ?? conn.provider
-                                  : conn.db_type === 'mongodb' ? 'MongoDB' : conn.db_type === 'clickhouse' ? 'ClickHouse' : conn.db_type === 'libsql' ? 'LibSQL' : conn.db_type === 'redis' ? 'Redis' : conn.db_type.toUpperCase()}
-                              </span>
-                              {conn.file_path && (
-                                <span className="truncate">
-                                  {conn.file_path}
-                                </span>
-                              )}
-                              {conn.host && (
-                                <span>
-                                  {conn.host}:{conn.port}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              togglePinConnection(conn.id);
-                            }}
-                          >
-                            {isPinned ? (
-                              <><PinOff className="h-4 w-4 mr-2" />Unpin from Home</>
-                            ) : (
-                              <><Pin className="h-4 w-4 mr-2" />Pin to Home</>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void openNewWorkspaceWindow(conn.id);
-                            }}
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Open in New Window
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditConnectionWindow(conn.id);
-                            }}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenameConnectionId(conn.id);
-                              setRenameValue(conn.name);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCopyConnectionUrl(conn);
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy URL
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDuplicateConnection(conn);
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConnectionId(conn.id);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    );
-                  })}
-
-                  {/* Add New Connection Card */}
-                  <button
-                    onClick={() => openNewConnectionWindow()}
-                    className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Plus className="h-6 w-6 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold mb-1">
-                          Add New Connection
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Connect to a new database
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ConnectionsWorkspace
+            connections={connections}
+            pinnedConnectionIds={pinnedConnectionIds}
+            previousConnectionId={previousConnectionId}
+            onConnect={(conn) => void connectToConnection(conn)}
+            onOpenInNewWindow={(connId) => void openNewWorkspaceWindow(connId)}
+            onEdit={(connId) => void openEditConnectionWindow(connId)}
+            onRename={(connId, currentName) => {
+              setRenameConnectionId(connId);
+              setRenameValue(currentName);
+            }}
+            onDelete={(connId) => setDeleteConnectionId(connId)}
+            onDuplicate={handleDuplicateConnection}
+            onCopyUrl={handleCopyConnectionUrl}
+            onTogglePin={togglePinConnection}
+            onAddNew={() => void openNewConnectionWindow()}
+            onBackToPrevious={restorePreviousConnection}
+          />
         ) : (
           /* Welcome screen for new users */
           <div className="flex-1 flex items-center justify-center">
