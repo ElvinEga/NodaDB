@@ -48,6 +48,8 @@ const DATA_TYPES = {
     "BOOLEAN",
     "DATE",
     "DATETIME",
+    "JSON",
+    "JSONB",
   ],
   postgresql: [
     "INTEGER",

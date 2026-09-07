@@ -1,5 +1,5 @@
 import { DbIcon } from "@/components/DbIcon";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Database,
   Plus,
@@ -24,7 +24,9 @@ import {
   LayoutGrid,
   Bot,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,7 +47,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { KeyboardCheatSheet } from "@/components/KeyboardCheatSheet";
 import { CommandPalette, type PaletteCommand } from "@/components/CommandPalette";
@@ -53,10 +54,18 @@ import { AgentsPanel } from "@/components/AgentsPanel";
 import { AgentControlCenter } from "@/components/AgentControlCenter";
 import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { AgentRunnerDialog, type AgentRunParams } from "@/components/AgentRunnerDialog";
-import { SettingsDialog } from "@/components/SettingsDialog";
+import {
+  openSettingsWindow,
+  openNewConnectionWindow,
+  openEditConnectionWindow,
+  openNewWorkspaceWindow,
+} from "@/lib/windowManager";
+import { ConnectionsWorkspace } from "@/components/connection/ConnectionsWorkspace";
+import { useApplyTheme } from "@/hooks/useApplyTheme";
 import { AboutDialog } from "@/components/AboutDialog";
 import { QueryHistoryPanel } from "@/components/QueryHistoryPanel";
 import { MenuBar } from "@/components/MenuBar";
+import { listen } from "@tauri-apps/api/event";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { QueryEditor } from "@/components/QueryEditor";
@@ -82,7 +91,6 @@ import { OPEN_ABOUT_EVENT } from "@/lib/appEvents";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 function App() {
-  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [deleteConnectionId, setDeleteConnectionId] = useState<string | null>(
     null,
   );
@@ -90,10 +98,8 @@ function App() {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
-  const [editConnectionId, setEditConnectionId] = useState<string | null>(null);
-  const { fontFamily, fontSize, colorTheme } = useSettingsStore();
+  useApplyTheme();
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -156,16 +162,6 @@ function App() {
       Boolean(connection),
     );
 
-  // Connections sorted with pinned at top
-  const sortedConnections = [
-    ...connections.filter((c) => pinnedConnectionIds.includes(c.id)),
-    ...connections.filter((c) => !pinnedConnectionIds.includes(c.id)),
-  ];
-
-  const editConnection = editConnectionId
-    ? connections.find((c) => c.id === editConnectionId)
-    : undefined;
-
   const handleDuplicateConnection = (conn: ConnectionConfig) => {
     const duplicate: ConnectionConfig = {
       ...conn,
@@ -203,6 +199,31 @@ function App() {
     setActiveTabId(null);
   }, [activeConnectionId]);
 
+  // Gracefully reveal workspace window once initial render is painted (avoids white flash)
+  useEffect(() => {
+    let cancelled = false;
+    let raf2: number | undefined;
+
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(async () => {
+        if (cancelled) return;
+        try {
+          const win = getCurrentWindow();
+          await win.show();
+          await win.setFocus();
+        } catch {
+          // Ignore if running outside desktop webview
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, []);
+
   useEffect(() => {
     const handleOpenAbout = () => {
       setAboutDialogOpen(true);
@@ -213,6 +234,40 @@ function App() {
       window.removeEventListener(OPEN_ABOUT_EVENT, handleOpenAbout);
     };
   }, []);
+
+  // Listen for connection events from connection sub-windows
+  useEffect(() => {
+    let unlistenActivated: (() => void) | undefined;
+    let unlistenChanged: (() => void) | undefined;
+
+    listen<{ connectionId: string }>("nodadb:connection-activated", (event) => {
+      try {
+        useConnectionStore.persist.rehydrate();
+      } catch (e) {
+        console.warn("Could not rehydrate connection store:", e);
+      }
+      if (event.payload?.connectionId) {
+        setActiveConnection(event.payload.connectionId);
+      }
+    }).then((fn) => {
+      unlistenActivated = fn;
+    });
+
+    listen("nodadb:connections-changed", () => {
+      try {
+        useConnectionStore.persist.rehydrate();
+      } catch (e) {
+        console.warn("Could not rehydrate connection store:", e);
+      }
+    }).then((fn) => {
+      unlistenChanged = fn;
+    });
+
+    return () => {
+      if (unlistenActivated) unlistenActivated();
+      if (unlistenChanged) unlistenChanged();
+    };
+  }, [setActiveConnection]);
 
   useEffect(() => {
     if (!autoCheckForUpdates) {
@@ -274,19 +329,45 @@ function App() {
     setActiveTabId(newTab.id);
   };
 
-  const connectToConnection = async (
-    connection: (typeof connections)[number],
-  ) => {
-    try {
-      await invoke("connect_database", {
-        config: connection,
-      });
-      setActiveConnection(connection.id);
-    } catch (error) {
-      console.error("Failed to connect:", error);
-      alert(`Failed to connect to ${connection.name}: ${error}`);
+  const connectToConnection = useCallback(
+    async (connection: (typeof connections)[number]) => {
+      try {
+        await invoke("connect_database", {
+          config: connection,
+        });
+        setActiveConnection(connection.id);
+      } catch (error) {
+        console.error("Failed to connect:", error);
+        alert(`Failed to connect to ${connection.name}: ${error}`);
+      }
+    },
+    [setActiveConnection],
+  );
+
+  // Track whether initial auto-connect has run for this window
+  const initialConnectAttempted = useRef(false);
+
+  // Auto-connect if this workspace window was opened with ?connection=<id>
+  useEffect(() => {
+    if (initialConnectAttempted.current) return;
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetConnId = urlParams.get("connection");
+    if (!targetConnId) return;
+
+    const conn = connections.find((c) => c.id === targetConnId);
+    if (conn) {
+      initialConnectAttempted.current = true;
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch {
+        // Ignore replaceState errors
+      }
+      void connectToConnection(conn);
     }
-  };
+  }, [connections, connectToConnection]);
 
   const openQueryTab = () => {
     const newTab: TabType = {
@@ -543,7 +624,7 @@ function App() {
       // Cmd+, (mac) / Ctrl+, (win)  →  Settings
       if (modKey && key === ",") {
         e.preventDefault();
-        setSettingsDialogOpen((prev) => !prev);
+        openSettingsWindow();
         return;
       }
       // Cmd+Shift+? (mac) / Ctrl+Shift+? (win)  →  Shortcuts dialog
@@ -581,7 +662,7 @@ function App() {
       macShortcut: undefined,
       winShortcut: undefined,
       category: 'Connections',
-      action: () => setConnectionDialogOpen(true),
+      action: () => openNewConnectionWindow(),
     },
     {
       id: 'switch-connection',
@@ -676,7 +757,7 @@ function App() {
       macShortcut: ['⌘', ','],
       winShortcut: ['Ctrl', ','],
       category: 'Settings',
-      action: () => setSettingsDialogOpen(true),
+      action: () => openSettingsWindow(),
     },
     {
       id: 'keyboard-shortcuts',
@@ -736,8 +817,8 @@ function App() {
       setActiveTabId(tabId);
     },
     openVisualQueryBuilder: openQueryBuilderTab,
-    openConnectionDialog: () => setConnectionDialogOpen(true),
-    openSettings: () => setSettingsDialogOpen(true),
+    openConnectionDialog: () => openNewConnectionWindow(),
+    openSettings: () => openSettingsWindow(),
     openAgentsPanel: () => setAgentsPanelOpen(true),
     openAiAssistant: () => setShowAiAssistant((prev) => !prev),
     openHistory: () => setShowHistoryPanel(prev => !prev),
@@ -755,29 +836,6 @@ function App() {
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [activeConnectionId, activeConnection?.db_type, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, handleLaunchAgent]);
-
-  // Apply font family and font size to root element
-  useEffect(() => {
-    const root = window.document.documentElement;
-
-    // Apply font family
-    root.classList.remove("font-outfit", "font-jetbrains-mono", "font-system");
-    root.classList.add(`font-${fontFamily.toLowerCase().replace(/ /g, "-")}`);
-
-    // Apply font size
-    root.classList.remove(
-      "font-size-small",
-      "font-size-medium",
-      "font-size-large",
-    );
-    root.classList.add(`font-size-${fontSize}`);
-  }, [fontFamily, fontSize]);
-
-  // Apply color theme on load and when changed
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", colorTheme);
-  }, [colorTheme]);
-
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       <div className="relative flex min-h-screen w-full overflow-hidden">
@@ -884,7 +942,7 @@ function App() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setSettingsDialogOpen(true)}
+                    onClick={() => openSettingsWindow()}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -1073,7 +1131,7 @@ function App() {
                         setActiveTabId(tabId);
                       }}
                       onOpenSchemaDesigner={openSchemaDesignerTab}
-                      onOpenSettings={() => setSettingsDialogOpen(true)}
+                      onOpenSettings={() => openSettingsWindow("ai")}
                       onClose={() => setShowAiAssistant(false)}
                     />
                   </div>
@@ -1082,197 +1140,36 @@ function App() {
             </SidebarInset>
           </>
         ) : connections.length > 0 ? (
-          /* Connection List when no active connection */
-          <div className="flex-1 flex flex-col">
-            <header
-              data-tauri-drag-region
-              className="pl-24 md:pl-0 h-9 py-1 border-b border-border bg-background text-foreground flex items-center px-4 gap-4"
-            ></header>
-            {/* Back button when switching connections */}
-            {previousConnectionId && (
-              <div className="flex items-center p-6 mb-6">
-                <Button
-                  variant="outline"
-                  onClick={restorePreviousConnection}
-                  className="gap-2"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to{" "}
-                  {connections.find((c) => c.id === previousConnectionId)
-                    ?.name || "Connection"}
-                </Button>
-              </div>
-            )}
-            <div className="flex-1 flex items-center justify-center">
-              <div className="max-w-2xl w-full">
-                <h2 className="text-2xl font-bold mb-2">Your Connections</h2>
-                <p className="text-muted-foreground mb-6">
-                  Select a connection to start exploring your database
-                </p>
-                <div className="grid gap-3">
-                  {sortedConnections.map((conn) => {
-                    const isPinned = pinnedConnectionIds.includes(conn.id);
-                    return (
-                    <div
-                      key={conn.id}
-                      className={`relative group text-left p-5 rounded-lg border bg-card hover:border-primary hover:bg-accent transition-all duration-150 ${
-                        isPinned ? 'border-primary/50' : 'border-border'
-                      }`}
-                    >
-                      <button
-                        onClick={async () => {
-                          await connectToConnection(conn);
-                        }}
-                        className="w-full"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <DbIcon dbType={conn.db_type} provider={conn.provider} className="h-6 w-6 shrink-0" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-semibold mb-1 text-left flex items-center gap-2">
-                              {conn.name}
-                              {isPinned && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                                  <Pin className="h-2.5 w-2.5" />
-                                  Pinned
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded bg-secondary font-mono text-xs">
-                                {conn.provider
-                                  ? ({ supabase: 'Supabase', neon: 'Neon', mariadb: 'MariaDB', planetscale: 'PlanetScale (MySQL)', planetscale_postgres: 'PlanetScale (Postgres)', prisma: 'Prisma', turso: 'Turso', valtown: 'Val Town', cloudflare: 'Cloudflare D1' } as Record<string, string>)[conn.provider] ?? conn.provider
-                                  : conn.db_type === 'mongodb' ? 'MongoDB' : conn.db_type === 'clickhouse' ? 'ClickHouse' : conn.db_type === 'libsql' ? 'LibSQL' : conn.db_type === 'redis' ? 'Redis' : conn.db_type.toUpperCase()}
-                              </span>
-                              {conn.file_path && (
-                                <span className="truncate">
-                                  {conn.file_path}
-                                </span>
-                              )}
-                              {conn.host && (
-                                <span>
-                                  {conn.host}:{conn.port}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              togglePinConnection(conn.id);
-                            }}
-                          >
-                            {isPinned ? (
-                              <><PinOff className="h-4 w-4 mr-2" />Unpin from Home</>
-                            ) : (
-                              <><Pin className="h-4 w-4 mr-2" />Pin to Home</>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditConnectionId(conn.id);
-                            }}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenameConnectionId(conn.id);
-                              setRenameValue(conn.name);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCopyConnectionUrl(conn);
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy URL
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDuplicateConnection(conn);
-                            }}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConnectionId(conn.id);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    );
-                  })}
-
-                  {/* Add New Connection Card */}
-                  <button
-                    onClick={() => setConnectionDialogOpen(true)}
-                    className="text-left p-5 rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-accent/50 transition-all duration-150"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Plus className="h-6 w-6 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold mb-1">
-                          Add New Connection
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Connect to a new database
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <ConnectionsWorkspace
+            connections={connections}
+            pinnedConnectionIds={pinnedConnectionIds}
+            previousConnectionId={previousConnectionId}
+            onConnect={(conn) => void connectToConnection(conn)}
+            onOpenInNewWindow={(connId) => void openNewWorkspaceWindow(connId)}
+            onEdit={(connId) => void openEditConnectionWindow(connId)}
+            onRename={(connId, currentName) => {
+              setRenameConnectionId(connId);
+              setRenameValue(currentName);
+            }}
+            onDelete={(connId) => setDeleteConnectionId(connId)}
+            onDuplicate={handleDuplicateConnection}
+            onCopyUrl={handleCopyConnectionUrl}
+            onTogglePin={togglePinConnection}
+            onAddNew={() => void openNewConnectionWindow()}
+            onBackToPrevious={restorePreviousConnection}
+          />
         ) : (
           /* Welcome screen for new users */
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <div className="h-20 w-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <img src="/logo.png" alt="NodaDB Logo" className="h-10w-10" />
+                <img src="/logo.png" alt="NodaDB Logo" className="h-10 w-10" />
               </div>
               <h2 className="text-3xl font-bold mb-3">NodaDB</h2>
               <p className="text-muted-foreground mb-8 text-lg">
                 A modern, professional database management tool built with Tauri
               </p>
-              <Button onClick={() => setConnectionDialogOpen(true)} size="lg">
+              <Button onClick={() => openNewConnectionWindow()} size="lg">
                 <Plus className="h-5 w-5 mr-2" />
                 Create Your First Connection
               </Button>
@@ -1376,23 +1273,9 @@ function App() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <ConnectionDialog
-          open={connectionDialogOpen}
-          onOpenChange={setConnectionDialogOpen}
-        />
-        <ConnectionDialog
-          open={editConnectionId !== null}
-          onOpenChange={(open) => !open && setEditConnectionId(null)}
-          editConnection={editConnection}
-        />
         <KeyboardShortcutsDialog
           open={shortcutsDialogOpen}
           onOpenChange={setShortcutsDialogOpen}
-        />
-        <SettingsDialog
-          open={settingsDialogOpen}
-          onOpenChange={setSettingsDialogOpen}
-          appUpdate={appUpdate}
         />
         <AboutDialog
           open={aboutDialogOpen}

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -46,14 +46,21 @@ pub enum ColumnTypeFamily {
     Unknown,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SSHAuthMethod {
     Password,
+    #[serde(alias = "privateKey", alias = "private_key")]
     PrivateKey,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+impl Default for SSHAuthMethod {
+    fn default() -> Self {
+        Self::Password
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SSHConfig {
     pub enabled: bool,
     pub host: String,
@@ -63,6 +70,59 @@ pub struct SSHConfig {
     pub private_key_path: Option<String>,
     pub password: Option<String>,
     pub local_port: Option<u16>,
+}
+
+impl<'de> Deserialize<'de> for SSHConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let val = serde_json::Value::deserialize(deserializer)?;
+        let enabled = val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+        let host = val.get("host").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let port = val.get("port").and_then(|v| v.as_u64()).unwrap_or(22) as u16;
+        let username = val.get("username").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+        let auth_str = val
+            .get("auth_method")
+            .or_else(|| val.get("authMethod"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("password");
+        let auth_method = match auth_str.to_lowercase().as_str() {
+            "privatekey" | "private_key" => SSHAuthMethod::PrivateKey,
+            _ => SSHAuthMethod::Password,
+        };
+
+        let private_key_path = val
+            .get("private_key_path")
+            .or_else(|| val.get("privateKeyPath"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let password = val
+            .get("password")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let local_port = val
+            .get("local_port")
+            .or_else(|| val.get("localPort"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u16);
+
+        Ok(SSHConfig {
+            enabled,
+            host,
+            port,
+            username,
+            auth_method,
+            private_key_path,
+            password,
+            local_port,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -268,4 +328,64 @@ pub struct RelationMatch {
     pub count: u64,
     pub sample_rows: QueryResult,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserializes_ssh_config_camel_case() {
+        let json = r#"{
+            "enabled": true,
+            "host": "127.0.0.1",
+            "port": 22,
+            "username": "root",
+            "authMethod": "privateKey",
+            "privateKeyPath": "/path/to/key",
+            "password": null,
+            "localPort": 12345
+        }"#;
+
+        let config: SSHConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.auth_method, SSHAuthMethod::PrivateKey);
+        assert_eq!(config.private_key_path.as_deref(), Some("/path/to/key"));
+        assert_eq!(config.local_port, Some(12345));
+    }
+
+    #[test]
+    fn deserializes_ssh_config_snake_case_and_defaults() {
+        let json = r#"{
+            "enabled": true,
+            "host": "127.0.0.1",
+            "port": 22,
+            "username": "ubuntu"
+        }"#;
+
+        let config: SSHConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.auth_method, SSHAuthMethod::Password);
+        assert_eq!(config.private_key_path, None);
+    }
+
+    #[test]
+    fn deserializes_ssh_config_with_duplicate_and_mixed_fields() {
+        let json = r#"{
+            "enabled": true,
+            "host": "127.0.0.1",
+            "port": 22,
+            "username": "root",
+            "authMethod": "privateKey",
+            "auth_method": "privateKey",
+            "privateKeyPath": "/path/to/key",
+            "private_key_path": "/path/to/key",
+            "password": null
+        }"#;
+
+        let config: SSHConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.auth_method, SSHAuthMethod::PrivateKey);
+        assert_eq!(config.private_key_path.as_deref(), Some("/path/to/key"));
+    }
+}
+
 

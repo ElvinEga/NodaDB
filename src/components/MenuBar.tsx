@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { openNewConnectionWindow, openNewWorkspaceWindow } from "@/lib/windowManager";
 
 interface MenuBarProps {
   onOpenAbout: () => void;
@@ -66,7 +67,7 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
 
   const handleNewWindow = React.useCallback(async () => {
     try {
-      await invoke("create_new_window");
+      await openNewWorkspaceWindow();
       toast.success("New window opened");
     } catch (error) {
       console.log("Creating new window via command:", error);
@@ -172,7 +173,7 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
       <MenubarMenu>
         <MenubarTrigger className="font-normal">File</MenubarTrigger>
         <MenubarContent className="font-normal">
-          <MenubarItem onSelect={() => invoke("open_connection_dialog")}>
+          <MenubarItem onSelect={() => openNewConnectionWindow()}>
             <Plus className="mr-2 h-4 w-4" />
             New Connection
             <MenubarShortcut>Ctrl+Shift+N</MenubarShortcut>
@@ -325,20 +326,6 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
             <MenubarShortcut>Ctrl+Shift+H</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
-          <MenubarItem onSelect={handleMaximizeWindow}>
-            {isWindowMaximized ? (
-              <Minimize2 className="mr-2 h-4 w-4" />
-            ) : (
-              <Maximize2 className="mr-2 h-4 w-4" />
-            )}
-            {isWindowMaximized ? "Restore Down" : "Maximize"}
-            <MenubarShortcut>Ctrl+Shift+M</MenubarShortcut>
-          </MenubarItem>
-          <MenubarItem onSelect={handleMinimizeWindow}>
-            <Minimize2 className="mr-2 h-4 w-4" />
-            Minimize
-          </MenubarItem>
-          <MenubarSeparator />
           <MenubarItem onSelect={handleToggleDarkMode}>
             {document.documentElement.classList.contains("dark") ? (
               <Sun className="mr-2 h-4 w-4" />
@@ -367,6 +354,37 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
               </MenubarItem>
             </MenubarSubContent>
           </MenubarSub>
+        </MenubarContent>
+      </MenubarMenu>
+
+      <MenubarMenu>
+        <MenubarTrigger className="font-normal">Window</MenubarTrigger>
+        <MenubarContent className="font-normal">
+          <MenubarItem onSelect={handleNewWindow}>
+            <Layout className="mr-2 h-4 w-4" />
+            New Window
+            <MenubarShortcut>Ctrl+Shift+W</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
+          <MenubarItem onSelect={handleMinimizeWindow}>
+            <Minimize2 className="mr-2 h-4 w-4" />
+            Minimize
+          </MenubarItem>
+          <MenubarItem onSelect={handleMaximizeWindow}>
+            {isWindowMaximized ? (
+              <Minimize2 className="mr-2 h-4 w-4" />
+            ) : (
+              <Maximize2 className="mr-2 h-4 w-4" />
+            )}
+            {isWindowMaximized ? "Restore Down" : "Maximize"}
+            <MenubarShortcut>Ctrl+Shift+M</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
+          <MenubarItem onSelect={handleCloseWindow}>
+            <X className="mr-2 h-4 w-4" />
+            Close Window
+            <MenubarShortcut>Alt+F4</MenubarShortcut>
+          </MenubarItem>
         </MenubarContent>
       </MenubarMenu>
 

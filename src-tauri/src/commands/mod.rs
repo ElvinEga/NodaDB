@@ -13,7 +13,7 @@ use crate::models::{
 };
 use chrono::Utc;
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[tauri::command]
 pub async fn test_connection(config: ConnectionConfig) -> Result<ConnectionTestResult, String> {
@@ -411,35 +411,60 @@ pub async fn get_postgres_table_privileges(
 }
 
 #[tauri::command]
-pub async fn create_new_window(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn create_new_window(
+    app: tauri::AppHandle,
+    connection_id: Option<String>,
+) -> Result<(), String> {
     let label = format!("nodadb-window-{}", Utc::now().timestamp_millis());
+    let url = match connection_id {
+        Some(ref id) if !id.trim().is_empty() => {
+            format!("index.html?connection={}", urlencoding::encode(id.trim()))
+        }
+        _ => "index.html".to_string(),
+    };
 
-    let webview_window =
-        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("index.html".into()))
-            .title("NodaDB")
-            .inner_size(1200.0, 800.0)
-            .min_inner_size(800.0, 600.0)
-            .center()
-            .resizable(true)
-            .fullscreen(false)
-            .always_on_top(false)
-            .visible(true)
-            .build()
-            .map_err(|e| format!("Failed to create new window: {}", e))?;
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title("NodaDB")
+    .inner_size(1200.0, 800.0)
+    .min_inner_size(800.0, 600.0)
+    .center()
+    .resizable(true)
+    .fullscreen(false)
+    .accept_first_mouse(true)
+    .background_color(tauri::webview::Color(9, 9, 11, 255))
+    .visible(false);
 
-    webview_window
-        .show()
-        .map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window
-        .set_focus()
-        .map_err(|e| format!("Failed to focus window: {}", e))?;
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let webview_window = builder
+        .build()
+        .map_err(|e| format!("Failed to create new window: {}", e))?;
+
+    // Safety fallback: ensure window is shown even if frontend takes time
+    let win_clone = webview_window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let _ = win_clone.show();
+        let _ = win_clone.set_focus();
+    });
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> Result<(), String> {
-    let webview_window = tauri::WebviewWindowBuilder::new(
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         label.clone(),
         tauri::WebviewUrl::App("index.html".into()),
@@ -450,18 +475,103 @@ pub async fn create_window_from_label(app: tauri::AppHandle, label: String) -> R
     .center()
     .resizable(true)
     .fullscreen(false)
-    .always_on_top(false)
-    .visible(true)
-    .build()
-    .map_err(|e| format!("Failed to create window {}: {}", label, e))?;
+    .accept_first_mouse(true)
+    .background_color(tauri::webview::Color(9, 9, 11, 255))
+    .visible(false);
 
-    webview_window
-        .show()
-        .map_err(|e| format!("Failed to show window: {}", e))?;
-    webview_window
-        .set_focus()
-        .map_err(|e| format!("Failed to focus window: {}", e))?;
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
 
+    let webview_window = builder
+        .build()
+        .map_err(|e| format!("Failed to create window {}: {}", label, e))?;
+
+    let win_clone = webview_window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let _ = win_clone.show();
+        let _ = win_clone.set_focus();
+    });
+
+    Ok(())
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SubWindowOptions {
+    pub label: String,
+    pub title: String,
+    pub route: String,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+    pub min_width: Option<f64>,
+    pub min_height: Option<f64>,
+    pub resizable: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn open_sub_window(app: tauri::AppHandle, options: SubWindowOptions) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(&options.label) {
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        let _ = existing.emit("navigate-sub-window", &options.route);
+        return Ok(());
+    }
+
+    let url = format!("index.html?window={}", options.route);
+    let width = options.width.unwrap_or(920.0);
+    let height = options.height.unwrap_or(660.0);
+    let min_w = options.min_width.unwrap_or(700.0);
+    let min_h = options.min_height.unwrap_or(500.0);
+    let resizable = options.resizable.unwrap_or(true);
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        options.label,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title(&options.title)
+    .inner_size(width, height)
+    .min_inner_size(min_w, min_h)
+    .center()
+    .resizable(resizable)
+    .fullscreen(false)
+    .background_color(tauri::webview::Color(9, 9, 11, 255))
+    .visible(false);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let webview_window = builder
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
+
+    // Safety fallback: if frontend doesn't call show() within 800ms, reveal the window
+    let win_clone = webview_window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        let _ = win_clone.show();
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.unminimize();
+        let _ = main_win.show();
+        let _ = main_win.set_focus();
+    }
     Ok(())
 }
 

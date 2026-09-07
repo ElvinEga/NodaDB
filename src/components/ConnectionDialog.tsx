@@ -153,9 +153,10 @@ export function ConnectionDialog({
         setSshHost(ssh.host ?? '');
         setSshPort(String(ssh.port ?? 22));
         setSshUsername(ssh.username ?? '');
-        setSshAuthMethod(ssh.authMethod ?? 'password');
+        const method = ssh.authMethod ?? ssh.auth_method;
+        setSshAuthMethod(method === 'privateKey' || method === 'privatekey' ? 'privateKey' : 'password');
         setSshPassword(ssh.password ?? '');
-        setSshPrivateKeyPath(ssh.privateKeyPath ?? '');
+        setSshPrivateKeyPath(ssh.privateKeyPath ?? ssh.private_key_path ?? '');
       } else {
         setConnectionType('direct');
       }
@@ -416,12 +417,12 @@ export function ConnectionDialog({
               ssh_config: {
                 enabled: true,
                 host: sshHost,
-                port: parseInt(sshPort),
+                port: parseInt(sshPort) || 22,
                 username: sshUsername,
-                authMethod: sshAuthMethod,
+                auth_method: sshAuthMethod,
                 password:
                   sshAuthMethod === "password" ? sshPassword : undefined,
-                privateKeyPath:
+                private_key_path:
                   sshAuthMethod === "privateKey"
                     ? sshPrivateKeyPath
                     : undefined,
@@ -534,11 +535,11 @@ export function ConnectionDialog({
             ssh_config: {
               enabled: true,
               host: sshHost,
-              port: parseInt(sshPort),
+              port: parseInt(sshPort) || 22,
               username: sshUsername,
-              authMethod: sshAuthMethod,
+              auth_method: sshAuthMethod,
               password: sshAuthMethod === "password" ? sshPassword : undefined,
-              privateKeyPath:
+              private_key_path:
                 sshAuthMethod === "privateKey" ? sshPrivateKeyPath : undefined,
             },
           }
@@ -1769,7 +1770,10 @@ export function ConnectionDialog({
                                 dbType === "postgresql" ? "5432" : "3306"
                               }
                               className="h-9 text-sm font-mono"
-                            />
+                                    />
+                            <p className="text-[10px] text-muted-foreground">
+                              {dbType === "postgresql" ? "Usually 5432" : "Usually 3306"}
+                            </p>
                           </div>
                         </div>
 

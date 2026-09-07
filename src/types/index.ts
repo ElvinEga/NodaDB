@@ -25,18 +25,22 @@ export type ColumnTypeFamily =
   | 'custom'
   | 'unknown';
 
-export type SSHAuthMethod = 'password' | 'privateKey';
+export type SSHAuthMethod = 'password' | 'privateKey' | 'privatekey';
 
 export interface SSHConfig {
   enabled: boolean;
   host: string;
   port: number;
   username: string;
-  authMethod: SSHAuthMethod;
+  authMethod?: SSHAuthMethod;
+  auth_method?: SSHAuthMethod;
   privateKeyPath?: string;
+  private_key_path?: string;
   password?: string;
   localPort?: number;
+  local_port?: number;
 }
+
 
 export interface ConnectionConfig {
   id: string;
@@ -68,6 +72,8 @@ export interface ConnectionConfig {
   mongo_connection_string?: string;
   /** MongoDB: auth source database (defaults to 'admin') */
   mongo_auth_source?: string;
+  /** MongoDB: target database name (defaults to 'admin' or extracted from connection string) */
+  mongo_database?: string;
   /** ClickHouse SSL/TLS requirement */
   clickhouse_use_ssl?: boolean;
   /** LibSQL / Turso / Val Town Connection URI */
@@ -94,6 +100,11 @@ export interface DatabaseTable {
 }
 
 export interface SQLiteBooleanSuggestion {
+  columnName: string;
+  sampleSize: number;
+}
+
+export interface SQLiteJsonSuggestion {
   columnName: string;
   sampleSize: number;
 }

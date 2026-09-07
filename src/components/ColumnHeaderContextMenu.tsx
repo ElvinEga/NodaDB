@@ -26,6 +26,7 @@ import {
   copyColumnAsCsv,
   exportColumnToCsv,
 } from '@/lib/tableOperations';
+import type { ColumnTypeFamily } from '@/types';
 
 interface ColumnHeaderContextMenuProps {
   columnName: string;
@@ -41,6 +42,8 @@ interface ColumnHeaderContextMenuProps {
   onSetColumnValue?: () => void;
   onSetColumnNull?: () => void;
   disableColumnEdit?: boolean;
+  currentTypeFamily?: ColumnTypeFamily;
+  onSetTypeFamily?: (typeFamily: ColumnTypeFamily | null) => void;
   children: React.ReactNode;
 }
 
@@ -55,6 +58,8 @@ export function ColumnHeaderContextMenu({
   onSetColumnValue,
   onSetColumnNull,
   disableColumnEdit = false,
+  currentTypeFamily,
+  onSetTypeFamily,
   children,
 }: ColumnHeaderContextMenuProps) {
   return (
@@ -109,6 +114,32 @@ export function ColumnHeaderContextMenu({
           <Download className="mr-2 h-4 w-4" />
           Export Column as CSV
         </ContextMenuItem>
+
+        {onSetTypeFamily && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <FileJson className="mr-2 h-4 w-4" />
+                Display As
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <ContextMenuItem onClick={() => onSetTypeFamily(null)}>
+                  Default / Auto {currentTypeFamily ? `(${currentTypeFamily})` : ''}
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onSetTypeFamily('json')}>
+                  JSON
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onSetTypeFamily('boolean')}>
+                  Boolean
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onSetTypeFamily('text')}>
+                  Text
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
 
         <ContextMenuSeparator />
 
