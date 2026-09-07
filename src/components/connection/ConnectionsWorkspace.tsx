@@ -180,14 +180,7 @@ export function ConnectionsWorkspace({
               <span>Back to {previousConnection.name}</span>
             </Button>
           )}
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold text-foreground tracking-tight">
-              Connections
-            </h1>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
-              {connections.length}
-            </span>
-          </div>
+
         </div>
 
         {/* Center/Right Toolbar */}
