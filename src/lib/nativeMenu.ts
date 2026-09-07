@@ -77,7 +77,8 @@ export async function setupNativeMenu(): Promise<void> {
         id: "new-window",
         text: "New Window",
         action: async () => {
-          await invoke("create_new_window");
+          const { openNewWorkspaceWindow } = await import("@/lib/windowManager");
+          await openNewWorkspaceWindow();
         },
       }),
       await PredefinedMenuItem.new({ item: "Separator", text: "" }),
@@ -207,6 +208,34 @@ export async function setupNativeMenu(): Promise<void> {
     ],
   });
 
+  // Window menu
+  const windowSubmenu = await Submenu.new({
+    text: "Window",
+    items: [
+      await PredefinedMenuItem.new({ item: "Minimize" }),
+      await PredefinedMenuItem.new({ item: "Maximize" }),
+      await PredefinedMenuItem.new({ item: "Fullscreen" }),
+      await PredefinedMenuItem.new({ item: "Separator", text: "" }),
+      await MenuItem.new({
+        id: "window-new",
+        text: "New Window",
+        action: async () => {
+          const { openNewWorkspaceWindow } = await import("@/lib/windowManager");
+          await openNewWorkspaceWindow();
+        },
+      }),
+      await MenuItem.new({
+        id: "window-main",
+        text: "Main Window",
+        action: async () => {
+          await invoke("focus_main_window");
+        },
+      }),
+      await PredefinedMenuItem.new({ item: "Separator", text: "" }),
+      await PredefinedMenuItem.new({ item: "BringAllToFront" }),
+    ],
+  });
+
   // Help menu
   const helpSubmenu = await Submenu.new({
     text: "Help",
@@ -249,6 +278,7 @@ export async function setupNativeMenu(): Promise<void> {
       editSubmenu,
       selectionSubmenu,
       viewSubmenu,
+      windowSubmenu,
       helpSubmenu,
     ],
   });
