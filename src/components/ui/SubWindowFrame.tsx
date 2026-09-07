@@ -63,12 +63,12 @@ export function SubWindowFrame({
         data-tauri-drag-region
         onDoubleClick={handleHeaderDoubleClick}
         className={cn(
-          "flex h-11 shrink-0 items-center border-b border-border/60 bg-card/60 backdrop-blur-md",
+          "flex h-11 shrink-0 items-center border-b border-border bg-card/60 backdrop-blur-md",
           IS_MAC ? "pl-28 pr-3" : "pl-4 pr-0"
         )}
       >
         {title && !headerContent && (
-          <div data-tauri-drag-region className="flex-1 font-medium text-xs text-muted-foreground truncate">
+          <div className="flex-1 font-medium text-xs text-muted-foreground truncate">
             {title}
           </div>
         )}
