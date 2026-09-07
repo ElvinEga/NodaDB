@@ -838,7 +838,7 @@ function App() {
   }), [activeConnectionId, activeConnection?.db_type, openQueryTab, openQueryBuilderTab, openSchemaDesignerTab, handleLaunchAgent]);
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <div className="relative flex min-h-screen w-full overflow-hidden">
+      <div className="relative flex min-h-screen w-full overflow-hidden bg-background">
         {activeConnectionId && activeConnection ? (
           <>
             <AppSidebar

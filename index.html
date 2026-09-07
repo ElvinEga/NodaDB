@@ -37,6 +37,27 @@
             <img src="/logo.png" alt="Loading" />
         </div>
         <script>
+            try {
+                var rawSettings = localStorage.getItem("app-settings-storage");
+                if (rawSettings) {
+                    var parsed = JSON.parse(rawSettings);
+                    var state = parsed && parsed.state ? parsed.state : parsed;
+                    if (state && state.colorTheme === "glass") {
+                        document.documentElement.classList.add("has-native-glass");
+                        document.documentElement.setAttribute("data-theme", "glass");
+                        if (typeof state.glassOpacity === "number") {
+                            document.documentElement.style.setProperty("--glass-opacity", state.glassOpacity);
+                        }
+                        if (typeof state.glassBlur === "number") {
+                            document.documentElement.style.setProperty("--glass-blur", state.glassBlur + "px");
+                        }
+                        var loader = document.getElementById("loading");
+                        if (loader) {
+                            loader.style.background = "transparent";
+                        }
+                    }
+                }
+            } catch (e) {}
             if (window.location.search.includes("window=")) {
                 document.getElementById("loading")?.remove();
             }

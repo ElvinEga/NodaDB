@@ -14,6 +14,8 @@ interface SettingsStore {
   colorTheme: ColorTheme;
   fontSize: FontSize;
   fontFamily: FontFamily;
+  glassOpacity: number;
+  glassBlur: number;
 
   // Editor
   autoSave: boolean;
@@ -54,6 +56,8 @@ interface SettingsStore {
   setColorTheme: (colorTheme: ColorTheme) => void;
   setFontSize: (fontSize: FontSize) => void;
   setFontFamily: (fontFamily: FontFamily) => void;
+  setGlassOpacity: (opacity: number) => void;
+  setGlassBlur: (blur: number) => void;
   setAutoSave: (enabled: boolean) => void;
   setAutoSaveDelay: (seconds: number) => void;
   setEditorTabSize: (size: number) => void;
@@ -89,6 +93,8 @@ const defaultSettings = {
   colorTheme: "default" as ColorTheme,
   fontSize: "small" as FontSize,
   fontFamily: "Outfit" as FontFamily,
+  glassOpacity: 0.65,
+  glassBlur: 20,
   autoSave: true,
   autoSaveDelay: 5,
   editorTabSize: 2,
@@ -125,6 +131,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setColorTheme: (colorTheme) => set({ colorTheme }),
       setFontSize: (fontSize) => set({ fontSize }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
+      setGlassOpacity: (glassOpacity) => set({ glassOpacity }),
+      setGlassBlur: (glassBlur) => set({ glassBlur }),
       setAutoSave: (autoSave) => set({ autoSave }),
       setAutoSaveDelay: (autoSaveDelay) => set({ autoSaveDelay }),
       setEditorTabSize: (editorTabSize) => set({ editorTabSize }),

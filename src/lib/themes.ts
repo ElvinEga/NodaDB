@@ -78,4 +78,10 @@ export const THEMES: ThemeDefinition[] = [
     description: "Google Material Design — clean & modern.",
     previewColors: ["#263238", "#37474f", "#89ddff"],
   },
+  {
+    id: "glass",
+    name: "Glass",
+    description: "Translucent frosted glass with customizable opacity & native blur.",
+   previewColors: ["#0c0c0c", "#1a1a1a", "#e8e8e8"],
+  },
 ];
