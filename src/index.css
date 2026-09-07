@@ -898,59 +898,59 @@
 /* ── Glass Theme ────────────────────────────────────────────── */
 [data-theme="glass"].dark,
 .dark[data-theme="glass"] {
-    --background: 224 28% 10% / var(--glass-opacity, 0.65);
-    --foreground: 210 40% 98%;
-    --card: 224 28% 13% / calc(var(--glass-opacity, 0.65) * 0.85);
-    --card-foreground: 210 40% 98%;
-    --popover: 224 28% 10% / 0.88;
-    --popover-foreground: 210 40% 98%;
-    --primary: 199 89% 48%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 224 28% 18% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --secondary-foreground: 210 40% 98%;
-    --muted: 224 25% 18% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --muted-foreground: 215 20% 65%;
-    --accent: 224 25% 20% / calc(var(--glass-opacity, 0.65) * 0.75);
-    --accent-foreground: 210 40% 98%;
-    --border: 224 20% 30% / 0.35;
-    --input: 224 25% 14% / calc(var(--glass-opacity, 0.65) * 0.75);
-    --ring: 199 89% 48%;
-    --sidebar: 224 30% 8% / var(--glass-opacity, 0.65);
-    --sidebar-foreground: 215 20% 65%;
-    --sidebar-primary: 199 89% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 224 25% 16% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 224 20% 30% / 0.28;
-    --sidebar-ring: 199 89% 48%;
+    --background: 0 0% 6% / var(--glass-opacity, 0.65);
+    --foreground: 0 0% 98%;
+    --card: 0 0% 8% / calc(var(--glass-opacity, 0.65) * 0.85);
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 6% / 0.88;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 90%;
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 12% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 14% / calc(var(--glass-opacity, 0.65) * 0.75);
+    --accent-foreground: 0 0% 98%;
+    --border: 0 0% 20% / 0.35;
+    --input: 0 0% 8% / calc(var(--glass-opacity, 0.65) * 0.75);
+    --ring: 0 0% 90%;
+    --sidebar: 0 0% 4% / var(--glass-opacity, 0.65);
+    --sidebar-foreground: 0 0% 65%;
+    --sidebar-primary: 0 0% 90%;
+    --sidebar-primary-foreground: 0 0% 6%;
+    --sidebar-accent: 0 0% 10% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 20% / 0.28;
+    --sidebar-ring: 0 0% 90%;
 }
 
 [data-theme="glass"]:not(.dark) {
-    --background: 210 40% 98% / var(--glass-opacity, 0.65);
-    --foreground: 222 25% 12%;
+    --background: 0 0% 98% / var(--glass-opacity, 0.65);
+    --foreground: 0 0% 10%;
     --card: 0 0% 100% / calc(var(--glass-opacity, 0.65) * 0.85);
-    --card-foreground: 222 25% 12%;
+    --card-foreground: 0 0% 10%;
     --popover: 0 0% 100% / 0.9;
-    --popover-foreground: 222 25% 12%;
-    --primary: 201 96% 40%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 0% 10%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 93% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --secondary-foreground: 222 25% 12%;
-    --muted: 210 30% 94% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 92% / calc(var(--glass-opacity, 0.65) * 0.75);
-    --accent-foreground: 222 25% 12%;
-    --border: 220 13% 80% / 0.4;
-    --input: 210 30% 94% / calc(var(--glass-opacity, 0.65) * 0.75);
-    --ring: 201 96% 40%;
-    --sidebar: 210 40% 96% / var(--glass-opacity, 0.65);
-    --sidebar-foreground: 215 16% 47%;
-    --sidebar-primary: 201 96% 40%;
+    --secondary: 0 0% 94% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --secondary-foreground: 0 0% 10%;
+    --muted: 0 0% 94% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 92% / calc(var(--glass-opacity, 0.65) * 0.75);
+    --accent-foreground: 0 0% 10%;
+    --border: 0 0% 80% / 0.4;
+    --input: 0 0% 94% / calc(var(--glass-opacity, 0.65) * 0.75);
+    --ring: 0 0% 10%;
+    --sidebar: 0 0% 96% / var(--glass-opacity, 0.65);
+    --sidebar-foreground: 0 0% 45%;
+    --sidebar-primary: 0 0% 10%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 90% / calc(var(--glass-opacity, 0.65) * 0.7);
-    --sidebar-accent-foreground: 222 25% 12%;
-    --sidebar-border: 220 13% 80% / 0.35;
-    --sidebar-ring: 201 96% 40%;
+    --sidebar-accent: 0 0% 90% / calc(var(--glass-opacity, 0.65) * 0.7);
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 80% / 0.35;
+    --sidebar-ring: 0 0% 10%;
 }
 
 /* ── Native Glass Layering & Vibrancy ───────────────────────── */
@@ -968,4 +968,3 @@ html.has-native-glass[data-theme="glass"] .glass-panel {
     backdrop-filter: blur(var(--glass-blur, 20px));
     -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
 }
-

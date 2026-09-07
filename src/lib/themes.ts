@@ -82,6 +82,6 @@ export const THEMES: ThemeDefinition[] = [
     id: "glass",
     name: "Glass",
     description: "Translucent frosted glass with customizable opacity & native blur.",
-   previewColors: ["#0c0c0c", "#1a1a1a", "#e8e8e8"],
+    previewColors: ["#0f172a", "#1e293b", "#38bdf8"],
   },
 ];
