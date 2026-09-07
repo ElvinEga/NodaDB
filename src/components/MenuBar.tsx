@@ -326,20 +326,6 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
             <MenubarShortcut>Ctrl+Shift+H</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
-          <MenubarItem onSelect={handleMaximizeWindow}>
-            {isWindowMaximized ? (
-              <Minimize2 className="mr-2 h-4 w-4" />
-            ) : (
-              <Maximize2 className="mr-2 h-4 w-4" />
-            )}
-            {isWindowMaximized ? "Restore Down" : "Maximize"}
-            <MenubarShortcut>Ctrl+Shift+M</MenubarShortcut>
-          </MenubarItem>
-          <MenubarItem onSelect={handleMinimizeWindow}>
-            <Minimize2 className="mr-2 h-4 w-4" />
-            Minimize
-          </MenubarItem>
-          <MenubarSeparator />
           <MenubarItem onSelect={handleToggleDarkMode}>
             {document.documentElement.classList.contains("dark") ? (
               <Sun className="mr-2 h-4 w-4" />
@@ -368,6 +354,37 @@ export function MenuBar({ onOpenAbout }: MenuBarProps) {
               </MenubarItem>
             </MenubarSubContent>
           </MenubarSub>
+        </MenubarContent>
+      </MenubarMenu>
+
+      <MenubarMenu>
+        <MenubarTrigger className="font-normal">Window</MenubarTrigger>
+        <MenubarContent className="font-normal">
+          <MenubarItem onSelect={handleNewWindow}>
+            <Layout className="mr-2 h-4 w-4" />
+            New Window
+            <MenubarShortcut>Ctrl+Shift+W</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
+          <MenubarItem onSelect={handleMinimizeWindow}>
+            <Minimize2 className="mr-2 h-4 w-4" />
+            Minimize
+          </MenubarItem>
+          <MenubarItem onSelect={handleMaximizeWindow}>
+            {isWindowMaximized ? (
+              <Minimize2 className="mr-2 h-4 w-4" />
+            ) : (
+              <Maximize2 className="mr-2 h-4 w-4" />
+            )}
+            {isWindowMaximized ? "Restore Down" : "Maximize"}
+            <MenubarShortcut>Ctrl+Shift+M</MenubarShortcut>
+          </MenubarItem>
+          <MenubarSeparator />
+          <MenubarItem onSelect={handleCloseWindow}>
+            <X className="mr-2 h-4 w-4" />
+            Close Window
+            <MenubarShortcut>Alt+F4</MenubarShortcut>
+          </MenubarItem>
         </MenubarContent>
       </MenubarMenu>
 
